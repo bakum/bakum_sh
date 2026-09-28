@@ -8,7 +8,8 @@ export function buildInfo(): Record<string, string> {
   let commit = 'unknown';
   try {
     commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
-    if (execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim()) commit += '-dirty';
+    // Only changes to tracked files count: electron-vite puts a temporary bundled config next to the real one.
+    if (execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' }).trim()) commit += '-dirty';
   } catch {
     /* building outside a git checkout */
   }
