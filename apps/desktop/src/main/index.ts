@@ -261,6 +261,7 @@ async function doQuit(cancelJobs: boolean): Promise<void> {
 function onCoreMessage(msg: CoreToMain): void {
   switch (msg.kind) {
     case 'notify': {
+      log.info({ type: msg.notifType, title: msg.title, body: msg.body }, 'notification');
       if (!Notification.isSupported()) return;
       const n = new Notification({ title: msg.title, body: msg.body, icon: drawIcon(64, 'idle') });
       n.on('click', () => {
@@ -279,9 +280,13 @@ function onCoreMessage(msg: CoreToMain): void {
       break;
     case 'busy':
       activeJobs = msg.activeJobs;
-      if (activeJobs > 0 && blockerId === null) blockerId = powerSaveBlocker.start('prevent-app-suspension');
+      if (activeJobs > 0 && blockerId === null) {
+        blockerId = powerSaveBlocker.start('prevent-app-suspension');
+        log.info({ activeJobs, blockerId }, 'sleep blocked (powerSaveBlocker)');
+      }
       if (activeJobs === 0 && blockerId !== null) {
         powerSaveBlocker.stop(blockerId);
+        log.info({ blockerId }, 'sleep allowed again');
         blockerId = null;
       }
       break;
@@ -350,6 +355,8 @@ function registerIpc(): void {
     version: app.getVersion(),
     profile,
     corePid: core?.pid ?? null,
+    sleepBlocked: blockerId !== null && powerSaveBlocker.isStarted(blockerId),
+    windowVisible: win?.isVisible() ?? false,
     configDir,
     localDir,
   }));

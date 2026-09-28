@@ -8,6 +8,9 @@ import { pgPing } from '../pg';
 import { summaries } from './projects';
 import { bus } from '../events';
 import { audit } from './audit';
+import { reconcile } from '../reconcile';
+
+let lastReconcile = 0;
 
 export function appState(ctx: Ctx): AppStateView {
   return {
@@ -58,6 +61,10 @@ async function ghStatus(exe: string): Promise<{ ok: boolean; text: string }> {
 }
 
 export async function systemStatus(ctx: Ctx, refresh: boolean): Promise<SystemStatus> {
+  if (refresh && runtimeState.docker.ok && Date.now() - lastReconcile > 5000) {
+    lastReconcile = Date.now();
+    await reconcile(ctx).catch(() => {});
+  }
   if (refresh) {
     for (const p of ctx.store.list()) {
       if (!p.config) continue;

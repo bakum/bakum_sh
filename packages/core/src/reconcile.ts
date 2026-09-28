@@ -18,6 +18,7 @@ import { isInside, samePath, toPosix } from './util/paths';
 import { log } from './util/logger';
 import { nowIso } from './util/time';
 import { TRAEFIK_PROJECT } from './docker/traefik';
+import { buildContainers } from './builds/drop';
 
 /** Builds of interrupted jobs become `failed` (spec 8.12); their previous live build is untouched. */
 export function failInterruptedBuilds(ctx: Ctx, stale: JobRow[]): void {
@@ -39,6 +40,15 @@ export function failInterruptedBuilds(ctx: Ctx, stale: JobRow[]): void {
       .where(eq(builds.id, b.id))
       .run();
     audit(ctx, { projectId: b.projectId, action: 'build.interrupted', target: `${b.composeProject}#${b.number}`, result: 'failed' });
+    // Interrupted while copying a database: the source build was stopped for CREATE DATABASE … TEMPLATE — start it again.
+    const dbStep = (b.steps ?? []).find((s) => s.name === 'database');
+    const restartOf = dbStep?.status === 'running' && b.sourceBuildId ? b.sourceBuildId : b.kind === 'update' ? b.previousBuildId : null;
+    // `update` stops the live container before -u: after an interruption it is started again (spec 8.3).
+    if (restartOf) {
+      void buildContainers(restartOf)
+        .then((cs) => Promise.all(cs.filter((c) => !c.oneoff && c.state !== 'running').map((c) => docker.getContainer(c.id).start())))
+        .catch((err) => log().warn({ err }, 'restart copy source failed'));
+    }
     bus.emit({ type: 'build.changed', projectId: b.projectId, branchId: b.branchId, buildId: b.id });
   }
   for (const j of stale) {

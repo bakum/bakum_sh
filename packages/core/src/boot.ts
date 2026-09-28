@@ -4,6 +4,7 @@ import { fetchExecutor, requestFetch, scheduleFetches, stopFetches } from './ser
 import { LocalWatcher, setLocalWatcher } from './services/watch-local';
 import { applyRules } from './services/branches';
 import { deleteBranchExecutor } from './services/branch-delete';
+import { deleteProjectExecutor } from './services/project-delete';
 import { ensureTraefik } from './docker/traefik';
 import { startDockerWatch, stopDockerWatch } from './docker/watch';
 import { failInterruptedBuilds, reconcile } from './reconcile';
@@ -19,6 +20,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
   setQueue(queue);
   queue.register('fetch', fetchExecutor);
   queue.register('delete_branch', deleteBranchExecutor);
+  queue.register('delete_project', deleteProjectExecutor);
   registerBuildExecutors(queue);
 
   const watcher = new LocalWatcher(ctx);

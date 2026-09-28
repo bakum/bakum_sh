@@ -233,7 +233,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
 }
 
 export function ConnectButton({ b }: { b: BuildView }) {
-  const running = b.status === 'running';
+  const running = b.status === 'running' && (b.containerState === null || b.containerState === 'running');
   return (
     <Group gap={0} wrap="nowrap">
       <Button

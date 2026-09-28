@@ -18,6 +18,9 @@ function assertLocal(cfg: PgCfg): void {
 
 export async function withPg<T>(cfg: PgCfg, database: string, fn: (c: pg.Client) => Promise<T>): Promise<T> {
   assertLocal(cfg);
+  if (!cfg.password) {
+    throw new BmError('PG_NO_PASSWORD', 'Пароль Postgres не задан (postgres.password в настройках проекта). Укажите его в Settings → Postgres.');
+  }
   const client = new pg.Client({
     host: cfg.host,
     port: cfg.port,

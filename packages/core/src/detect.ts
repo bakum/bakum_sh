@@ -242,3 +242,9 @@ function readConf(file: string | null, key: string): string | null {
   }
   return null;
 }
+
+/** Password found by the most recent detection (the wizard may change the repo path before creating). */
+export function lastDetectedPassword(): string | null {
+  const all = [...secrets.values()];
+  return all[all.length - 1]?.password || null;
+}

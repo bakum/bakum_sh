@@ -4,7 +4,7 @@ import { BmError, type ProjectConfig, type ProjectSummary } from '@bm/shared';
 import type { Ctx } from '../context';
 import { projects } from '../db/schema';
 import { bus } from '../events';
-import { detectedPassword } from '../detect';
+import { detectedPassword, lastDetectedPassword } from '../detect';
 import { audit, lineDiff } from './audit';
 import { ensureBranchRow, relayoutProductionBranch } from './branch-rows';
 import { nowIso } from '../util/time';
@@ -90,7 +90,7 @@ export function createProject(ctx: Ctx, yaml: string): ProjectSummary {
   const doc = YAML.parseDocument(yaml);
   const repoPath = String(doc.getIn(['repo', 'path']) ?? '');
   const pw = doc.getIn(['postgres', 'password']);
-  if (!pw || pw === PASSWORD_MASK) doc.setIn(['postgres', 'password'], detectedPassword(repoPath) ?? '');
+  if (!pw || pw === PASSWORD_MASK) doc.setIn(['postgres', 'password'], detectedPassword(repoPath) || lastDetectedPassword() || '');
   const text = `# Настройки проекта DEMZ Branch Manager. Правка файла подхватывается автоматически.\n${doc.toString()}`;
   const cfg = ctx.store.putProject(text, { create: true });
   syncProjectRows(ctx);

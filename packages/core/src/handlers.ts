@@ -27,6 +27,7 @@ import { getQueue } from './jobs/queue';
 import { registerBuildHandlers } from './services/build-actions';
 import { deletePreview, requestDelete } from './services/branch-delete';
 import { mergeUrl } from './services/merge';
+import { projectDeletePreview, requestProjectDelete } from './services/project-delete';
 import { readLogs } from './services/logs';
 import { cleanupOrphans } from './reconcile';
 
@@ -49,6 +50,8 @@ export function registerHandlers(ctx: Ctx): void {
     'projects.create': (p) => createProject(ctx, p.yaml),
     'projects.update': (p) => updateProject(ctx, p.projectId, p.yaml),
     'projects.setEnabled': (p) => setEnabled(ctx, p.projectId, p.enabled),
+    'projects.deletePreview': (p) => projectDeletePreview(ctx, p.projectId),
+    'projects.delete': (p) => requestProjectDelete(ctx, p.projectId, p.confirm),
 
     'config.get': (p) => configGet(ctx, p),
     'config.put': (p) => configPut(ctx, p),

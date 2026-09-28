@@ -5,6 +5,7 @@ import { Alert, Badge, Box, Button, Card, Container, Group, Stack, Switch, Table
 import { useBm, useBmMutation } from '../lib/query';
 import { YamlEditor } from '../components/YamlEditor';
 import { YamlForm, type FieldDef, type FieldGroup } from '../components/YamlForm';
+import { DeleteProjectButton } from '../components/dialogs/DeleteProject';
 
 const STAGE_NAMES = { production: 'Production', staging: 'Staging', development: 'Development' } as const;
 
@@ -188,11 +189,14 @@ export function SettingsPage() {
         <Group justify="space-between">
           <Title order={3}>{isApp ? 'Настройки приложения' : `Настройки проекта ${project.data?.summary.name ?? ''}`}</Title>
           {project.data && (
-            <Switch
-              label="Проект включён (fetch и авто-сборки)"
-              checked={project.data.summary.enabled}
-              onChange={(e) => setEnabled.mutate({ projectId: pid!, enabled: e.currentTarget.checked })}
-            />
+            <Group>
+              <Switch
+                label="Проект включён (fetch и авто-сборки)"
+                checked={project.data.summary.enabled}
+                onChange={(e) => setEnabled.mutate({ projectId: pid!, enabled: e.currentTarget.checked })}
+              />
+              <DeleteProjectButton projectId={pid!} />
+            </Group>
           )}
         </Group>
         {project.data?.summary.configError && (

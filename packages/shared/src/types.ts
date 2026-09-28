@@ -15,7 +15,9 @@ export type JobType =
   | 'restore_snapshot'
   | 'import_backup'
   | 'fetch'
-  | 'apply_config';
+  | 'apply_config'
+  | 'modules'
+  | 'delete_project';
 export type JobStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled' | 'interrupted';
 
 export const BUILD_STEPS = [

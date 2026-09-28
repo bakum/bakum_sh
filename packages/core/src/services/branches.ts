@@ -83,7 +83,7 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
     worktreePath: b.worktreePath,
     protected: r.scope.protected,
     odooVersion: r.scope.image === cfg.runtime.image ? cfg.runtime.odooVersion : `${cfg.runtime.odooVersion}*`,
-    indicator: indicator(live, latest, active),
+    indicator: liveView?.containerState === 'missing' && !active ? 'failed' : indicator(live, latest, active),
     liveBuild: liveView,
     activeBuild: active ? toBuildView(ctx, active, { branchName: b.name }) : null,
     badges,

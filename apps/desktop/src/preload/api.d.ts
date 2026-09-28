@@ -9,7 +9,7 @@ export interface BmDesktop {
   copy(text: string): Promise<boolean>;
   openExternal(url: string): Promise<boolean>;
   confirm(opts: { message: string; detail?: string; buttons?: string[] }): Promise<number>;
-  info(): Promise<{ version: string; profile: string; corePid: number | null; configDir: string; localDir: string }>;
+  info(): Promise<{ version: string; profile: string; corePid: number | null; sleepBlocked: boolean; windowVisible: boolean; configDir: string; localDir: string }>;
   quit(): Promise<void>;
   onNavigate(cb: (route: string) => void): () => void;
   pathForFile(file: File): string;
