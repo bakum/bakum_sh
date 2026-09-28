@@ -6,6 +6,7 @@ import { useBm, useBmMutation } from '../lib/query';
 import { YamlEditor } from '../components/YamlEditor';
 import { YamlForm, type FieldDef, type FieldGroup } from '../components/YamlForm';
 import { DeleteProjectButton } from '../components/dialogs/DeleteProject';
+import { UpdatesCard } from '../components/UpdatesCard';
 
 const STAGE_NAMES = { production: 'Production', staging: 'Staging', development: 'Development' } as const;
 
@@ -331,6 +332,14 @@ function AppSettings({ text, onSave, saving }: { text: string; onSave: (t: strin
       ],
     },
     {
+      title: 'Обновления',
+      fields: [
+        { path: ['updates', 'checkOnStart'], label: 'Проверять обновления при запуске', type: 'switch' },
+        { path: ['updates', 'includePrerelease'], label: 'Предлагать предварительные версии', type: 'switch' },
+        { path: ['updates', 'repository'], label: 'GitHub-репозиторий релизов', type: 'text', description: 'owner/repo' },
+      ],
+    },
+    {
       title: 'Уведомления Windows',
       fields: [
         { path: ['desktop', 'notifications', 'buildReady'], label: 'Сборка готова', type: 'switch' },
@@ -343,6 +352,7 @@ function AppSettings({ text, onSave, saving }: { text: string; onSave: (t: strin
   ];
   return (
     <Stack>
+      <UpdatesCard />
       <Card withBorder>
         <YamlForm text={text} groups={groups} onSave={onSave} saving={saving} />
       </Card>

@@ -1,4 +1,4 @@
-import type { MethodName, MethodParams, MethodResult, Topic } from '@bm/shared';
+import type { MethodName, MethodParams, MethodResult, Topic, UpdateState } from '@bm/shared';
 
 export type CoreStatus = { state: 'connected' | 'restarted' | 'disconnected'; at: string };
 
@@ -13,6 +13,13 @@ export interface BmDesktop {
   quit(): Promise<void>;
   onNavigate(cb: (route: string) => void): () => void;
   pathForFile(file: File): string;
+  update: {
+    get(): Promise<UpdateState | null>;
+    check(): Promise<UpdateState | null>;
+    install(): Promise<{ ok: boolean; message?: string }>;
+    skip(): Promise<UpdateState | null>;
+    onState(cb: (s: UpdateState) => void): () => void;
+  };
 }
 
 export interface BmApi {

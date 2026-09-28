@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Group, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { checkForUpdates, installUpdate, useUpdateState } from './UpdateBanner';
 
 export const COPYRIGHT_HOLDER = 'Bakum Viacheslav';
 
@@ -37,9 +38,25 @@ export function AppFooter() {
           </Text>
         </UnstyledButton>
       </Tooltip>
-      <Text size="xs" c="dimmed">
-        © {year} {COPYRIGHT_HOLDER}
-      </Text>
+      <Group gap="md" wrap="nowrap">
+        <FooterUpdateLink />
+        <Text size="xs" c="dimmed">
+          © {year} {COPYRIGHT_HOLDER}
+        </Text>
+      </Group>
     </Group>
+  );
+}
+
+function FooterUpdateLink() {
+  const s = useUpdateState();
+  if (!s) return null;
+  const available = s.status === 'available' || s.status === 'ready';
+  return (
+    <UnstyledButton onClick={() => void (available ? installUpdate() : checkForUpdates())} data-testid="footer-update">
+      <Text size="xs" c={available ? 'blue' : 'dimmed'} td="underline">
+        {s.status === 'checking' ? 'Проверка обновлений…' : available ? `Доступна версия ${s.latest} — обновить` : 'Проверить обновления'}
+      </Text>
+    </UnstyledButton>
   );
 }

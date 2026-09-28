@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -20,6 +21,7 @@ import { CoreHost } from './core-host';
 import { drawIcon, trayImage, type TrayState } from './icons';
 import { isAllowedExternal } from './security';
 import { resolveDirs } from './migrate-dirs';
+import { Updater } from './updater';
 
 const PRODUCT = 'Odoo Branch Manager';
 /** BM_PROFILE=dev keeps development runs away from the real configuration and registry. */
@@ -53,6 +55,9 @@ let trayState: TrayState = 'idle';
 let trayProjects: TrayProject[] = [];
 let blockerId: number | null = null;
 let appConfig: AppConfig | null = null;
+let updater: Updater | null = null;
+let pendingInstaller: string | null = null;
+let startupCheckDone = false;
 
 // ---------- single instance ----------
 if (!app.requestSingleInstanceLock({ hook: isHook })) {
@@ -211,6 +216,10 @@ function rebuildTrayMenu(): void {
     { label: 'Показать окно', click: () => showWindow() },
     { label: 'Остановить все сборки', click: () => void core?.call('builds.stopAll', {}) },
     { type: 'separator' },
+    updater && (updater.state.status === 'available' || updater.state.status === 'ready')
+      ? { label: `Установить обновление ${updater.state.latest}…`, click: () => void installUpdate() }
+      : { label: 'Проверить обновления', enabled: updater?.state.status !== 'checking', click: () => void checkUpdates(true) },
+    { type: 'separator' },
     { label: 'Выход', click: () => void requestQuit() },
   ]);
   tray.setContextMenu(menu);
@@ -260,7 +269,92 @@ async function doQuit(cancelJobs: boolean): Promise<void> {
   saveWindowState();
   await core?.stop(cancelJobs);
   tray?.destroy();
+  if (pendingInstaller) launchInstaller(pendingInstaller);
   app.exit(0);
+}
+
+// ---------- updates (docs/decisions.md D29) ----------
+/** Test-only: with BM_UPDATE_DRY_RUN=1 an unpackaged build goes through the whole flow but does not start the installer. */
+const updateDryRun = !app.isPackaged && process.env.BM_UPDATE_DRY_RUN === '1';
+
+function launchInstaller(file: string): void {
+  if (updateDryRun) {
+    log.info({ file }, 'update: dry run, installer not started');
+    return;
+  }
+  // The app is already shut down (Core stopped, tray gone); main exits right after this call.
+  spawn(file, [], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+  log.info({ file }, 'update: installer started, exiting');
+}
+
+/**
+ * «Обновить»: confirm → download and verify the installer → close the app completely (same job handling as «Выход»)
+ * → start the installer. Portable builds open the release page instead.
+ */
+async function installUpdate(): Promise<{ ok: boolean; message?: string }> {
+  if (!updater) return { ok: false, message: 'Проверка обновлений не готова' };
+  const s = updater.state;
+  if (s.status !== 'available' && s.status !== 'ready') return { ok: false, message: 'Нет доступного обновления: сначала проверьте обновления' };
+  if (s.mode === 'portable') {
+    if (s.url && isAllowedExternal(s.url)) void shell.openExternal(s.url);
+    return { ok: true, message: 'Portable-версия: скачайте новую версию со страницы релиза' };
+  }
+  if (s.mode === 'dev') return { ok: false, message: 'В режиме разработки (pnpm dev / start) установка обновлений недоступна' };
+  if (!s.asset) return { ok: false, message: 'В релизе нет установщика' };
+  const jobs = activeJobs;
+  const buttons = jobs > 0 ? ['Дождаться задач и установить', 'Прервать задачи и установить', 'Отмена'] : ['Установить', 'Отмена'];
+  const { response } = await dialog.showMessageBox(win && win.isVisible() ? win : undefined!, {
+    type: 'question',
+    title: PRODUCT,
+    message: `Установить Odoo Branch Manager ${s.latest}?`,
+    detail:
+      `Текущая версия ${s.current}. Установщик будет скачан (${Math.round(s.asset.size / 1e6)} МБ) и проверен, затем приложение ` +
+      'полностью закроется и запустится установщик. Контейнеры сборок, базы и настройки не затрагиваются.' +
+      (jobs > 0 ? `\n\nСейчас выполняется задач: ${jobs}. Прерванные сборки получат статус failed, их можно повторить после обновления.` : ''),
+    buttons,
+    defaultId: 0,
+    cancelId: buttons.length - 1,
+  });
+  if (response === buttons.length - 1) return { ok: false, message: 'Отменено' };
+  let file: string;
+  try {
+    file = await updater.download();
+  } catch (err) {
+    return { ok: false, message: (err as Error).message };
+  }
+  if (jobs > 0 && response === 0) {
+    new Notification({ title: PRODUCT, body: 'Обновление будет установлено после завершения текущих задач.' }).show();
+    await new Promise<void>((resolve) => {
+      const t = setInterval(() => {
+        if (activeJobs === 0) {
+          clearInterval(t);
+          resolve();
+        }
+      }, 1000);
+    });
+  }
+  updater.markInstalling();
+  pendingInstaller = file;
+  log.info({ from: s.current, to: s.latest, file }, 'update: closing the app to install');
+  await doQuit(jobs > 0 && response === 1);
+  return { ok: true };
+}
+
+function updateSettings(): { repository: string; includePrerelease: boolean } {
+  return { repository: appConfig?.updates.repository ?? 'bakum/bakum_sh', includePrerelease: appConfig?.updates.includePrerelease ?? false };
+}
+
+async function checkUpdates(manual: boolean): Promise<void> {
+  if (!updater) return;
+  const s = await updater.check(manual);
+  const fromTray = manual === true && !win?.isVisible();
+  if (s.status === 'available' && (manual || !s.skipped) && Notification.isSupported()) {
+    const n = new Notification({ title: `Доступна версия ${s.latest}`, body: `Установлена ${s.current}. Откройте окно, чтобы посмотреть изменения и обновить.` });
+    n.on('click', () => showWindow());
+    n.show();
+  } else if (fromTray && Notification.isSupported()) {
+    new Notification({ title: PRODUCT, body: s.status === 'none' ? `Установлена последняя версия ${s.current}` : (s.error ?? 'Проверка не удалась') }).show();
+  }
 }
 
 // ---------- messages from Core ----------
@@ -304,6 +398,11 @@ function onCoreMessage(msg: CoreToMain): void {
     case 'appConfig':
       appConfig = msg.config;
       applyAutostart();
+      if (!startupCheckDone && appConfig.updates.checkOnStart) {
+        startupCheckDone = true;
+        // A little after start: the window and Core come first.
+        setTimeout(() => void checkUpdates(false), 8000);
+      }
       break;
     case 'log':
       log[msg.level]({ src: 'core' }, msg.msg);
@@ -369,6 +468,16 @@ function registerIpc(): void {
     localDir,
   }));
   ipcMain.handle('bm:quit', () => requestQuit());
+  ipcMain.handle('bm:update:get', () => updater?.state ?? null);
+  ipcMain.handle('bm:update:check', async () => {
+    await checkUpdates(true);
+    return updater?.state ?? null;
+  });
+  ipcMain.handle('bm:update:install', () => installUpdate());
+  ipcMain.handle('bm:update:skip', () => {
+    updater?.skip();
+    return updater?.state ?? null;
+  });
 }
 
 // ---------- boot ----------
@@ -376,6 +485,18 @@ async function boot(): Promise<void> {
   const t0 = Date.now();
   log.info({ version: __BM_VERSION__, commit: __BM_COMMIT__, buildDate: __BM_BUILD_DATE__, profile }, 'Odoo Branch Manager starting');
   registerIpc();
+  updater = new Updater({
+    current: __BM_VERSION__,
+    log,
+    userDataDir: app.getPath('userData'),
+    mode: app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_DIR ? 'portable' : 'installer') : updateDryRun ? 'installer' : 'dev',
+    settings: updateSettings,
+    testEndpoint: app.isPackaged ? null : (process.env.BM_UPDATE_URL ?? null),
+    onChange: (s) => {
+      win?.webContents.send('bm:update-state', s);
+      rebuildTrayMenu();
+    },
+  });
   core = new CoreHost({
     configDir,
     // A dev profile never touches the dataDir configured in app.yaml.

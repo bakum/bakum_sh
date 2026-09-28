@@ -24,6 +24,7 @@ import { fmtAgo } from '../lib/format';
 import { HEADER_BG } from '../theme';
 import classes from './Shell.module.css';
 import { AppFooter } from './AppFooter';
+import { UpdateBanner } from './UpdateBanner';
 
 const JOB_LABELS: Record<string, string> = {
   build: 'Сборка',
@@ -159,6 +160,7 @@ export function Shell() {
           </Text>
         </Alert>
       )}
+      <UpdateBanner />
       <Box className={classes.main}>
         <Outlet />
       </Box>

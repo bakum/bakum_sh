@@ -291,3 +291,20 @@ export interface GitBranchInfo {
   name: string;
   source: 'remote' | 'local' | 'both';
 }
+
+/** Application update state (main process updater, docs/decisions.md D29). */
+export interface UpdateState {
+  status: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'ready' | 'installing' | 'error';
+  current: string;
+  latest: string | null;
+  notes: string | null;
+  url: string | null;
+  publishedAt: string | null;
+  asset: { name: string; size: number } | null;
+  progress: number | null;
+  error: string | null;
+  checkedAt: string | null;
+  /** installer — download and run Setup; portable — open the release page; dev — not available. */
+  mode: 'installer' | 'portable' | 'dev';
+  skipped: boolean;
+}

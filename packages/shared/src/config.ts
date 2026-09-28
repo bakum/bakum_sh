@@ -307,6 +307,18 @@ export const appConfigSchema = z
       .object({ image: z.string().default('traefik:v3.5') })
       .strict()
       .prefault({}),
+    /** Update check against GitHub Releases (docs/decisions.md D29). */
+    updates: z
+      .object({
+        checkOnStart: z.boolean().default(true),
+        repository: z
+          .string()
+          .regex(/^[\w.-]+\/[\w.-]+$/, 'ожидается owner/repo')
+          .default('bakum/bakum_sh'),
+        includePrerelease: z.boolean().default(false),
+      })
+      .strict()
+      .prefault({}),
     desktop: z
       .object({
         autostart: z.boolean().default(false),

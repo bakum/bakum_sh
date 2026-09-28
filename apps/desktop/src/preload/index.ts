@@ -3,7 +3,7 @@
  * The renderer never sees the port, Node or Electron objects.
  */
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import type { ClientMessage, ServerMessage } from '@bm/shared';
+import type { ClientMessage, ServerMessage, UpdateState } from '@bm/shared';
 import type { BmApi, CoreStatus } from './api';
 
 let port: MessagePort | null = null;
@@ -93,6 +93,17 @@ const api: BmApi = {
       return () => navListeners.delete(cb);
     },
     pathForFile: (file) => webUtils.getPathForFile(file),
+    update: {
+      get: () => ipcRenderer.invoke('bm:update:get'),
+      check: () => ipcRenderer.invoke('bm:update:check'),
+      install: () => ipcRenderer.invoke('bm:update:install'),
+      skip: () => ipcRenderer.invoke('bm:update:skip'),
+      onState(cb) {
+        const h = (_e: unknown, s: UpdateState) => cb(s);
+        ipcRenderer.on('bm:update-state', h);
+        return () => ipcRenderer.off('bm:update-state', h);
+      },
+    },
   },
 };
 

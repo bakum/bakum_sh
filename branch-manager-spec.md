@@ -81,7 +81,7 @@
 
 | Слой | Технологии |
 |---|---|
-| Десктоп | Electron (стабильная), `electron-vite`, `electron-builder` (NSIS per-user и portable; без подписи и автообновления) |
+| Десктоп | Electron (стабильная), `electron-vite`, `electron-builder` (NSIS per-user и portable, без подписи); проверка обновлений по GitHub Releases с установкой по подтверждению (docs/decisions.md D29) |
 | UI | React 19, TypeScript, TanStack Query (queryFn → `window.bm`), React Router (`HashRouter`), Mantine, `@dnd-kit` (перетаскивание веток), xterm.js (просмотр логов), Monaco (YAML-редактор настроек) |
 | Core | Node.js из Electron, TypeScript, `dockerode`, `execa` (git / docker compose / gh), `pg`, `better-sqlite3` + Drizzle, `zod` (конфиг и IPC), `pino`, `croner` (расписания), `chokidar` (папка бэкапов, HEAD worktree) |
 | IPC | контракт в `packages/shared`: zod-схемы методов и событий |
