@@ -47,7 +47,12 @@ export function registerHandlers(ctx: Ctx): void {
         worktreesFallback: path.join(ctx.dataDir, 'worktrees'),
         existingIds: ctx.store.list().map((e) => e.id),
       }),
-    'projects.create': (p) => createProject(ctx, p.yaml),
+    'projects.create': (p) => {
+      const s = createProject(ctx, p.yaml);
+      // First fetch right away: branches are laid out by the rules without waiting for the timer (criterion 3).
+      requestFetch(ctx, s.id);
+      return s;
+    },
     'projects.update': (p) => updateProject(ctx, p.projectId, p.yaml),
     'projects.setEnabled': (p) => setEnabled(ctx, p.projectId, p.enabled),
     'projects.deletePreview': (p) => projectDeletePreview(ctx, p.projectId),

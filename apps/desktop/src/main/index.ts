@@ -62,6 +62,7 @@ if (!app.requestSingleInstanceLock({ hook: isHook })) {
       core?.sendHook(argv.slice(argv.indexOf('--hook') + 1));
       return;
     }
+    log.info('second instance started: focusing the window');
     showWindow();
   });
   app.whenReady().then(boot).catch((err) => {
