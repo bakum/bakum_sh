@@ -10,6 +10,7 @@ import { startDockerWatch, stopDockerWatch } from './docker/watch';
 import { failInterruptedBuilds, reconcile } from './reconcile';
 import { subscribeBuildLog, subscribeContainerLog, subscribeStats } from './services/logs';
 import { publishTray } from './services/tray';
+import { bus } from './events';
 import { registerBuildExecutors } from './builds/executors';
 import { runtime } from './runtime';
 import { log } from './util/logger';
@@ -22,6 +23,12 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
   queue.register('delete_branch', deleteBranchExecutor);
   queue.register('delete_project', deleteProjectExecutor);
   registerBuildExecutors(queue);
+
+  // Tray «building» follows the queue: re-published after a job starts or finishes (a build publishing the tray
+  // itself still sees its own job as running).
+  bus.on((batch) => {
+    if (batch.some((e) => e.type === 'job.changed')) publishTray(ctx);
+  });
 
   const watcher = new LocalWatcher(ctx);
   setLocalWatcher(watcher);
