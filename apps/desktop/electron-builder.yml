@@ -19,8 +19,8 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  artifactName: ${productName}-Setup-${version}.${ext}
+  artifactName: Odoo-Branch-Manager-Setup-${version}.${ext}
 portable:
-  artifactName: ${productName}-Portable-${version}.${ext}
+  artifactName: Odoo-Branch-Manager-Portable-${version}.${ext}
 npmRebuild: false
 publish: null

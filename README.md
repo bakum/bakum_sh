@@ -92,7 +92,7 @@ pnpm test        # unit-тесты Core (Vitest под ELECTRON_RUN_AS_NODE=1)
 pnpm release patch     # или minor / major / 0.2.0
 # Версия меняется во всех package.json, [Unreleased] становится «[X.Y.Z] — дата»,
 # создаются коммит «Release vX.Y.Z» и тег vX.Y.Z. Скрипт ничего не пушит.
-pnpm package           # установщик «dist/Odoo Branch Manager-Setup-X.Y.Z.exe»
+pnpm package           # установщик apps/desktop/dist/Odoo-Branch-Manager-Setup-X.Y.Z.exe
 ```
 
 При сборке в приложение встраиваются версия, короткий хеш коммита (с `-dirty`, если были незакоммиченные правки) и
