@@ -1,0 +1,25 @@
+# Packaging (spec 4): NSIS per-user installer and portable exe, no signing, no auto-update.
+# build/ in the repo root belongs to the 1C publication — resources and output live elsewhere.
+appId: ua.demz.branch-manager
+productName: DEMZ Branch Manager
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - out/**
+  - package.json
+asarUnpack:
+  - "**/*.node"
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}
+npmRebuild: false
+publish: null
