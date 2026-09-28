@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-09-28
+
 ### Изменено
 - Приложение переименовано в **Odoo Branch Manager**. Папки `%APPDATA%\DEMZ Branch Manager` и
   `%LOCALAPPDATA%\DEMZ Branch Manager` при первом запуске переносятся под новое имя вместе с проектами, реестром и
