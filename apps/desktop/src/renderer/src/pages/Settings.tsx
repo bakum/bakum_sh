@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import YAML from 'yaml';
 import { Alert, Badge, Box, Button, Card, Container, Group, Stack, Switch, Table, Tabs, Text, Title } from '@mantine/core';
+import { EditionBadge, EditionLine } from '../components/EditionBadge';
 import { useBm, useBmMutation } from '../lib/query';
 import { YamlEditor } from '../components/YamlEditor';
 import { YamlForm, type FieldDef, type FieldGroup } from '../components/YamlForm';
@@ -196,7 +197,10 @@ export function SettingsPage() {
     <Container size="xl" py="md">
       <Stack>
         <Group justify="space-between">
-          <Title order={3}>{isApp ? 'Настройки приложения' : `Настройки проекта ${project.data?.summary.name ?? ''}`}</Title>
+          <Group gap="sm">
+            <Title order={3}>{isApp ? 'Настройки приложения' : `Настройки проекта ${project.data?.summary.name ?? ''}`}</Title>
+            {!isApp && <EditionBadge edition={project.data?.summary.edition} />}
+          </Group>
           {project.data && (
             <Group>
               <Switch
@@ -243,6 +247,11 @@ export function SettingsPage() {
             Object.entries(projectTabs).map(([k, t]) => (
               <Tabs.Panel key={k} value={k} pt="md">
                 <Card withBorder>
+                  {k === 'runtime' && (
+                    <Box mb="md">
+                      <EditionLine edition={project.data.summary.edition} />
+                    </Box>
+                  )}
                   <YamlForm text={project.data.yaml} groups={t.groups} onSave={saveProject} saving={update.isPending} />
                 </Card>
               </Tabs.Panel>

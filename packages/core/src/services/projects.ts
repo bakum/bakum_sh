@@ -10,6 +10,7 @@ import { pgPing } from '../pg';
 import { audit, lineDiff } from './audit';
 import { ensureBranchRow, relayoutProductionBranch } from './branch-rows';
 import { nowIso } from '../util/time';
+import { odooEdition } from '../config/edition';
 
 export const PASSWORD_MASK = '********';
 
@@ -53,6 +54,7 @@ export function summary(ctx: Ctx, id: string): ProjectSummary {
     name: e.config?.name ?? id,
     repoPath: (e.config ? repoLabel(e.config) : null) ?? row?.repoPath ?? '',
     legacy: !!e.config && isLegacyProject(e.config),
+    edition: e.config ? odooEdition(e.config) : null,
     enabled: e.config?.enabled ?? false,
     configPath: e.path,
     configError: e.error,

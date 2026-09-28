@@ -59,6 +59,14 @@ export interface TestsResult {
   failures: string[];
 }
 
+export interface OdooEdition {
+  kind: 'enterprise' | 'community';
+  /** Host folder with the Enterprise addons, if found. */
+  source: string | null;
+  /** How the edition was determined (shown as a hint). */
+  note: string;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -66,6 +74,8 @@ export interface ProjectSummary {
   repoPath: string;
   /** Created before D33 (the app worked inside the user's repository): can only be deleted and added anew. */
   legacy: boolean;
+  /** Community or Enterprise, from the project settings; null when the settings file has an error. */
+  edition: OdooEdition | null;
   enabled: boolean;
   configPath: string;
   configError: string | null;

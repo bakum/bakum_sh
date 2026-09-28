@@ -1,0 +1,33 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import type { OdooEdition, ProjectConfig } from '@bm/shared';
+
+const hasWebEnterprise = (dir: string): boolean => {
+  try {
+    return fs.existsSync(path.join(dir, 'web_enterprise', '__manifest__.py'));
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Odoo edition of a project's builds, from its settings: `runtime.enterprise` (the app installs web_enterprise into
+ * fresh databases, D32) or a mount whose host folder holds the Enterprise addons (web_enterprise), as in DEMZ.
+ * An image with Enterprise baked in cannot be told apart from Community here.
+ */
+export function odooEdition(cfg: ProjectConfig): OdooEdition {
+  const r = cfg.runtime;
+  if (r.enterprise) {
+    const m = r.mounts.find((x) => x.container === r.enterprise);
+    return { kind: 'enterprise', source: m?.host ?? null, note: `аддоны Enterprise в ${r.enterprise}; в новые чистые БД ставится web_enterprise` };
+  }
+  const m = r.mounts.find((x) => hasWebEnterprise(x.host));
+  if (m) {
+    return {
+      kind: 'enterprise',
+      source: m.host,
+      note: `аддоны Enterprise смонтированы в ${m.container}. БД из бэкапа прода — Enterprise, как на проде; в новые чистые БД web_enterprise сам не ставится (runtime.enterprise не задан)`,
+    };
+  }
+  return { kind: 'community', source: null, note: 'в монтированиях нет аддонов Enterprise (web_enterprise)' };
+}

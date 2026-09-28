@@ -19,6 +19,7 @@ import {
 } from '@mantine/core';
 import { IconBell, IconBrandDocker, IconGitBranch, IconMoon, IconSun } from '@tabler/icons-react';
 import { useBm, useBmMutation } from '../lib/query';
+import { EditionBadge } from './EditionBadge';
 import { useCoreEvents } from '../lib/events';
 import { fmtAgo } from '../lib/format';
 import { HEADER_BG } from '../theme';
@@ -83,6 +84,7 @@ export function Shell() {
           </Group>
         )}
         <Group gap="xs" ml="auto" pr="md" wrap="nowrap">
+          <EditionBadge short edition={projects.data?.find((p) => p.id === current)?.edition} />
           <Select
             size="xs"
             w={220}

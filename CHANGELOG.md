@@ -5,6 +5,11 @@
 
 ## [Unreleased]
 
+### Добавлено
+- Выпуск Odoo проекта (Community / Enterprise): бейдж CE / EE рядом с выбором проекта в шапке и в заголовке Settings,
+  подробности на вкладке Settings → Рантайм. Определяется по монтированию с аддонами Enterprise (`web_enterprise`) и
+  полю `runtime.enterprise`.
+
 ## [0.2.0] — 2026-09-28
 
 ### Добавлено
