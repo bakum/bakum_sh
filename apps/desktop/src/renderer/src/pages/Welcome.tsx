@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Center, Code, Group, List, Stack, Stepper, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Button, Card, Center, Code, Group, List, Stack, Stepper, Text, Title } from '@mantine/core';
 import { IconGitBranch } from '@tabler/icons-react';
 import { useBm, useBmMutation } from '../lib/query';
 import { COPYRIGHT_HOLDER, useBuildInfo } from '../components/AppFooter';
@@ -8,7 +8,7 @@ import { COPYRIGHT_HOLDER, useBuildInfo } from '../components/AppFooter';
 export function Welcome() {
   const nav = useNavigate();
   const state = useBm('system.state', {});
-  const status = useBm('system.status', { refresh: true });
+  const status = useBm('system.status', { refresh: true }, { refetchInterval: 5000 });
   const finish = useBmMutation('system.completeFirstRun');
   const build = useBuildInfo().data;
 
@@ -39,10 +39,29 @@ export function Welcome() {
             <List.Item>
               Docker: {status.data ? (status.data.docker.ok ? status.data.docker.text : 'не запущен — запустите Docker Desktop') : '…'}
             </List.Item>
+            <List.Item>Git: {status.data ? status.data.git.text : '…'}</List.Item>
             <List.Item>
               Сборки доступны через Traefik на порту 80, а если он занят — на 8080. Приложение само не открывает сетевых портов.
             </List.Item>
           </List>
+          {status.data && !status.data.git.ok && (
+            <Alert color="red" variant="light" title="Нужен Git">
+              Приложение работает с репозиторием через Git for Windows.{' '}
+              <Anchor size="sm" onClick={() => void window.bm.desktop.openExternal('https://git-scm.com/download/win')}>
+                Скачать Git for Windows
+              </Anchor>
+              , установите с настройками по умолчанию (вместе с Git Credential Manager) и перезапустите приложение.
+            </Alert>
+          )}
+          {status.data && !status.data.docker.ok && (
+            <Alert color="orange" variant="light" title="Нужен Docker Desktop">
+              Сборки Odoo работают в Docker.{' '}
+              <Anchor size="sm" onClick={() => void window.bm.desktop.openExternal('https://www.docker.com/products/docker-desktop/')}>
+                Установите Docker Desktop
+              </Anchor>{' '}
+              (WSL2) или запустите его, если он уже установлен.
+            </Alert>
+          )}
           <Alert color="blue" variant="light">
             Приложение работает только с локальным Docker и Postgres. С настоящим продом оно не соединяется: зеркало прода собирается из
             файла бэкапа.

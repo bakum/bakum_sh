@@ -5,6 +5,8 @@ import { LocalWatcher, setLocalWatcher } from './services/watch-local';
 import { applyRules } from './services/branches';
 import { deleteBranchExecutor } from './services/branch-delete';
 import { deleteProjectExecutor } from './services/project-delete';
+import { cloneExecutor } from './services/repo';
+import { ensureAllManagedPostgres, setupProjectExecutor } from './services/project-setup';
 import { ensureTraefik } from './docker/traefik';
 import { startDockerWatch, stopDockerWatch } from './docker/watch';
 import { failInterruptedBuilds, reconcile } from './reconcile';
@@ -22,6 +24,8 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
   queue.register('fetch', fetchExecutor);
   queue.register('delete_branch', deleteBranchExecutor);
   queue.register('delete_project', deleteProjectExecutor);
+  queue.register('clone', cloneExecutor);
+  queue.register('setup_project', setupProjectExecutor);
   registerBuildExecutors(queue);
 
   // Tray «building» follows the queue: re-published after a job starts or finishes (a build publishing the tray
@@ -52,6 +56,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
   runtime.onDockerUp(async () => {
     startDockerWatch(ctx);
     await ensureTraefik(ctx);
+    await ensureAllManagedPostgres(ctx);
     await reconcile(ctx);
   });
   runtime.onStop(async (_c, cancel) => {

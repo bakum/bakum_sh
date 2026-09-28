@@ -14,7 +14,7 @@ export const APP_STAGE_DEFAULTS: Record<Stage, ResolvedBranchScope> = {
     onNewCommit: 'update',
     onForcePush: 'pause',
     updateModules: 'changed',
-    tracking: 'remote',
+    folder: null,
     tests: { mode: 'none', tags: '/{module}', extraArgs: [], failBuild: false },
     mails: { enabled: false },
     idleStopHours: 0,
@@ -34,7 +34,7 @@ export const APP_STAGE_DEFAULTS: Record<Stage, ResolvedBranchScope> = {
     onNewCommit: 'update',
     onForcePush: 'pause',
     updateModules: 'changed',
-    tracking: 'remote',
+    folder: null,
     tests: { mode: 'changed', tags: '/{module}', extraArgs: [], failBuild: false },
     mails: { enabled: true },
     idleStopHours: 0,
@@ -54,7 +54,7 @@ export const APP_STAGE_DEFAULTS: Record<Stage, ResolvedBranchScope> = {
     onNewCommit: 'new',
     onForcePush: 'pause',
     updateModules: 'changed',
-    tracking: 'local',
+    folder: null,
     tests: { mode: 'changed', tags: '/{module}', extraArgs: [], failBuild: false },
     mails: { enabled: true },
     idleStopHours: 8,
@@ -67,10 +67,17 @@ export const APP_STAGE_DEFAULTS: Record<Stage, ResolvedBranchScope> = {
   },
 };
 
+export interface RepoInputs {
+  url: string;
+  mirrorDir: string;
+  localFolder: string | null;
+}
+
 export interface PresetInputs {
   id: string;
   name: string;
-  repoPath: string;
+  /** Code source (D33): the remote URL, the app's mirror of it, the user's own clone (optional, never changed). */
+  repo: RepoInputs;
   github: string | null;
   remote: string;
   projectRoot: string | null;
@@ -107,7 +114,9 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
     id: i.id,
     name: i.name,
     repo: {
-      path: i.repoPath,
+      url: i.repo.url,
+      mirrorDir: i.repo.mirrorDir,
+      localFolder: i.repo.localFolder,
       remote: i.remote,
       github: i.github,
       fetchIntervalMin: 5,
@@ -170,7 +179,6 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
     stages: {
       production: {
         onNewCommit: 'update',
-        tracking: 'remote',
         tests: { mode: 'none' },
         mails: { enabled: false },
         idleStopHours: 0,
@@ -182,7 +190,6 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
         onNewCommit: 'update',
         onForcePush: 'pause',
         updateModules: 'changed',
-        tracking: 'remote',
         tests: { mode: 'changed', failBuild: false },
         mails: { enabled: true },
         idleStopHours: 0,
@@ -195,7 +202,6 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
         withDemo: false,
         onNewCommit: 'update',
         updateModules: 'changed',
-        tracking: 'local',
         tests: { mode: 'changed' },
         mails: { enabled: true },
         idleStopHours: 8,
@@ -214,6 +220,126 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
   };
 }
 
+export interface OdooPresetInputs {
+  id: string;
+  name: string;
+  repo: RepoInputs;
+  repoName: string;
+  github: string | null;
+  remote: string;
+  worktreesDir: string;
+  filestoreHostDir: string;
+  moduleRoots: string[];
+  modulesToInstall: string | null;
+  addonsDirs: string[];
+  productionBranch: string;
+  odooVersion: string;
+  /** Host port of the project's own Postgres (127.0.0.1 only). */
+  pgPort: number;
+  /** Host folder of Odoo Enterprise addons, null for Community. */
+  enterpriseDir: string | null;
+}
+
+/**
+ * «Odoo in Docker» preset (docs/decisions.md D32): nothing but a git repository is needed. The app runs the official
+ * `odoo:<series>` image and its own Postgres container (`postgres.mode: managed`, D30) in the network `bm-<project>`.
+ * Production starts from a fresh database (a backups folder turns it into a mirror of production later),
+ * Staging copies Production, Development gets a fresh database with demo data — the odoo.sh behaviour.
+ */
+export function odooPreset(i: OdooPresetInputs): ProjectConfigInput {
+  const prefix = i.id.replace(/-/g, '_');
+  const repoMount = `/mnt/repo/${i.repoName}`;
+  const enterpriseMount = '/mnt/enterprise';
+  const addons = [
+    ...(i.enterpriseDir ? [enterpriseMount] : []),
+    '/usr/lib/python3/dist-packages/odoo/addons',
+    ...i.addonsDirs.map((d) => (d ? `${repoMount}/${d}` : repoMount)),
+  ];
+  const install = i.modulesToInstall ? ('my' as const) : ('roots' as const);
+  return {
+    id: i.id,
+    name: i.name,
+    repo: {
+      url: i.repo.url,
+      mirrorDir: i.repo.mirrorDir,
+      localFolder: i.repo.localFolder,
+      remote: i.remote,
+      github: i.github,
+      fetchIntervalMin: 5,
+      worktreesDir: i.worktreesDir,
+      protectedBranches: [i.productionBranch],
+      moduleRoots: i.moduleRoots,
+      modulesToInstall: i.modulesToInstall,
+      issueUrl: i.github ? `https://github.com/${i.github}/issues/{issue}` : null,
+    },
+    naming: {
+      slug: '{branch}',
+      slugStrip: null,
+      db: `bm_${prefix}_{slug_}_{build}`,
+      host: `{slug}.${i.id}.localhost`,
+      composeProject: 'bm-{project}-{slug}',
+      parse: null,
+      branch: { pattern: '{name}', base: i.productionBranch, nameRegex: '^[a-z0-9-/]+$' },
+      pr: { title: '{branch}', body: '', targets: [i.productionBranch] },
+    },
+    runtime: {
+      image: `odoo:${i.odooVersion}`,
+      odooVersion: i.odooVersion,
+      network: `bm-${i.id}`,
+      repoMount,
+      mounts: i.enterpriseDir ? [{ host: i.enterpriseDir, container: enterpriseMount, readOnly: true }] : [],
+      filestore: { hostDir: i.filestoreHostDir, containerDir: '/var/lib/odoo/filestore', copy: 'hardlink' },
+      env: {},
+      // The official image has no debugpy (D26); the entrypoint adds --db_password from PASSWORD (set from postgres).
+      command: [
+        'odoo',
+        '--data-dir=/var/lib/odoo',
+        `--addons-path=${addons.join(',')}`,
+        '--db_host=db', '--db_port=5432', '--db_user=odoo',
+        '-d', '{db}', '--db-filter=^{db}$', '--proxy-mode',
+      ],
+      debug: {
+        containerPort: 5678,
+        pathMappings: [
+          { local: '{worktree}', remote: repoMount },
+          ...(i.enterpriseDir ? [{ local: i.enterpriseDir, remote: enterpriseMount }] : []),
+        ],
+      },
+      healthcheck: { path: '/web/login', timeoutSec: 300 },
+      composeTemplate: null,
+      enterprise: i.enterpriseDir ? enterpriseMount : null,
+    },
+    postgres: {
+      mode: 'managed',
+      image: 'postgres:16',
+      host: 'localhost',
+      port: i.pgPort,
+      internalHost: 'db',
+      user: 'odoo',
+      password: '',
+      protectedDbs: ['postgres'],
+      protectedContainers: [`bm-${i.id}-db`],
+    },
+    production: {
+      branch: i.productionBranch,
+      slug: 'prod',
+      backups: { dir: null, pattern: '*.zip', pick: 'latest', autoImport: false },
+      postRestore: { sql: [], verifySql: null },
+      updateModules: 'all',
+    },
+    stages: {
+      production: { install, withDemo: false, onNewCommit: 'update', updateModules: 'changed' } satisfies BranchScope,
+      staging: { database: 'copy:production', onNewCommit: 'update', updateModules: 'changed' } satisfies BranchScope,
+      development: { database: 'fresh', install, withDemo: true, onNewCommit: 'new' } satisfies BranchScope,
+    },
+    branchRules: [],
+    autoAddBranches: 'all',
+    connect: { adminPassword: null },
+    extraSql: [],
+    hooks: [],
+  };
+}
+
 /** Generic Odoo preset (spec 9.4): odoo.sh defaults, fresh Development databases. */
 export function genericPreset(i: PresetInputs): ProjectConfigInput {
   const prefix = i.id.replace(/-/g, '_');
@@ -221,7 +347,9 @@ export function genericPreset(i: PresetInputs): ProjectConfigInput {
     id: i.id,
     name: i.name,
     repo: {
-      path: i.repoPath,
+      url: i.repo.url,
+      mirrorDir: i.repo.mirrorDir,
+      localFolder: i.repo.localFolder,
       remote: i.remote,
       github: i.github,
       fetchIntervalMin: 5,

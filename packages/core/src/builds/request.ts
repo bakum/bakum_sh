@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { and, desc, eq, inArray, max } from 'drizzle-orm';
-import { BmError, BUILD_STEPS, type BuildKind, type BuildTrigger, type BuildStep } from '@bm/shared';
+import { BmError, BUILD_STEPS, type BuildKind, type BuildTrigger, type BuildStep, type ProjectConfig, type Stage } from '@bm/shared';
 import type { Ctx } from '../context';
 import { buildLogsDir } from '../context';
 import { builds, type BranchRow } from '../db/schema';
@@ -9,7 +9,8 @@ import { resolveBranchScope } from '../config/effective';
 import { assertHost, assertSqlIdent, parseBranchName, renderTemplate, slugUnderscore } from '../config/templates';
 import { branchRow } from '../services/branch-rows';
 import { configHash, liveBuild } from './view';
-import { assertLocalWorktreePossible } from '../git/worktrees';
+import { assertFolderUsable } from '../git/worktrees';
+import { assertNotLegacy } from '../config/legacy';
 import { getQueue } from '../jobs/queue';
 import { bus } from '../events';
 import { runtimeState } from '../state';
@@ -33,9 +34,18 @@ export async function requestBuildChecked(ctx: Ctx, branchId: number, req: Build
   if (!b) throw new BmError('NO_BRANCH', 'Ветка не найдена');
   const cfg = ctx.store.require(b.projectId);
   const scope = resolveBranchScope(cfg, b.name, b.stage, b.overrides).scope;
-  if (cfg.postgres.mode === 'managed') throw new BmError('STAGE2', 'postgres.mode: managed появится на этапе 2');
-  if (scope.tracking === 'local') await assertLocalWorktreePossible(cfg, b);
+  if (scope.folder) await assertFolderUsable(scope.folder);
   return requestBuild(ctx, branchId, req);
+}
+
+/**
+ * Whether the database comes from a production backup (D32): an explicit backup import always does; `database: backup`
+ * does only when a backups folder is configured — without one Production gets a fresh database instead of failing.
+ */
+export function productionFromBackup(cfg: ProjectConfig, stage: Stage, database: string, backupPath?: string): boolean {
+  if (backupPath) return true;
+  if (database !== 'backup') return false;
+  return stage !== 'production' || !!cfg.production.backups.dir;
 }
 
 /** Synchronous part: creates the Build row and enqueues its job. */
@@ -43,6 +53,7 @@ export function requestBuild(ctx: Ctx, branchId: number, req: BuildRequest): num
   const b = branchRow(ctx, branchId);
   if (!b) throw new BmError('NO_BRANCH', 'Ветка не найдена');
   const cfg = ctx.store.require(b.projectId);
+  assertNotLegacy(cfg);
   const active = ctx.db
     .select()
     .from(builds)
@@ -77,7 +88,10 @@ export function requestBuild(ctx: Ctx, branchId: number, req: BuildRequest): num
     dbSource = `update:#${live!.number}`;
   } else {
     dbName = assertSqlIdent(renderTemplate(cfg.naming.db, vars));
-    if (b.stage === 'production' || scope.database === 'backup') {
+    if (b.stage === 'production' && scope.database.startsWith('copy:')) {
+      throw new BmError('BAD_CONFIG', 'Production не может копировать БД другой ветки: укажите database: backup или fresh');
+    }
+    if (productionFromBackup(cfg, b.stage, scope.database, req.backupPath)) {
       if (b.stage !== 'production') throw new BmError('BAD_CONFIG', 'database: backup допустима только для Production');
       const file = req.backupPath ?? pickBackup(cfg)?.path;
       if (!file) {
@@ -90,7 +104,8 @@ export function requestBuild(ctx: Ctx, branchId: number, req: BuildRequest): num
       if (!fs.existsSync(file)) throw new BmError('NO_BACKUP', `Файл бэкапа не найден: ${file}`);
       dbSource = `backup:${path.basename(file)}`;
     } else {
-      dbSource = scope.database === 'fresh' ? 'fresh' : scope.database;
+      // database: backup without a backups folder → fresh (productionFromBackup).
+      dbSource = scope.database === 'fresh' || scope.database === 'backup' ? 'fresh' : scope.database;
     }
   }
 

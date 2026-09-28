@@ -29,7 +29,7 @@ export async function deletePreview(ctx: Ctx, branchId: number) {
 }
 
 /** Validates the Delete request (spec 8.10) and queues the job. */
-export async function requestDelete(ctx: Ctx, p: { branchId: number; confirmSlug: string; deleteLocal: boolean; deleteRemote: boolean; forceDirty: boolean }) {
+export async function requestDelete(ctx: Ctx, p: { branchId: number; confirmSlug: string; deleteRemote: boolean; forceDirty: boolean }) {
   const b = mustBranch(ctx, p.branchId);
   if (p.confirmSlug !== b.slug) throw new BmError('CONFIRM', `Для удаления введите slug ветки: ${b.slug}`);
   if (p.deleteRemote) throw new BmError('STAGE2', 'Удаление ветки в origin появится на этапе 2');
@@ -42,7 +42,7 @@ export async function requestDelete(ctx: Ctx, p: { branchId: number; confirmSlug
 export async function deleteBranchExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const b = mustBranch(ctx, job.branchId!);
   const cfg = ctx.store.require(b.projectId);
-  const params = job.params as { deleteLocal?: boolean; forceDirty?: boolean };
+  const params = job.params as { forceDirty?: boolean };
   const all = ctx.db.select().from(builds).where(eq(builds.branchId, b.id)).all();
   // Newest first: the live container is taken down with its own build.
   for (const x of all.sort((a, c) => c.number - a.number)) {
@@ -55,11 +55,6 @@ export async function deleteBranchExecutor(ctx: Ctx, job: JobRow, jc: JobContext
     jc.log(`git worktree remove ${b.worktreePath}`);
     await removeWorktree(ctx, cfg, b, !!params.forceDirty);
   }
-  if (params.deleteLocal && (await git.localSha(cfg.repo.path, b.name))) {
-    if (cfg.repo.protectedBranches.includes(b.name)) throw new BmError('PROTECTED', `Ветка ${b.name} в protectedBranches: локальную ветку удалять нельзя`);
-    jc.log(`git branch -d ${b.name}`);
-    await git.branchDeleteSafe(cfg.repo.path, b.name);
-  }
   ctx.db.delete(builds).where(eq(builds.branchId, b.id)).run();
   ctx.db.delete(branches).where(eq(branches.id, b.id)).run();
   setAutoAddSkip(ctx, cfg.id, b.name, true);
@@ -69,7 +64,7 @@ export async function deleteBranchExecutor(ctx: Ctx, job: JobRow, jc: JobContext
     projectId: cfg.id,
     action: 'branch.delete',
     target: b.name,
-    params: { builds: all.map((x) => ({ n: x.number, db: x.dbName, status: x.status, sha: x.commitSha })), deleteLocal: !!params.deleteLocal },
+    params: { builds: all.map((x) => ({ n: x.number, db: x.dbName, status: x.status, sha: x.commitSha })) },
   });
   bus.emit({ type: 'branch.changed', projectId: cfg.id, branchId: b.id });
 }

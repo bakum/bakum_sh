@@ -22,6 +22,8 @@ import { audit } from './audit';
 import { branchByName, branchRow, branchRows, ensureBranchRow, setAutoAddSkip } from './branch-rows';
 import { branchBuilds, buildUrl, configHash, liveBuild, toBuildView } from '../builds/view';
 import { requestBuildChecked } from '../builds/request';
+import { repoDir } from '../git/worktrees';
+import { assertNotLegacy } from '../config/legacy';
 import { onProjectConfigChanged } from './projects';
 import { nowIso } from '../util/time';
 
@@ -29,7 +31,7 @@ import { nowIso } from '../util/time';
 const gitCache = new Map<string, GitBranchInfo[]>();
 
 export async function gitBranches(ctx: Ctx, cfg: ProjectConfig, refresh = false): Promise<GitBranchInfo[]> {
-  if (refresh || !gitCache.has(cfg.id)) gitCache.set(cfg.id, await git.listBranches(cfg.repo.path, cfg.repo.remote));
+  if (refresh || !gitCache.has(cfg.id)) gitCache.set(cfg.id, await git.listBranches(repoDir(cfg), cfg.repo.remote));
   return gitCache.get(cfg.id)!;
 }
 
@@ -56,7 +58,7 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
   const port = ctx.proxyPort ?? ctx.store.app.proxyPort;
   const hash = configHash(cfg, r.scope, port);
   const badges: BranchBadge[] = [];
-  const head = r.scope.tracking === 'remote' ? b.lastSeenRemoteSha : (b.lastSeenLocalSha ?? b.lastSeenRemoteSha);
+  const head = r.scope.folder ? (b.lastSeenLocalSha ?? b.lastSeenRemoteSha) : b.lastSeenRemoteSha;
   if (!live && !active) badges.push({ kind: 'no-build', text: 'Сборки нет' });
   if (live && head && live.commitSha && head !== live.commitSha && !active) {
     badges.push({ kind: 'unbuilt-commits', text: 'Есть несобранные коммиты' });
@@ -79,8 +81,9 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
     slug: b.slug,
     stage: b.stage,
     assignedBy: b.assignedBy,
-    tracking: r.scope.tracking,
+    folder: r.scope.folder,
     worktreePath: b.worktreePath,
+    codeDir: r.scope.folder ?? b.worktreePath,
     protected: r.scope.protected,
     odooVersion: r.scope.image === cfg.runtime.image ? cfg.runtime.odooVersion : `${cfg.runtime.odooVersion}*`,
     indicator: liveView?.containerState === 'missing' && !active ? 'failed' : indicator(live, latest, active),
@@ -154,13 +157,12 @@ export async function addBranch(ctx: Ctx, p: { projectId: string; name: string; 
   return getBranchView(ctx, row.id);
 }
 
-/** Remembers current remote / local heads so only later commits count as "new". */
+/** Remembers the current remote head so only later commits count as "new" (the folder head is tracked by LocalWatcher). */
 export async function recordHeads(ctx: Ctx, cfg: ProjectConfig, row: BranchRow): Promise<void> {
-  const remoteSha = await git.remoteSha(cfg.repo.path, cfg.repo.remote, row.name);
-  const localSha = await git.localSha(cfg.repo.path, row.name);
+  const remoteSha = await git.remoteSha(repoDir(cfg), cfg.repo.remote, row.name);
   ctx.db
     .update(branches)
-    .set({ lastSeenRemoteSha: remoteSha ?? row.lastSeenRemoteSha, lastSeenLocalSha: row.lastSeenLocalSha ?? localSha })
+    .set({ lastSeenRemoteSha: remoteSha ?? row.lastSeenRemoteSha })
     .where(eq(branches.id, row.id))
     .run();
 }
@@ -242,29 +244,30 @@ export function forkName(ctx: Ctx, projectId: string, input: string): { name: st
 }
 
 /**
- * Fork (spec 8.10): `git branch <new> <sha of the live build, else HEAD of the branch>` → Development → build.
- * Push to origin is stage 2.
+ * Fork (spec 8.10, D33): the new branch is created on the remote — `git push <remote> <sha>:refs/heads/<new>` from the
+ * app's mirror (sha of the live build, else the head of the branch) → fetch → Development → build.
  */
-export async function forkBranch(ctx: Ctx, p: { branchId: number; name: string; push: boolean }): Promise<{ branch: BranchView; jobId: number | null }> {
-  if (p.push) throw new BmError('STAGE2', '«Push -u origin» появится на этапе 2. Сейчас Fork создаёт только локальную ветку.');
+export async function forkBranch(ctx: Ctx, p: { branchId: number; name: string }): Promise<{ branch: BranchView; jobId: number | null }> {
   const src = mustBranch(ctx, p.branchId);
   const cfg = ctx.store.require(src.projectId);
+  assertNotLegacy(cfg);
+  const repo = repoDir(cfg);
   const n = forkName(ctx, cfg.id, p.name);
   if (!n.valid) throw new BmError('BAD_NAME', n.error!);
-  if (!(await git.isValidBranchName(cfg.repo.path, n.name))) throw new BmError('BAD_NAME', `«${n.name}» — недопустимое имя ветки git`);
+  if (!(await git.isValidBranchName(repo, n.name))) throw new BmError('BAD_NAME', `«${n.name}» — недопустимое имя ветки git`);
   const known = await gitBranches(ctx, cfg, true);
   if (known.some((g) => g.name === n.name)) throw new BmError('BRANCH_EXISTS', `Ветка «${n.name}» уже существует`);
   const live = liveBuild(ctx, src.id);
-  const start =
-    live?.commitSha ??
-    (await git.remoteSha(cfg.repo.path, cfg.repo.remote, src.name)) ??
-    (await git.localSha(cfg.repo.path, src.name));
+  // A live build from the user's folder may sit on an unpushed commit: then the branch starts from the remote head.
+  const liveSha = live?.commitSha && (await git.revParse(repo, live.commitSha)) ? live.commitSha : null;
+  const start = liveSha ?? (await git.remoteSha(repo, cfg.repo.remote, src.name));
   if (!start) throw new BmError('NO_BRANCH_REF', `Не найден коммит ветки «${src.name}». Выполните fetch.`);
-  await git.branchCreate(cfg.repo.path, n.name, start);
+  await git.pushNewBranch(repo, cfg.repo.remote, start, n.name);
+  await git.fetch(repo, cfg.repo.remote);
   invalidateGitCache(cfg.id);
   const row = ensureBranchRow(ctx, cfg, n.name, 'development', 'user');
-  ctx.db.update(branches).set({ lastSeenLocalSha: start }).where(eq(branches.id, row.id)).run();
-  audit(ctx, { projectId: cfg.id, action: 'branch.fork', target: n.name, params: { from: src.name, sha: start } });
+  await recordHeads(ctx, cfg, row);
+  audit(ctx, { projectId: cfg.id, action: 'branch.fork', target: n.name, params: { from: src.name, sha: start, pushed: cfg.repo.remote } });
   bus.emit({ type: 'branch.changed', projectId: cfg.id, branchId: row.id });
   const jobId = await requestBuildChecked(ctx, row.id, { trigger: 'manual' });
   return { branch: getBranchView(ctx, row.id), jobId };

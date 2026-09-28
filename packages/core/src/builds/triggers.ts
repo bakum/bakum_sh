@@ -17,8 +17,8 @@ function pause(ctx: Ctx, b: BranchRow, reason: 'dirty-worktree' | 'force-push'):
 }
 
 /**
- * A new commit arrived for a branch (spec 8.3): `origin/<b>` moved after fetch (remote tracking) or
- * the worktree HEAD moved (local tracking). Acts according to onNewCommit / onForcePush.
+ * A new commit arrived for a branch (spec 8.3): `origin/<b>` moved after fetch (code from the mirror) or
+ * HEAD of the user's folder moved (code from the folder, D33). Acts according to onNewCommit / onForcePush.
  * Branches without a live build only get the «unbuilt commits» / «no build» badge.
  */
 export async function onNewCommit(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, sha: string, opts: { forcePush: boolean }): Promise<void> {
@@ -33,7 +33,7 @@ export async function onNewCommit(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, sh
       return;
     }
   }
-  if (scope.tracking === 'remote' && b.worktreePath) {
+  if (!scope.folder && b.worktreePath) {
     const dirty = await git.statusPorcelain(b.worktreePath).catch(() => '');
     if (dirty.trim()) {
       pause(ctx, b, 'dirty-worktree');

@@ -17,7 +17,9 @@ export type JobType =
   | 'fetch'
   | 'apply_config'
   | 'modules'
-  | 'delete_project';
+  | 'delete_project'
+  | 'clone'
+  | 'setup_project';
 export type JobStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled' | 'interrupted';
 
 export const BUILD_STEPS = [
@@ -60,7 +62,10 @@ export interface TestsResult {
 export interface ProjectSummary {
   id: string;
   name: string;
+  /** Where the code comes from: the remote URL (for a legacy project — the user's repository). */
   repoPath: string;
+  /** Created before D33 (the app worked inside the user's repository): can only be deleted and added anew. */
+  legacy: boolean;
   enabled: boolean;
   configPath: string;
   configError: string | null;
@@ -79,8 +84,11 @@ export interface BranchView {
   slug: string;
   stage: Stage;
   assignedBy: 'user' | 'rule';
-  tracking: 'local' | 'remote';
+  /** The user's folder the code comes from (Development setting, D33); null — the app's mirror of the remote. */
+  folder: string | null;
   worktreePath: string | null;
+  /** Folder the build mounts: `folder` or the worktree. */
+  codeDir: string | null;
   protected: boolean;
   odooVersion: string;
   indicator: LiveIndicator;
@@ -169,7 +177,11 @@ export interface JobView {
 }
 
 export interface DetectResult {
-  repoPath: string;
+  /** The app's bare mirror the project will work in (D33). */
+  mirrorDir: string;
+  url: string;
+  /** The user's own clone given in the wizard (only read), null when the project was started from a URL. */
+  localFolder: string | null;
   isGitRepo: boolean;
   remote: string | null;
   remoteUrl: string | null;
@@ -190,10 +202,32 @@ export interface DetectResult {
   mounts: { host: string; container: string; readOnly: boolean }[];
   command: string[] | null;
   postgres: { container: string; host: string; port: number; internalHost: string; user: string; hasPassword: boolean } | null;
-  suggestedPreset: 'demz' | 'generic';
+  /** Odoo series of the repository (manifest versions, production branch), e.g. «19.0». */
+  odooVersion: string;
+  suggestedPreset: PresetId;
   warnings: string[];
   /** Project config generated from the chosen preset and the detected values (password stripped). */
-  proposals: Record<'demz' | 'generic', ProjectConfig>;
+  proposals: Record<PresetId, ProjectConfig>;
+}
+
+/** demz — the DEMZ project; generic — an existing Odoo in Docker; odoo — the app runs Odoo and Postgres itself. */
+export type PresetId = 'demz' | 'generic' | 'odoo';
+
+export const ODOO_VERSIONS = ['19.0', '18.0', '17.0'] as const;
+
+/** Access check of a remote repository (`git ls-remote`), docs/decisions.md D31. */
+export interface RepoProbe {
+  ok: boolean;
+  url: string;
+  /** auth — no credentials; denied — credentials without access or no such repository; ssh-key / host-key — SSH setup. */
+  problem: 'auth' | 'denied' | 'ssh-key' | 'host-key' | 'network' | 'no-helper' | 'other' | null;
+  message: string | null;
+  branches: string[];
+  defaultBranch: string | null;
+  /** The URL uses https (a token can be saved for it). */
+  https: boolean;
+  /** Git credential helper configured (credential.helper), e.g. «manager». */
+  helper: string | null;
 }
 
 export interface EffectiveField {
@@ -219,6 +253,7 @@ export interface ServiceStatus {
 export interface SystemStatus {
   docker: ServiceStatus & { version: string | null };
   traefik: ServiceStatus & { port: number | null };
+  git: ServiceStatus;
   postgres: Record<string, ServiceStatus>;
   gh: ServiceStatus;
   disk: { freeGb: number | null; path: string; low: boolean };

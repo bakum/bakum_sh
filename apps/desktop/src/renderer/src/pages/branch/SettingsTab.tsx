@@ -21,7 +21,6 @@ const FIELDS: Editable[] = [
   { path: 'install', label: 'Установка (fresh)', kind: 'select', options: ['my', 'roots', 'full'] },
   { path: 'withDemo', label: 'Демо-данные (fresh)', kind: 'switch' },
   { path: 'updateModules', label: 'Обновлять модули', kind: 'select', options: ['changed', 'all'] },
-  { path: 'tracking', label: 'Код ветки (tracking)', kind: 'select', options: ['local', 'remote'] },
   { path: 'onForcePush', label: 'Force-push', kind: 'select', options: ['pause', 'new'] },
   { path: 'cloneMethod', label: 'Копирование БД', kind: 'select', options: ['template'] },
   { path: 'filestoreCopy', label: 'Копирование filestore', kind: 'select', options: ['hardlink', 'copy'] },

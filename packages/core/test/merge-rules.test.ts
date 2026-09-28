@@ -9,7 +9,7 @@ const demz = projectConfigSchema.parse(
   demzPreset({
     id: 'demz',
     name: 'DEMZ Odoo 19',
-    repoPath: 'E:/demz-odoo-19/repositories/demz-odoo',
+    repo: { url: 'https://github.com/demz-ua/demz-odoo.git', mirrorDir: 'C:/bm/repos/demz-odoo.git', localFolder: 'E:/demz-odoo-19/repositories/demz-odoo' },
     github: 'DEMZ-UA/demz-odoo',
     remote: 'origin',
     projectRoot: 'E:/demz-odoo-19',
@@ -112,7 +112,7 @@ describe('resolveBranchScope', () => {
 
   it('uses stage defaults of the current stage after a manual move', () => {
     const r = resolveBranchScope(demz, 'demz-roman', 'staging', null);
-    expect(r.scope.tracking).toBe('remote');
+    expect(r.scope.folder).toBeNull();
     expect(r.scope.database).toBe('copy:production');
     expect(r.ruleIndex).toBeNull();
   });

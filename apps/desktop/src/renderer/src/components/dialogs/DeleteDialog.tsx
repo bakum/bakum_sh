@@ -8,14 +8,12 @@ import { useBm, useBmMutation } from '../../lib/query';
 export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch: BranchView; onClose: () => void }) {
   const nav = useNavigate();
   const [slug, setSlug] = useState('');
-  const [deleteLocal, setDeleteLocal] = useState(false);
   const [forceDirty, setForceDirty] = useState(false);
   const preview = useBm('branches.deletePreview', { branchId: branch.id }, { enabled: open });
   const del = useBmMutation('branches.delete', { success: 'Ветка удаляется' });
   useEffect(() => {
     if (open) {
       setSlug('');
-      setDeleteLocal(false);
       setForceDirty(false);
     }
   }, [open]);
@@ -29,7 +27,7 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
           <>
             <Text size="sm">
               Будут отброшены все сборки ветки ({p?.builds ?? '…'}): БД, filestore и контейнеры. Worktree будет удалён. История остаётся в Audit
-              Logs. Ветка в git сохраняется, если не отмечено иное.
+              Logs. Ветка на GitHub и ваша папка с кодом не трогаются.
             </Text>
             {p?.dirty && (
               <Alert color="red" title="В worktree есть незакоммиченные изменения">
@@ -37,7 +35,6 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
                 <Checkbox mt="xs" label="Я понимаю, что эти изменения будут потеряны" checked={forceDirty} onChange={(e) => setForceDirty(e.currentTarget.checked)} />
               </Alert>
             )}
-            <Checkbox label="Удалить локальную ветку (git branch -d, только слитую)" checked={deleteLocal} onChange={(e) => setDeleteLocal(e.currentTarget.checked)} />
             <Checkbox label="Удалить ветку в origin (этап 2)" disabled />
             <TextInput label={`Для подтверждения введите slug: ${branch.slug}`} value={slug} onChange={(e) => setSlug(e.currentTarget.value)} />
           </>
@@ -52,7 +49,7 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
             loading={del.isPending}
             onClick={() =>
               del.mutate(
-                { branchId: branch.id, confirmSlug: slug, deleteLocal, deleteRemote: false, forceDirty },
+                { branchId: branch.id, confirmSlug: slug, deleteRemote: false, forceDirty },
                 {
                   onSuccess: () => {
                     onClose();

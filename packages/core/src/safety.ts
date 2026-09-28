@@ -15,6 +15,8 @@ export type OwnedResource =
   | { kind: 'container'; name: string; labels: Record<string, string> }
   | { kind: 'compose'; name: string }
   | { kind: 'worktree'; path: string }
+  /** The app's bare mirror of the project repository (D33), removed only together with the project. */
+  | { kind: 'mirror'; path: string; reposRoot: string }
   | { kind: 'filestore'; path: string; db: string };
 
 const SYSTEM_DBS = new Set(['postgres', 'template0', 'template1']);
@@ -52,8 +54,17 @@ export function assertOwned(cfg: ProjectConfig, r: OwnedResource, reg: OwnedRegi
     }
     case 'worktree': {
       if (!isInside(cfg.repo.worktreesDir, r.path)) deny(`«${r.path}» вне папки worktree проекта (${cfg.repo.worktreesDir})`);
-      if (samePath(r.path, cfg.repo.path) || isInside(r.path, cfg.repo.path)) deny('это основной чекаут репозитория');
+      // Neither the repository nor the user's folder may be the worktree, lie inside it or contain it.
+      const overlaps = (own: string | null | undefined): boolean => !!own && (samePath(r.path, own) || isInside(r.path, own) || isInside(own, r.path));
+      if (overlaps(cfg.repo.path) || overlaps(cfg.repo.mirrorDir)) deny('это репозиторий проекта, а не worktree');
+      if (overlaps(cfg.repo.localFolder)) deny('это ваша папка с кодом');
       if (![...reg.worktrees].some((w) => samePath(w, r.path))) deny(`worktree «${r.path}» отсутствует в реестре`);
+      return;
+    }
+    case 'mirror': {
+      if (!cfg.repo.mirrorDir || !samePath(r.path, cfg.repo.mirrorDir)) deny(`«${r.path}» не является копией репозитория проекта ${cfg.id}`);
+      if (!isInside(r.reposRoot, r.path)) deny(`копия «${r.path}» лежит вне папки приложения ${r.reposRoot}`);
+      if (cfg.repo.localFolder && samePath(r.path, cfg.repo.localFolder)) deny('это ваша папка с кодом');
       return;
     }
     case 'filestore': {

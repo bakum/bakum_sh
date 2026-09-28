@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Button, Checkbox, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
 import type { BranchView } from '@bm/shared';
 import { useBm, useBmMutation } from '../../lib/query';
 
-/** Fork (spec 8.10): new branch from the live build commit (or HEAD) → Development → build. No push in stage 1. */
+/** Fork (spec 8.10, D33): the new branch is created on GitHub from the live build commit (or the branch head) → Development → build. */
 export function ForkDialog({ open, branch, onClose }: { open: boolean; branch: BranchView; onClose: () => void }) {
   const nav = useNavigate();
   const [name, setName] = useState('');
@@ -13,18 +13,17 @@ export function ForkDialog({ open, branch, onClose }: { open: boolean; branch: B
   }, [open]);
   const preview = useBm('branches.forkName', { projectId: branch.projectId, name }, { enabled: open && !!name });
   const fork = useBmMutation('branches.fork', { success: 'Ветка создана, сборка поставлена в очередь' });
-  const from = branch.liveBuild?.commitSha ? `коммита живой сборки ${branch.liveBuild.commitSha.slice(0, 7)}` : `HEAD ${branch.name}`;
+  const from = branch.liveBuild?.commitSha ? `коммита живой сборки ${branch.liveBuild.commitSha.slice(0, 7)}` : `последнего коммита ${branch.name}`;
   return (
     <Modal opened={open} onClose={onClose} title={`Fork от ${branch.name}`}>
       <Stack>
         <TextInput label="Имя новой ветки" placeholder="test999" value={name} onChange={(e) => setName(e.currentTarget.value)} data-autofocus />
         {preview.data && (
           <Text size="sm">
-            Будет создана ветка <b>{preview.data.name}</b> от {from}
+            Ветка <b>{preview.data.name}</b> будет создана в репозитории на GitHub от {from}. Нужны права на запись (push).
           </Text>
         )}
         {preview.data?.error && <Alert color="red">{preview.data.error}</Alert>}
-        <Checkbox label="Push -u origin (этап 2)" disabled />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
             Отмена
@@ -34,7 +33,7 @@ export function ForkDialog({ open, branch, onClose }: { open: boolean; branch: B
             loading={fork.isPending}
             onClick={() =>
               fork.mutate(
-                { branchId: branch.id, name: preview.data!.name, push: false },
+                { branchId: branch.id, name: preview.data!.name },
                 {
                   onSuccess: (r) => {
                     onClose();

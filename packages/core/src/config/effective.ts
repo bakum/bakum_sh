@@ -34,6 +34,13 @@ export function resolveBranchScope(cfg: ProjectConfig, branch: string, stage: St
     { level: 'rule', value: ruleApplies ? (sel.rule!.overrides as Record<string, unknown> | undefined) : undefined },
     { level: 'branch', value: branchOverrides as Record<string, unknown> | null },
   ]);
+  // `tracking` is a leftover of old YAML (D33); the folder is honoured for Development branches only.
+  delete (merged.value as Partial<ResolvedBranchScope> & { tracking?: unknown }).tracking;
+  delete merged.sources.tracking;
+  if (stage !== 'development' || !merged.value.folder) {
+    merged.value.folder = null;
+    delete merged.sources.folder;
+  }
   const fields = flattenFields(merged.value as unknown as Record<string, unknown>, merged.sources);
   return { scope: merged.value, sources: merged.sources, ruleIndex: ruleApplies ? sel.ruleIndex : null, fields };
 }

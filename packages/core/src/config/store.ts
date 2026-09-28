@@ -113,8 +113,8 @@ export class ConfigStore {
   deleteProject(id: string): void {
     const e = this.projects.get(id);
     if (!e) return;
-    const trash = `${e.path}.deleted-${Date.now()}`;
-    fs.renameSync(e.path, trash);
+    // Full cleanup (D34): the settings file goes too, no `.deleted-<time>` copy.
+    fs.rmSync(e.path, { force: true });
     this.projects.delete(id);
   }
 

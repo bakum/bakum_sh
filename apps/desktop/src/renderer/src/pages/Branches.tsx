@@ -4,7 +4,7 @@ import { Alert, Box, Button, Center, Group, Modal, Select, Stack, Text, Title } 
 import { notifications } from '@mantine/notifications';
 import type { BranchView, Stage } from '@bm/shared';
 import { useBm, useBmMutation } from '../lib/query';
-import { call, errorCode, errorText } from '../lib/bm';
+import { call, errorText } from '../lib/bm';
 import { Sidebar } from '../components/Sidebar';
 import { BranchPage } from './BranchPage';
 import { MergeDialog } from '../components/dialogs/MergeDialog';
@@ -20,6 +20,7 @@ export function BranchesPage() {
   const projects = useBm('projects.list', {});
   const jobs = useBm('jobs.list', { projectId, active: true }, { refetchInterval: 4000 });
   const fetchM = useBmMutation('git.fetch', { success: 'Fetch запущен' });
+  const login = useBmMutation('projects.login');
   const [move, setMove] = useState<{ b: BranchView; stage: Stage } | null>(null);
   const [addStage, setAddStage] = useState<Stage | null>(null);
   const [merge, setMerge] = useState<{ source: BranchView; target: BranchView | null } | null>(null);
@@ -70,9 +71,32 @@ export function BranchesPage() {
         }}
       />
       <Box style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+        {summary?.legacy && (
+          <Alert color="red" radius={0} py={6}>
+            Проект создан по старой схеме: приложение работало внутри вашего репозитория, сборки и fetch для него отключены. Удалите проект (Settings →
+            «Удалить проект…») и добавьте заново — код сборок будет браться с GitHub.
+          </Alert>
+        )}
         {summary?.lastFetchError && (
           <Alert color="orange" radius={0} py={6}>
-            Последний fetch завершился ошибкой: {summary.lastFetchError}
+            <Group justify="space-between" wrap="nowrap">
+              <span>Последний fetch завершился ошибкой: {summary.lastFetchError}</span>
+              {/нет доступа к репозиторию/.test(summary.lastFetchError) && (
+                <Button
+                  size="compact-sm"
+                  variant="white"
+                  loading={login.isPending}
+                  onClick={() =>
+                    login.mutate(
+                      { projectId },
+                      { onSuccess: (p) => notifications.show({ color: p.ok ? 'green' : 'red', message: p.ok ? 'Доступ есть, fetch запущен' : (p.message ?? 'Нет доступа') }) },
+                    )
+                  }
+                >
+                  Войти
+                </Button>
+              )}
+            </Group>
           </Alert>
         )}
         {selectedId && all.some((b) => b.id === selectedId) ? (
@@ -150,9 +174,6 @@ function MoveDialog({ move, onClose, production }: { move: { b: BranchView; stag
                   { branchId: move.b.id, trigger: 'stage_change' },
                   {
                     onSuccess: close,
-                    onError: (e) => {
-                      if (errorCode(e) === 'BRANCH_IN_MAIN_CHECKOUT') close();
-                    },
                   },
                 )
               }

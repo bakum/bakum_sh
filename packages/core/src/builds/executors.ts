@@ -10,6 +10,7 @@ import { generateCompose } from '../docker/compose';
 import { ensureTraefik } from '../docker/traefik';
 import { refreshContainers } from '../docker/watch';
 import { resolveBranchScope } from '../config/effective';
+import { codeSource } from '../git/worktrees';
 import { branchRow } from '../services/branch-rows';
 import { publishTray } from '../services/tray';
 import { audit } from '../services/audit';
@@ -69,7 +70,8 @@ async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void>
   const br = branchRow(ctx, b.branchId)!;
   const cfg = ctx.store.require(b.projectId);
   const scope = resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope;
-  if (!br.worktreePath) throw new BmError('NO_WORKTREE', 'Worktree ветки не найден — нужен Rebuild');
+  const code = codeSource(cfg, br, scope).dir;
+  if (!code) throw new BmError('NO_WORKTREE', 'Worktree ветки не найден — нужен Rebuild');
   await ensureTraefik(ctx);
   const file = path.join(branchDir(ctx, cfg.id, br.slug), 'compose.yml');
   const text = generateCompose({
@@ -77,7 +79,7 @@ async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void>
     scope,
     branch: { id: br.id, name: br.name, slug: br.slug, stage: br.stage },
     build: { id: b.id, number: b.number, dbName: b.dbName, host: b.host, composeProject: b.composeProject, debugPort: b.debugPort },
-    worktree: br.worktreePath,
+    worktree: code,
   });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text, 'utf8');

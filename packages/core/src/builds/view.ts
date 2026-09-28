@@ -24,6 +24,8 @@ export function configHash(cfg: ProjectConfig, scope: ResolvedBranchScope, proxy
     pg: cfg.postgres.internalHost,
     proxyPort,
     v: 1,
+    // The code folder is mounted into the container (D33); only present when it is the user's folder.
+    ...(scope.folder ? { folder: scope.folder } : {}),
   };
   return crypto.createHash('sha1').update(JSON.stringify(payload)).digest('hex').slice(0, 16);
 }

@@ -5,7 +5,7 @@ import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import { execa } from 'execa';
 import { BmError, BUILD_STEPS, type BuildStepName, type ChangedModules } from '@bm/shared';
 import type { Ctx } from '../context';
-import { branches, builds, jobs } from '../db/schema';
+import { branches, builds, jobs, type BranchRow } from '../db/schema';
 import { getQueue } from '../jobs/queue';
 import { buildRow, buildUrl, liveBuild, toBuildView } from '../builds/view';
 import { requestBuildChecked } from '../builds/request';
@@ -15,6 +15,7 @@ import { serverBaseArgs } from '../builds/odoo-cli';
 import { resolveBranchScope } from '../config/effective';
 import { renderDeep } from '../config/templates';
 import * as git from '../git';
+import { codeSource } from '../git/worktrees';
 import * as pg from '../pg';
 import { changedModules, modulesFromTree, parseModuleList, splitInstallUpdate } from '../modules';
 import { branchByName, branchRow } from './branch-rows';
@@ -81,15 +82,14 @@ async function changedModulesPreview(ctx: Ctx, branchId: number): Promise<Change
   const cfg = ctx.store.require(br.projectId);
   const scope = resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope;
   const live = liveBuild(ctx, br.id);
-  const to =
-    scope.tracking === 'local' && br.worktreePath
-      ? await git.headSha(br.worktreePath)
-      : (br.lastSeenRemoteSha ?? (await git.remoteSha(cfg.repo.path, cfg.repo.remote, br.name)));
+  const src = codeSource(cfg, br, scope);
+  const to = src.kind === 'folder' ? await git.headSha(src.dir) : (br.lastSeenRemoteSha ?? (await git.remoteSha(src.repo, cfg.repo.remote, br.name)));
   const from = live?.commitSha ?? null;
-  if (!from || !to || from === to) return { from, to, files: 0, modules: [] };
-  const files = await git.diffNames(cfg.repo.path, from, to);
-  const toMods = modulesFromTree(await git.lsTree(cfg.repo.path, to));
-  const fromMods = modulesFromTree(await git.lsTree(cfg.repo.path, from));
+  const extra = src.kind === 'folder' ? await git.uncommittedFiles(src.dir) : [];
+  if (!from || !to || (from === to && !extra.length) || !(await git.revParse(src.repo, from))) return { from, to, files: 0, modules: [] };
+  const files = [...new Set([...(await git.diffNames(src.repo, from, to)), ...extra])];
+  const toMods = modulesFromTree(await git.lsTree(src.repo, to));
+  const fromMods = modulesFromTree(await git.lsTree(src.repo, from));
   const ch = changedModules(files, toMods, fromMods, cfg.repo.moduleRoots);
   let installed = new Set<string>();
   try {
@@ -97,7 +97,7 @@ async function changedModulesPreview(ctx: Ctx, branchId: number): Promise<Change
   } catch {
     /* DB unavailable */
   }
-  const wantedText = cfg.repo.modulesToInstall ? await git.showFile(cfg.repo.path, to, cfg.repo.modulesToInstall) : null;
+  const wantedText = cfg.repo.modulesToInstall ? await git.showFile(src.repo, to, cfg.repo.modulesToInstall) : null;
   const s = splitInstallUpdate(ch.changed.map((m) => m.name), installed, new Set(wantedText ? parseModuleList(wantedText) : []));
   const dirOf = new Map(toMods.map((m) => [m.name, m.dir]));
   return {
@@ -113,12 +113,19 @@ async function changedModulesPreview(ctx: Ctx, branchId: number): Promise<Change
   };
 }
 
+/** Folder with the code of a branch: the user's folder (Development setting) or the worktree of the mirror (D33). */
+function codeDir(ctx: Ctx, br: BranchRow): string | null {
+  const cfg = ctx.store.require(br.projectId);
+  return codeSource(cfg, br, resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope).dir;
+}
+
 /** debugpy attach configuration (spec 8.9 Tools → Debug) with pathMappings from the project settings. */
 function launchConfig(ctx: Ctx, buildId: number) {
   const b = mustBuild(ctx, buildId);
   const br = branchRow(ctx, b.branchId);
   const cfg = ctx.store.require(b.projectId);
-  const worktree = br?.worktreePath ? toPosix(br.worktreePath) : '${workspaceFolder}';
+  const dir = br ? codeDir(ctx, br) : null;
+  const worktree = dir ? toPosix(dir) : '${workspaceFolder}';
   const mappings = renderDeep(cfg.runtime.debug.pathMappings, { worktree, repoMount: cfg.runtime.repoMount, project: cfg.id });
   return {
     name: `Attach ${br?.name ?? b.composeProject} (${cfg.id}:${b.debugPort})`,
@@ -133,9 +140,10 @@ function launchConfig(ctx: Ctx, buildId: number) {
 function writeLaunchJson(ctx: Ctx, buildId: number) {
   const b = mustBuild(ctx, buildId);
   const br = branchRow(ctx, b.branchId);
-  if (!br?.worktreePath) throw new BmError('NO_WORKTREE', 'У ветки нет worktree');
+  const dir = br ? codeDir(ctx, br) : null;
+  if (!br || !dir) throw new BmError('NO_WORKTREE', 'У ветки нет worktree');
   const conf = launchConfig(ctx, buildId);
-  const file = path.join(br.worktreePath, '.vscode', 'launch.json');
+  const file = path.join(dir, '.vscode', 'launch.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   let text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '{\n  "version": "0.2.0",\n  "configurations": []\n}\n';
   const parsed = (parseJsonc(text) ?? {}) as { configurations?: { name?: string }[] };
@@ -146,7 +154,7 @@ function writeLaunchJson(ctx: Ctx, buildId: number) {
   if (!parsed.configurations) text = applyEdits(text, modify(text, ['configurations'], [], fmt));
   text = applyEdits(text, modify(text, ['configurations', idx >= 0 ? idx : list.length], conf, { ...fmt, isArrayInsertion: idx < 0 }));
   fs.writeFileSync(file, text, 'utf8');
-  const gi = path.join(br.worktreePath, '.gitignore');
+  const gi = path.join(dir, '.gitignore');
   const ignored = fs.existsSync(gi) && /^\/?\.vscode\/?\s*$/m.test(fs.readFileSync(gi, 'utf8'));
   audit(ctx, { projectId: b.projectId, action: 'debug.launchJson', target: file });
   return { path: toPosix(file), gitignoreWarning: !ignored };
@@ -223,13 +231,14 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
     case 'explorer':
     case 'editor':
     case 'editor-cursor': {
-      if (!br?.worktreePath || !fs.existsSync(br.worktreePath)) throw new BmError('NO_WORKTREE', 'Worktree ветки ещё не создан: Editor → «Создать worktree» или Rebuild');
+      const dir = br ? codeDir(ctx, br) : null;
+      if (!dir || !fs.existsSync(dir)) throw new BmError('NO_WORKTREE', 'Worktree ветки ещё не создан: Editor → «Создать worktree» или Rebuild');
       if (p.target === 'explorer') {
-        ctx.toMain({ kind: 'openPath', path: br.worktreePath });
+        ctx.toMain({ kind: 'openPath', path: dir });
         return { ok: true };
       }
       const exe = p.target === 'editor-cursor' ? 'cursor' : ctx.store.app.desktop.editor;
-      const target = path.resolve(br.worktreePath);
+      const target = path.resolve(dir);
       const r = await execa(exe, [target], { reject: false, windowsHide: true, detached: true, stdio: 'ignore' });
       log().info({ exe, target, exitCode: r.exitCode }, 'editor opened');
       if (r.failed && r.exitCode !== 0) throw new BmError('NO_EDITOR', `Не удалось запустить «${exe}». Укажите путь к CLI редактора в Settings → Приложение → Редактор.`);

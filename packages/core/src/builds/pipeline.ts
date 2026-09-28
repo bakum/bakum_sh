@@ -7,10 +7,11 @@ import { branches, builds, type BranchRow, type BuildRow, type JobRow } from '..
 import type { JobContext } from '../jobs/queue';
 import { resolveBranchScope } from '../config/effective';
 import * as git from '../git';
-import { ensureWorktree } from '../git/worktrees';
+import { assertFolderUsable, codeSource, ensureWorktree, type CodeSource } from '../git/worktrees';
 import { docker, dockerCli } from '../docker/client';
 import { ODOO_SERVICE, dataDirOf, generateCompose } from '../docker/compose';
 import { ensureTraefik } from '../docker/traefik';
+import { ensureManagedPostgres, pullImage } from '../docker/postgres';
 import { refreshContainers } from '../docker/watch';
 import * as pg from '../pg';
 import { assertOwned } from '../safety';
@@ -52,6 +53,9 @@ const skip = (note: string): never => {
   throw new StepSkip(note);
 };
 
+/** Code source of the branch (mirror worktree or the user's folder, D33), with the current worktree path. */
+const src = (r: Run): CodeSource => codeSource(r.cfg, r.branch, r.scope);
+
 function refreshBuild(r: Run): void {
   r.build = r.ctx.db.select().from(builds).where(eq(builds.id, r.build.id)).get()!;
 }
@@ -67,15 +71,16 @@ function setStep(r: Run, name: BuildStepName, patch: Partial<BuildStep>): void {
   patchBuild(r, { steps });
 }
 
-/** Writes the compose file of this build (debug port, DB, worktree) into its build folder. */
+/** Writes the compose file of this build (debug port, DB, code folder) into its build folder. */
 function writeBuildCompose(r: Run): void {
-  if (!r.branch.worktreePath) throw new BmError('NO_WORKTREE', 'Worktree ветки не создан');
+  const code = src(r).dir;
+  if (!code) throw new BmError('NO_WORKTREE', 'Worktree ветки не создан');
   const text = generateCompose({
     cfg: r.cfg,
     scope: r.scope,
     branch: { id: r.branch.id, name: r.branch.name, slug: r.branch.slug, stage: r.branch.stage },
     build: { id: r.build.id, number: r.build.number, dbName: r.build.dbName, host: r.build.host, composeProject: r.build.composeProject, debugPort: r.build.debugPort },
-    worktree: r.branch.worktreePath,
+    worktree: code,
   });
   fs.mkdirSync(r.buildDir, { recursive: true });
   fs.writeFileSync(r.composeFile, text, 'utf8');
@@ -85,22 +90,29 @@ function writeBuildCompose(r: Run): void {
 // Steps
 
 async function stepCode(r: Run): Promise<string> {
-  const { ctx, cfg, scope } = r;
-  const wt = await ensureWorktree(ctx, cfg, r.branch, scope.tracking);
-  r.branch = branchRow(ctx, r.branch.id)!;
+  const { ctx, cfg } = r;
   let sha: string | null;
-  if (scope.tracking === 'remote') {
-    sha =
-      (r.job.params.targetSha as string | null) ??
-      (await git.remoteSha(cfg.repo.path, cfg.repo.remote, r.branch.name)) ??
-      (await git.localSha(cfg.repo.path, r.branch.name));
+  const from = src(r);
+  if (from.kind === 'folder') {
+    // The user's own clone: mounted as is, only read (D33).
+    await assertFolderUsable(from.dir);
+    sha = await git.headSha(from.dir);
+    if (!sha) throw new BmError('NO_HEAD', `Не удалось прочитать HEAD в папке ${from.dir}`);
+    const current = await git.currentBranch(from.dir);
+    if (current !== r.branch.name) r.log(`[warn] в папке ${from.dir} открыта ветка ${current ?? '(detached)'}, а не ${r.branch.name}: собирается то, что лежит в папке`);
+    const dirty = await git.uncommittedFiles(from.dir);
+    if (dirty.length) r.log(`незакоммиченных файлов в папке: ${dirty.length} — они попадут в сборку`);
+  } else {
+    const wt = await ensureWorktree(ctx, cfg, r.branch);
+    r.branch = branchRow(ctx, r.branch.id)!;
+    sha = (r.job.params.targetSha as string | null) ?? (await git.remoteSha(from.repo, cfg.repo.remote, r.branch.name));
     if (!sha) throw new BmError('NO_BRANCH_REF', `Ветка ${r.branch.name} не найдена в ${cfg.repo.remote}. Выполните fetch.`);
     const dirty = (await git.statusPorcelain(wt)).trim();
     if (dirty) {
       throw new BmError(
         'WORKTREE_DIRTY',
-        `В worktree ${wt} есть незакоммиченные изменения, а ветка собирается из ${cfg.repo.remote} (tracking: remote). Ничего не затирается: ` +
-          `перенесите или отмените изменения, либо переключите ветку на tracking: local.\n${dirty}`,
+        `В worktree ${wt} есть незакоммиченные изменения, а код ветки берётся из ${cfg.repo.remote}. Ничего не затирается: ` +
+          `перенесите или отмените изменения (правьте код в своей папке, см. Editor → «Код из моей папки»).\n${dirty}`,
       );
     }
     const head = await git.headSha(wt);
@@ -108,19 +120,17 @@ async function stepCode(r: Run): Promise<string> {
       r.log(`git checkout --detach ${sha}`);
       await git.checkoutDetach(wt, sha);
     }
-  } else {
-    sha = await git.headSha(wt);
-    if (!sha) throw new BmError('NO_HEAD', `Не удалось прочитать HEAD worktree ${wt}`);
   }
   const base = r.prevLive?.commitSha ?? latestBuiltSha(r);
-  const commits = await git.commitsBetween(cfg.repo.path, base && base !== sha ? base : null, sha, base && base !== sha ? 200 : 1);
+  const known = base && base !== sha && (await git.revParse(from.repo, base));
+  const commits = await git.commitsBetween(from.repo, known ? base : null, sha, known ? 200 : 1);
   patchBuild(r, { commitSha: sha, commits });
   ctx.db
     .update(branches)
-    .set(scope.tracking === 'remote' ? { lastSeenRemoteSha: sha } : { lastSeenLocalSha: sha })
+    .set(from.kind === 'mirror' ? { lastSeenRemoteSha: sha } : { lastSeenLocalSha: sha })
     .where(eq(branches.id, r.branch.id))
     .run();
-  return `${sha.slice(0, 7)}, коммитов: ${commits.length}`;
+  return `${sha.slice(0, 7)}${from.kind === 'folder' ? ' из вашей папки' : ''}, коммитов: ${commits.length}`;
 }
 
 function latestBuiltSha(r: Run): string | null {
@@ -171,7 +181,7 @@ function copySource(r: Run): BuildRow {
     throw new BmError(
       'NO_SOURCE',
       src === 'production'
-        ? 'Нет живой сборки зеркала прода: сначала импортируйте бэкап прода (ветка Production → Backups → Импортировать).'
+        ? 'Нет живой сборки Production: сначала соберите её (Rebuild на ветке Production) или импортируйте бэкап прода (Backups → Импортировать).'
         : `У ветки-источника «${name}» нет живой сборки: сначала соберите её.`,
     );
   }
@@ -361,13 +371,13 @@ async function stepTweaks(r: Run): Promise<string> {
 }
 
 async function treeModules(r: Run, sha: string): Promise<ModuleInfo[]> {
-  return modulesFromTree(await git.lsTree(r.cfg.repo.path, sha));
+  return modulesFromTree(await git.lsTree(src(r).repo, sha));
 }
 
 async function wantedModules(r: Run, sha: string): Promise<Set<string>> {
   const f = r.cfg.repo.modulesToInstall;
   if (!f) return new Set();
-  const text = await git.showFile(r.cfg.repo.path, sha, f);
+  const text = await git.showFile(src(r).repo, sha, f);
   return new Set(text ? parseModuleList(text) : []);
 }
 
@@ -409,6 +419,8 @@ async function stepModules(r: Run): Promise<string> {
     if (inst === 'my') install = [...wanted];
     else if (inst === 'roots' || inst === 'full') install = toMods.filter((m) => !roots.length || roots.some((x) => m.dir.startsWith(`${x}/`))).map((m) => m.name);
     else install = inst.list;
+    // Enterprise addons in the addons path: the database becomes Enterprise only with web_enterprise installed.
+    if (cfg.runtime.enterprise && !install.includes('web_enterprise')) install.push('web_enterprise');
     if (!install.length) install = ['base'];
     await runModules(r, install, [], scope.withDemo ? ['--with-demo'] : []);
     const tweaks = await applyTweaks(r);
@@ -428,8 +440,17 @@ async function stepModules(r: Run): Promise<string> {
   } else {
     // changed / version-bumped (stage 2: treated as changed): diff from the commit the database comes from (spec 8.7).
     const base = build.kind === 'update' ? r.prevLive?.commitSha : r.ctx.db.select().from(builds).where(eq(builds.id, build.sourceBuildId ?? -1)).get()?.commitSha;
-    if (base && base !== sha) {
-      const files = await git.diffNames(cfg.repo.path, base, sha);
+    const from = src(r);
+    // Uncommitted edits of the user's folder are part of the build too.
+    const extra = from.kind === 'folder' ? await git.uncommittedFiles(from.dir) : [];
+    if (base && !(await git.revParse(from.repo, base))) {
+      // The source commit is not in this repository (e.g. unpushed commits of the user's folder, then back to GitHub).
+      const s = splitInstallUpdate(toMods.map((m) => m.name).filter((m) => installed.has(m)), installed, wanted);
+      update = s.update;
+      install = s.install;
+      r.log(`коммит-источник ${base.slice(0, 7)} не найден — обновляются все установленные модули репозитория (${update.length})`);
+    } else if (base && (base !== sha || extra.length)) {
+      const files = [...new Set([...(await git.diffNames(from.repo, base, sha)), ...extra])];
       const fromMods = await treeModules(r, base);
       const ch = changedModules(files, toMods, fromMods, roots);
       for (const m of ch.removed) r.log(`[warn] модуль ${m.name} удалён из репозитория — в БД не удаляется`);
@@ -532,7 +553,7 @@ async function restorePrevious(r: Run): Promise<void> {
   const prev = r.prevLive;
   if (!prev) return;
   try {
-    if (r.scope.tracking === 'remote' && prev.commitSha && r.branch.worktreePath && r.build.commitSha !== prev.commitSha) {
+    if (src(r).kind === 'mirror' && prev.commitSha && r.branch.worktreePath && r.build.commitSha !== prev.commitSha) {
       r.log(`откат worktree на коммит живой сборки ${prev.commitSha.slice(0, 7)}`);
       await git.checkoutDetach(r.branch.worktreePath, prev.commitSha).catch((e) => r.log(`откат не удался: ${(e as Error).message}`));
     }
@@ -589,6 +610,11 @@ export async function runBuild(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
   log(`==> ${cfg.id}/${branch.name} сборка #${build0.number} (${build0.kind}, ${build0.dbSource}, trigger ${build0.trigger})${startIdx ? ` с шага ${from}` : ''} ${nowIso()}`);
   let current: BuildStepName = 'code';
   try {
+    if (cfg.postgres.mode === 'managed') {
+      // «Odoo in Docker»: the app's own Postgres and the official Odoo image must be there before any step (D30).
+      await ensureManagedPostgres(ctx, cfg, log);
+      await pullImage(scope.image, log, jc.signal);
+    }
     // A compose file is needed by one-off runs from the database step on (image, mounts, network).
     for (let i = startIdx; i < BUILD_STEPS.length; i++) {
       const name = BUILD_STEPS[i]!;

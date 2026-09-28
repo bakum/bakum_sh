@@ -1,21 +1,42 @@
+import os from 'node:os';
 import path from 'node:path';
 import { execa } from 'execa';
 import { BmError, type CommitInfo, type GitBranchInfo } from '@bm/shared';
 import { toPosix } from '../util/paths';
 
 /**
- * Git CLI wrapper. Only the operations allowed by the safety rules are exposed:
- * fetch, worktree add/remove, branch create / delete -d, detached checkout inside app worktrees, read-only queries.
+ * Background git calls never ask anything: no terminal prompt, no Git Credential Manager window (D31).
+ * Only an explicit «Войти» in the wizard lets the credential helper show its sign-in window.
  */
-async function git(cwd: string, args: string[], opts: { timeoutMs?: number; allowFail?: boolean } = {}): Promise<string> {
+const QUIET_ENV = { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', LC_ALL: 'C' };
+
+export const GIT_MISSING_TEXT = 'Git не найден. Установите Git for Windows (https://git-scm.com/download/win) и перезапустите приложение.';
+
+/** execa (reject: false) returns the spawn error as the result: `code: 'ENOENT'` when git.exe is not on PATH. */
+function assertGitFound(r: unknown): void {
+  if ((r as { code?: unknown } | null)?.code === 'ENOENT') throw new BmError('GIT_MISSING', GIT_MISSING_TEXT);
+}
+
+/**
+ * Git CLI wrapper. Only the operations allowed by the safety rules are exposed (D33): in the app's own mirror — fetch,
+ * detached worktree add/remove, detached checkout inside app worktrees, push of a new branch (Fork); clone into a new
+ * folder; credential approve / reject of a token the user entered; read-only queries anywhere else (the user's folder).
+ */
+async function git(
+  cwd: string,
+  args: string[],
+  opts: { timeoutMs?: number; allowFail?: boolean; env?: Record<string, string>; input?: string } = {},
+): Promise<string> {
   const r = await execa('git', args, {
     cwd,
     reject: false,
     timeout: opts.timeoutMs ?? 60_000,
-    env: { GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' },
+    env: { ...QUIET_ENV, ...opts.env },
     windowsHide: true,
     stripFinalNewline: true,
+    input: opts.input,
   });
+  assertGitFound(r);
   if (r.exitCode !== 0 && !opts.allowFail) {
     const msg = (r.stderr || r.stdout || '').toString().trim();
     throw new BmError('GIT', `git ${args[0]}: ${msg || `код ${r.exitCode}`}`, { args, exitCode: r.exitCode });
@@ -69,9 +90,237 @@ export async function listBranches(repo: string, remote: string): Promise<GitBra
   return [...map.entries()].map(([name, source]) => ({ name, source })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** `git fetch <remote>` (no prune, no tags rewrite): the only network operation the app performs. */
+/** `git fetch <remote>` (no prune, no tags rewrite). */
 export async function fetch(repo: string, remote: string): Promise<void> {
-  await git(repo, ['fetch', '--no-tags', remote], { timeoutMs: 180_000 });
+  const r = await execa('git', ['fetch', '--no-tags', remote], { cwd: repo, reject: false, timeout: 180_000, env: QUIET_ENV, windowsHide: true });
+  assertGitFound(r);
+  if (r.exitCode === 0) return;
+  const stderr = String(r.stderr || r.stdout || (r.timedOut ? 'timed out' : ''));
+  const c = classifyRemoteError(stderr);
+  const text = c.problem === 'auth' || c.problem === 'denied' ? `нет доступа к репозиторию. ${c.message}` : c.problem === 'other' ? stderr.trim() : c.message;
+  throw new BmError('GIT', text, { problem: c.problem });
+}
+
+/** `git --version`, null when git is not installed. */
+export async function version(): Promise<string | null> {
+  const r = await execa('git', ['--version'], { reject: false, windowsHide: true });
+  return r.exitCode === 0 ? String(r.stdout).trim() : null;
+}
+
+export type RemoteProblem = 'auth' | 'denied' | 'ssh-key' | 'host-key' | 'network' | 'other';
+
+/** Kind of a failed network git call, from its stderr (LC_ALL=C). */
+export function classifyRemoteError(stderr: string): { problem: RemoteProblem; message: string } {
+  const s = stderr.trim();
+  const last = s.split('\n').filter(Boolean).slice(-3).join('\n');
+  if (/Host key verification failed/i.test(s)) {
+    return { problem: 'host-key', message: 'Хост SSH ещё не известен. Один раз выполните в терминале `ssh -T git@github.com` (или другой хост) и подтвердите ключ.' };
+  }
+  if (/Permission denied \(publickey/i.test(s)) {
+    return { problem: 'ssh-key', message: 'SSH-ключ не принят: добавьте публичный ключ в аккаунт GitHub или используйте https-адрес.' };
+  }
+  if (/could not read (Username|Password)|terminal prompts disabled|Authentication failed|invalid username or password|HTTP Basic: Access denied|\b401\b/i.test(s)) {
+    return { problem: 'auth', message: 'Нужен вход: репозиторий приватный, а сохранённых учётных данных нет или они устарели.' };
+  }
+  if (/Repository not found|not found|\b403\b|\b404\b|access denied|not authorized/i.test(s)) {
+    return {
+      problem: 'denied',
+      message: 'Репозиторий не найден или у этой учётной записи нет к нему доступа. Проверьте адрес, войдите другим аккаунтом или сохраните токен с доступом к репозиторию.',
+    };
+  }
+  if (/Could not resolve host|unable to access|Connection (timed out|refused)|Failed to connect|timed out/i.test(s)) {
+    return { problem: 'network', message: `Нет соединения с сервером репозитория: ${last}` };
+  }
+  return { problem: 'other', message: last || 'git завершился с ошибкой' };
+}
+
+/**
+ * `git ls-remote --symref <url> HEAD refs/heads/*` — access check and branch list without a clone.
+ * `interactive` lets Git Credential Manager show its sign-in window (the only interactive git call).
+ */
+export async function lsRemote(
+  url: string,
+  opts: { interactive?: boolean; timeoutMs?: number } = {},
+): Promise<{ ok: true; branches: string[]; head: string | null } | { ok: false; stderr: string }> {
+  const r = await execa('git', ['ls-remote', '--symref', url, 'HEAD', 'refs/heads/*'], {
+    cwd: os.homedir(),
+    reject: false,
+    timeout: opts.timeoutMs ?? 45_000,
+    env: { ...QUIET_ENV, ...(opts.interactive ? { GCM_INTERACTIVE: 'auto' } : {}) },
+    windowsHide: true,
+  });
+  assertGitFound(r);
+  if (r.exitCode !== 0) return { ok: false, stderr: String(r.stderr || r.stdout || (r.timedOut ? 'timed out' : '')) };
+  let head: string | null = null;
+  const branches: string[] = [];
+  for (const line of String(r.stdout).split('\n')) {
+    const sym = /^ref: refs\/heads\/(\S+)\s+HEAD$/.exec(line.trim());
+    if (sym) head = sym[1]!;
+    const ref = /^[0-9a-f]{40,64}\s+refs\/heads\/(\S+)$/.exec(line.trim());
+    if (ref) branches.push(ref[1]!);
+  }
+  return { ok: true, branches: branches.sort(), head };
+}
+
+/** Puts a user name into an https URL (the credential helper then picks the matching stored credential). */
+export function withUser(url: string, user: string): string {
+  const u = new URL(url);
+  u.username = user;
+  u.password = '';
+  return u.toString();
+}
+
+/** Credential helper configured for the URL (`credential.helper`), null when none. */
+export async function credentialHelper(url: string): Promise<string | null> {
+  const out = await git(os.homedir(), ['config', '--get-urlmatch', 'credential.helper', url], { allowFail: true });
+  return out.trim().split('\n').filter(Boolean).pop() ?? null;
+}
+
+function credentialInput(url: string, username: string, token: string): string {
+  const u = new URL(url);
+  return `protocol=${u.protocol.replace(':', '')}\nhost=${u.host}\nusername=${username}\npassword=${token}\n\n`;
+}
+
+/** `git credential approve`: the helper (Windows Credential Manager via GCM) stores the token; the app keeps nothing. */
+export async function credentialApprove(url: string, username: string, token: string): Promise<void> {
+  await git(os.homedir(), ['credential', 'approve'], { input: credentialInput(url, username, token), timeoutMs: 30_000 });
+}
+
+/** `git credential reject`: removes a token that turned out not to work. */
+export async function credentialReject(url: string, username: string, token: string): Promise<void> {
+  await git(os.homedir(), ['credential', 'reject'], { input: credentialInput(url, username, token), timeoutMs: 30_000, allowFail: true });
+}
+
+/** Runs a network git command whose stderr carries progress lines (percent updates are thinned out). */
+async function runWithProgress(
+  cwd: string,
+  args: string[],
+  opts: { onLine: (line: string) => void; signal?: AbortSignal; timeoutMs?: number },
+): Promise<{ exitCode: number | undefined; isCanceled: boolean; stderr: string }> {
+  const sub = execa('git', args, {
+    cwd,
+    reject: false,
+    all: true,
+    cancelSignal: opts.signal,
+    timeout: opts.timeoutMs ?? 3 * 3600_000,
+    env: QUIET_ENV,
+    windowsHide: true,
+  });
+  let buf = '';
+  const lastPct = new Map<string, number>();
+  const emit = (raw: string): void => {
+    const line = raw.trim();
+    if (!line) return;
+    const m = /^(.*?):\s+(\d+)%/.exec(line);
+    if (m) {
+      const pct = Number(m[2]);
+      const prev = lastPct.get(m[1]!) ?? -100;
+      if (pct < 100 && pct - prev < 10) return;
+      lastPct.set(m[1]!, pct);
+    }
+    opts.onLine(line);
+  };
+  sub.all?.on('data', (chunk: Buffer) => {
+    buf += chunk.toString('utf8');
+    let i: number;
+    while ((i = buf.search(/[\r\n]/)) >= 0) {
+      emit(buf.slice(0, i));
+      buf = buf.slice(i + 1);
+    }
+  });
+  const r = await sub;
+  emit(buf);
+  assertGitFound(r);
+  return { exitCode: r.exitCode, isCanceled: !!r.isCanceled, stderr: String(r.stderr ?? r.all ?? '') };
+}
+
+/**
+ * `git clone` into a new folder with progress lines (Enterprise addons).
+ * Never interactive: access is checked (and granted) in the wizard beforehand.
+ */
+export async function clone(
+  url: string,
+  dir: string,
+  opts: { branch?: string; shallow?: boolean; onLine: (line: string) => void; signal?: AbortSignal },
+): Promise<void> {
+  const args = ['clone', '--progress'];
+  if (opts.branch) args.push('--branch', opts.branch, '--single-branch');
+  if (opts.shallow) args.push('--depth', '1');
+  args.push('--', url, dir);
+  const r = await runWithProgress(os.homedir(), args, opts);
+  if (r.isCanceled) throw new BmError('CANCELLED', 'Клонирование отменено');
+  if (r.exitCode !== 0) {
+    const c = classifyRemoteError(r.stderr);
+    throw new BmError('GIT_CLONE', `git clone: ${c.message}`, { problem: c.problem });
+  }
+}
+
+/**
+ * The app's own bare mirror of a remote (D33): `init --bare`, remote with the refspec
+ * `+refs/heads/*:refs/remotes/<remote>/*` (so `<remote>/<branch>` refs look like in a normal clone), first fetch.
+ * The user never works in it; worktrees made from it are always detached, so git never locks a branch.
+ */
+export async function initMirror(
+  url: string,
+  dir: string,
+  opts: { remote?: string; onLine: (line: string) => void; signal?: AbortSignal },
+): Promise<void> {
+  const remote = opts.remote ?? 'origin';
+  await git(os.homedir(), ['init', '--bare', '--quiet', toPosix(dir)]);
+  await git(dir, ['remote', 'add', remote, url]);
+  await git(dir, ['config', `remote.${remote}.fetch`, `+refs/heads/*:refs/remotes/${remote}/*`]);
+  const r = await runWithProgress(dir, ['fetch', '--progress', '--no-tags', remote], opts);
+  if (r.isCanceled) throw new BmError('CANCELLED', 'Загрузка отменена');
+  if (r.exitCode !== 0) {
+    const c = classifyRemoteError(r.stderr);
+    throw new BmError('GIT_CLONE', `git fetch: ${c.message}`, { problem: c.problem });
+  }
+}
+
+/** Top level, remote and its URL of a folder (the user's clone); read-only. */
+export async function folderRemoteUrl(dir: string): Promise<{ top: string; remote: string | null; url: string | null }> {
+  const top = await topLevel(dir);
+  if (!top) throw new BmError('NOT_A_REPO', `Папка «${dir}» не является git-репозиторием.`);
+  const list = await remotes(top);
+  const remote = list.includes('origin') ? 'origin' : (list[0] ?? null);
+  let url = remote ? await remoteUrl(top, remote) : null;
+  // A remote that is a local or network folder becomes a file:/// URL (the form the wizard accepts).
+  if (url && /^([A-Za-z]:[\\/]|\\\\|\/\/)/.test(url)) {
+    const p = toPosix(url);
+    url = p.startsWith('//') ? `file:${p}` : `file:///${p}`;
+  }
+  return { top, remote, url };
+}
+
+/**
+ * Creates a branch on the remote (Fork, D33): `git push <remote> <sha>:refs/heads/<name>` from the mirror with the
+ * credentials the Git credential helper already has. Never forces, never interactive.
+ */
+export async function pushNewBranch(mirror: string, remote: string, sha: string, name: string): Promise<void> {
+  // An empty lease: the push only creates the branch, it never moves an existing one.
+  const r = await execa('git', ['push', '--porcelain', `--force-with-lease=refs/heads/${name}:`, remote, `${sha}:refs/heads/${name}`], {
+    cwd: mirror,
+    reject: false,
+    timeout: 180_000,
+    env: QUIET_ENV,
+    windowsHide: true,
+  });
+  assertGitFound(r);
+  if (r.exitCode === 0) return;
+  // --porcelain puts the per-ref status («[rejected] (stale info)») on stdout, the transport errors on stderr.
+  const out = [r.stdout, r.stderr, r.timedOut ? 'timed out' : ''].map((x) => String(x ?? '')).filter(Boolean).join('\n');
+  if (/Permission to .* denied|\b403\b|write access|protected branch|not allowed to push/i.test(out)) {
+    throw new BmError(
+      'GIT_PUSH',
+      'Нет прав на запись в репозиторий. Войдите учётной записью с правом push или сохраните токен с доступом Contents — Read and write.',
+      { problem: 'denied' },
+    );
+  }
+  if (/already exists|\[rejected\]|stale info|non-fast-forward/i.test(out)) {
+    throw new BmError('BRANCH_EXISTS', `Ветка «${name}» уже есть в репозитории. Выполните fetch.`);
+  }
+  const c = classifyRemoteError(out);
+  throw new BmError('GIT_PUSH', `git push: ${c.problem === 'other' ? String(r.stderr || out).trim() : c.message}`, { problem: c.problem });
 }
 
 export async function revParse(cwd: string, ref: string): Promise<string | null> {
@@ -114,22 +363,8 @@ export async function worktreeList(repo: string): Promise<WorktreeInfo[]> {
   return items;
 }
 
-/** Where a local branch is checked out (main checkout or another worktree), if anywhere. */
-export async function branchCheckedOutAt(repo: string, branch: string): Promise<string | null> {
-  const wts = await worktreeList(repo);
-  return wts.find((w) => w.branch === branch)?.path ?? null;
-}
-
 export async function worktreeAddDetached(repo: string, dir: string, ref: string): Promise<void> {
   await git(repo, ['worktree', 'add', '--detach', toPosix(dir), ref], { timeoutMs: 300_000 });
-}
-
-export async function worktreeAddBranch(repo: string, dir: string, branch: string): Promise<void> {
-  await git(repo, ['worktree', 'add', toPosix(dir), branch], { timeoutMs: 300_000 });
-}
-
-export async function worktreeAddTrack(repo: string, dir: string, branch: string, remote: string): Promise<void> {
-  await git(repo, ['worktree', 'add', '--track', '-b', branch, toPosix(dir), `${remote}/${branch}`], { timeoutMs: 300_000 });
 }
 
 export async function worktreeRemove(repo: string, dir: string, force: boolean): Promise<void> {
@@ -146,6 +381,15 @@ export async function checkoutDetach(worktree: string, sha: string): Promise<voi
 
 export async function statusPorcelain(worktree: string): Promise<string> {
   return git(worktree, ['status', '--porcelain']);
+}
+
+/** Files changed but not committed in a folder (modified, staged, untracked), repo-relative; read-only. */
+export async function uncommittedFiles(dir: string): Promise<string[]> {
+  const out = await git(dir, ['status', '--porcelain', '--untracked-files=all', '--no-renames']);
+  return out
+    .split('\n')
+    .filter((l) => l.length > 3)
+    .map((l) => l.slice(3).replace(/^"(.*)"$/, '$1'));
 }
 
 export async function headSha(worktree: string): Promise<string | null> {
@@ -188,16 +432,6 @@ export async function commitsBetween(repo: string, from: string | null, to: stri
       const [sha, author, date, message] = r.split(SEP);
       return { sha: sha!, author: author ?? '', date: date ?? '', message: message ?? '' };
     });
-}
-
-export async function branchCreate(repo: string, name: string, start: string): Promise<void> {
-  await git(repo, ['check-ref-format', '--branch', name]);
-  await git(repo, ['branch', name, start]);
-}
-
-/** Safe delete only (`-d`): refuses to delete unmerged work. */
-export async function branchDeleteSafe(repo: string, name: string): Promise<void> {
-  await git(repo, ['branch', '-d', name]);
 }
 
 export async function showFile(repo: string, sha: string, file: string): Promise<string | null> {

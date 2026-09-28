@@ -16,6 +16,7 @@ import type {
   GitBranchInfo,
   JobView,
   ProjectSummary,
+  RepoProbe,
   SystemStatus,
   UnassignedBranch,
 } from './types';
@@ -32,6 +33,32 @@ function m<R>() {
 const empty = z.object({}).strict();
 const projectId = z.string().regex(/^[a-z0-9-]+$/);
 const id = z.number().int().positive();
+/**
+ * https://host/owner/repo(.git), git@host:owner/repo(.git), ssh://… or file:///<disk>/<path> (a local or network bare
+ * repository); no credentials inside the URL except a user name.
+ */
+const repoUrl = z
+  .string()
+  .trim()
+  .regex(
+    /^(https:\/\/([\w.-]+@)?[\w.-]+(:\d+)?\/[\w./~-]+|ssh:\/\/[\w.-]+@[\w.-]+(:\d+)?\/[\w./~-]+|[\w.-]+@[\w.-]+:[\w./~-]+|file:\/\/\/?[\w.:/~ -]+)$/,
+    'ожидается https://…, git@…:owner/repo.git или file:///…',
+  );
+
+/** Everything «Удалить проект…» removes (full cleanup, D34). */
+export interface ProjectDeletePreview {
+  legacy: boolean;
+  builds: string[];
+  databases: string[];
+  filestores: string[];
+  worktrees: string[];
+  postgres: string | null;
+  /** The app's mirror, project folder in dataDir, build and job logs, the settings file. */
+  folders: string[];
+  settingsFile: string;
+  /** Registry rows removed: jobs, audit records, auto-add exclusions. */
+  registry: { jobs: number; audit: number; kv: number };
+}
 
 export interface JobRef {
   jobId: number;
@@ -67,11 +94,24 @@ export const methods = {
   'projects.get': m<{ summary: ProjectSummary; config: ProjectConfig; yaml: string }>()(
     z.object({ projectId }).strict(),
   ),
-  'projects.detect': m<DetectResult>()(z.object({ path: z.string().min(1) }).strict()),
+  'projects.detect': m<DetectResult>()(
+    z
+      .object({
+        /** The app's mirror made by the `repo.clone` job (mirror: true), its URL and optionally the user's own clone. */
+        mirror: z.string().min(1),
+        url: repoUrl,
+        folder: z.string().min(1).nullable().optional(),
+        /** Choices of the «Odoo in Docker» preset made in the wizard. */
+        odoo: z.object({ version: z.string().regex(/^\d+\.\d+$/).optional(), enterprisePath: z.string().nullable().optional() }).strict().optional(),
+      })
+      .strict(),
+  ),
   'projects.create': m<ProjectSummary>()(z.object({ yaml: z.string().min(1) }).strict()),
+  /** Connection check of an external Postgres before the project is created (the detected password is used). */
+  'projects.checkPostgres': m<{ ok: boolean; text: string }>()(z.object({ yaml: z.string().min(1) }).strict()),
   'projects.update': m<ProjectSummary>()(z.object({ projectId, yaml: z.string().min(1) }).strict()),
   'projects.setEnabled': m<ProjectSummary>()(z.object({ projectId, enabled: z.boolean() }).strict()),
-  'projects.deletePreview': m<{ builds: string[]; databases: string[]; filestores: string[]; worktrees: string[] }>()(
+  'projects.deletePreview': m<ProjectDeletePreview>()(
     z.object({ projectId }).strict(),
   ),
   'projects.delete': m<JobRef>()(z.object({ projectId, confirm: z.string() }).strict()),
@@ -96,7 +136,7 @@ export const methods = {
   'branches.resetToRule': m<BranchView>()(z.object({ branchId: id }).strict()),
   'branches.setOverrides': m<BranchView>()(z.object({ branchId: id, overrides: branchScopeSchema }).strict()),
   'branches.fork': m<{ branch: BranchView; jobId: number | null }>()(
-    z.object({ branchId: id, name: z.string().min(1), push: z.boolean().default(false) }).strict(),
+    z.object({ branchId: id, name: z.string().min(1) }).strict(),
   ),
   'branches.forkName': m<{ name: string; base: string; valid: boolean; error: string | null }>()(
     z.object({ projectId, name: z.string() }).strict(),
@@ -110,7 +150,6 @@ export const methods = {
       .object({
         branchId: id,
         confirmSlug: z.string(),
-        deleteLocal: z.boolean().default(false),
         deleteRemote: z.boolean().default(false),
         forceDirty: z.boolean().default(false),
       })
@@ -159,11 +198,39 @@ export const methods = {
 
   'git.fetch': m<{ jobs: number[] }>()(z.object({ projectId: projectId.optional() }).strict()),
 
+  /** Remote repository access (docs/decisions.md D31). Credentials stay in the Git credential helper. */
+  'repo.probe': m<RepoProbe>()(z.object({ url: repoUrl }).strict()),
+  /** Same check with the credential helper allowed to show its sign-in window (Git Credential Manager). */
+  'repo.login': m<RepoProbe>()(z.object({ url: repoUrl }).strict()),
+  /** Hands a personal access token to `git credential approve` (stored by the helper, e.g. Windows Credential Manager). */
+  'repo.saveToken': m<RepoProbe>()(
+    z.object({ url: repoUrl, username: z.string().regex(/^[\w.@-]+$/).default('x-access-token'), token: z.string().min(8).max(500) }).strict(),
+  ),
+  /** Sign-in for an existing project (its remote URL), then a fetch. */
+  'projects.login': m<RepoProbe>()(z.object({ projectId }).strict()),
+  /** Remote URL of the user's own clone (read-only), to start a project from a folder. */
+  'repo.folderRemote': m<{ top: string; remote: string | null; url: string | null }>()(z.object({ path: z.string().min(1) }).strict()),
+  'repo.defaultDir': m<{ dir: string }>()(z.object({ url: repoUrl, suffix: z.string().regex(/^[\w.-]*$/).optional() }).strict()),
+  /** `mirror` — the app's own bare copy of the project repository in `<dataDir>/repos` (D33, `dir` is chosen by Core). */
+  'repo.clone': m<JobRef & { dir: string }>()(
+    z
+      .object({
+        url: repoUrl,
+        mirror: z.boolean().default(false),
+        dir: z.string().min(3).optional(),
+        /** Single branch, shallow (Enterprise addons of one Odoo series). */
+        branch: z.string().regex(/^[\w./-]+$/).optional(),
+        shallow: z.boolean().default(false),
+      })
+      .strict(),
+  ),
+
   'jobs.list': m<JobView[]>()(
     z.object({ projectId: projectId.optional(), active: z.boolean().optional(), limit: z.number().int().optional() }).strict(),
   ),
   'jobs.get': m<JobView>()(z.object({ jobId: id }).strict()),
   'jobs.cancel': m<{ ok: true }>()(z.object({ jobId: id }).strict()),
+  'jobs.log': m<{ lines: string[] }>()(z.object({ jobId: id, tail: z.number().int().min(1).max(2000).default(200) }).strict()),
 
   'audit.list': m<{ id: number; at: string; projectId: string | null; action: string; target: string; result: string }[]>()(
     z.object({ projectId: projectId.optional(), limit: z.number().int().optional() }).strict(),

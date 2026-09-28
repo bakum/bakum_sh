@@ -9,6 +9,7 @@ import { summaries } from './projects';
 import { bus } from '../events';
 import { audit } from './audit';
 import { reconcile } from '../reconcile';
+import * as git from '../git';
 
 let lastReconcile = 0;
 
@@ -60,6 +61,16 @@ async function ghStatus(exe: string): Promise<{ ok: boolean; text: string }> {
   return ghCache;
 }
 
+let gitCache: { ok: boolean; text: string } | null = null;
+/** Git for Windows is required (fetch, worktrees, clone); cached once found — a missing git is re-checked. */
+async function gitStatus(): Promise<{ ok: boolean; text: string }> {
+  if (gitCache) return gitCache;
+  const v = await git.version();
+  const s = v ? { ok: true, text: v } : { ok: false, text: git.GIT_MISSING_TEXT };
+  if (v) gitCache = s;
+  return s;
+}
+
 export async function systemStatus(ctx: Ctx, refresh: boolean): Promise<SystemStatus> {
   if (refresh && runtimeState.docker.ok && Date.now() - lastReconcile > 5000) {
     lastReconcile = Date.now();
@@ -89,6 +100,7 @@ export async function systemStatus(ctx: Ctx, refresh: boolean): Promise<SystemSt
       port: runtimeState.traefik.port,
       text: runtimeState.traefik.ok ? `работает, порт ${runtimeState.traefik.port}` : (runtimeState.traefik.error ?? 'не запущен'),
     },
+    git: await gitStatus(),
     postgres: Object.fromEntries(runtimeState.postgres),
     gh: await ghStatus(ctx.store.app.desktop.gh),
     disk: { freeGb: free, path: ctx.dataDir, low: free !== null && free < limits.minFreeDiskGb },

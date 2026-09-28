@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { ProjectConfig } from '@bm/shared';
+import { isLegacyProject, type ProjectConfig } from '@bm/shared';
 import type { Ctx } from '../context';
 import { branches, projects, type JobRow } from '../db/schema';
 import * as git from '../git';
@@ -12,16 +12,19 @@ import { branchByName, branchRows, ensureBranchRow, isAutoAddSkipped } from './b
 import { onNewCommit } from '../builds/triggers';
 import { requestBuildChecked } from '../builds/request';
 import { audit } from './audit';
+import { repoDir } from '../git/worktrees';
+import { assertNotLegacy } from '../config/legacy';
 import { log } from '../util/logger';
 import { nowIso } from '../util/time';
 
 /** Job `fetch`: git fetch → auto-add by rules → rules re-applied → new commits trigger builds (spec 8.2, 8.3). */
 export async function fetchExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const cfg = ctx.store.require(job.projectId!);
+  assertNotLegacy(cfg);
   let fetchError: string | null = null;
   try {
-    jc.log(`git fetch ${cfg.repo.remote} in ${cfg.repo.path}`);
-    await git.fetch(cfg.repo.path, cfg.repo.remote);
+    jc.log(`git fetch ${cfg.repo.remote} in ${repoDir(cfg)}`);
+    await git.fetch(repoDir(cfg), cfg.repo.remote);
   } catch (err) {
     fetchError = (err as Error).message;
     jc.log(`fetch failed: ${fetchError}`);
@@ -47,15 +50,15 @@ export async function processRefs(ctx: Ctx, cfg: ProjectConfig, jc?: JobContext)
     if (scope.buildOnAdd) await requestBuildChecked(ctx, row.id, { trigger: 'manual' }).catch((e) => jc?.log(`build on add: ${(e as Error).message}`));
   }
   applyRules(ctx, cfg);
-  // New commits on origin for remote-tracking branches.
+  // New commits on the remote for branches built from the mirror (branches with their own folder follow the folder).
   for (const b of branchRows(ctx, cfg.id)) {
-    const sha = await git.remoteSha(cfg.repo.path, cfg.repo.remote, b.name);
+    const sha = await git.remoteSha(repoDir(cfg), cfg.repo.remote, b.name);
     if (!sha || sha === b.lastSeenRemoteSha) continue;
     const prev = b.lastSeenRemoteSha;
     ctx.db.update(branches).set({ lastSeenRemoteSha: sha }).where(eq(branches.id, b.id)).run();
     const scope = resolveBranchScope(cfg, b.name, b.stage, b.overrides).scope;
-    if (scope.tracking !== 'remote' || !prev) continue;
-    const forcePush = !(await git.isAncestor(cfg.repo.path, prev, sha));
+    if (scope.folder || !prev) continue;
+    const forcePush = !(await git.isAncestor(repoDir(cfg), prev, sha));
     jc?.log(`${b.name}: ${prev.slice(0, 7)} → ${sha.slice(0, 7)}${forcePush ? ' (force-push)' : ''}`);
     await onNewCommit(ctx, cfg, { ...b, lastSeenRemoteSha: sha }, sha, { forcePush });
     bus.emit({ type: 'branch.changed', projectId: cfg.id, branchId: b.id });
@@ -70,7 +73,7 @@ export function scheduleFetches(ctx: Ctx): void {
   timers.clear();
   for (const e of ctx.store.list()) {
     const cfg = e.config;
-    if (!cfg || !cfg.enabled || !cfg.repo.fetchIntervalMin) continue;
+    if (!cfg || !cfg.enabled || !cfg.repo.fetchIntervalMin || isLegacyProject(cfg)) continue;
     const ms = cfg.repo.fetchIntervalMin * 60_000;
     timers.set(
       cfg.id,
@@ -86,9 +89,9 @@ export function scheduleFetches(ctx: Ctx): void {
 }
 
 export function requestFetch(ctx: Ctx, projectId?: string): number[] {
-  const ids = projectId ? [projectId] : ctx.store.list().filter((e) => e.config?.enabled).map((e) => e.id);
+  const ids = projectId ? [projectId] : ctx.store.list().filter((e) => e.config?.enabled && !isLegacyProject(e.config)).map((e) => e.id);
   return ids.map((id) => {
-    ctx.store.require(id);
+    assertNotLegacy(ctx.store.require(id));
     return getQueue().enqueue('fetch', { projectId: id }, { manual: true });
   });
 }

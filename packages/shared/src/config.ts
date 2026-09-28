@@ -62,7 +62,13 @@ export const branchScopeSchema = z
     onNewCommit: z.enum(['none', 'update', 'new']),
     onForcePush: z.enum(['pause', 'new']),
     updateModules: updateModulesSchema,
+    /** Deprecated (before D33 worktrees could hold a local branch); accepted in old YAML and ignored. */
     tracking: z.enum(['local', 'remote']),
+    /**
+     * Development only, branch level only (D33): the build mounts this folder (the user's own clone) instead of a worktree
+     * of the app's mirror. The app only reads it (HEAD, status, diff) and never changes it.
+     */
+    folder: z.string().min(1).nullable(),
     tests: testsSchema,
     mails: z.object({ enabled: z.boolean() }).partial().strict(),
     idleStopHours: z.number().min(0),
@@ -96,7 +102,8 @@ export interface ResolvedBranchScope {
   onNewCommit: 'none' | 'update' | 'new';
   onForcePush: 'pause' | 'new';
   updateModules: UpdateModules;
-  tracking: 'local' | 'remote';
+  /** The user's folder the code comes from (Development branch setting), null — the app's mirror of the remote. */
+  folder: string | null;
   tests: { mode: 'none' | 'changed' | 'my' | { list: string[] }; tags: string; extraArgs: string[]; failBuild: boolean };
   mails: { enabled: boolean };
   idleStopHours: number;
@@ -160,7 +167,14 @@ export const projectConfigSchema = z
     enabled: z.boolean().default(true),
     repo: z
       .object({
-        path: z.string().min(1),
+        /** Remote repository the code comes from (D33); may carry a user name for a token stored by Git (D31). */
+        url: z.string().min(1).optional(),
+        /** The app's own bare mirror of `url` (`<dataDir>/repos/<name>.git`): fetch, detached worktrees, push of new branches. */
+        mirrorDir: z.string().min(1).optional(),
+        /** The user's own clone (optional): suggested as the folder of Development branches, never changed by the app. */
+        localFolder: z.string().min(1).nullable().default(null),
+        /** Deprecated: the user's repository the app used before D33. A project with `path` and no `url` is legacy. */
+        path: z.string().min(1).optional(),
         remote: z.string().default('origin'),
         github: z
           .string()
@@ -234,11 +248,15 @@ export const projectConfigSchema = z
           .strict()
           .prefault({}),
         composeTemplate: z.string().nullable().default(null),
+        /** Container path of Odoo Enterprise addons (mounted read-only, listed in the addons path); fresh databases get web_enterprise. */
+        enterprise: z.string().startsWith('/').nullable().default(null),
       })
       .strict(),
     postgres: z
       .object({
+        /** external — an existing Postgres; managed — the app runs its own container bm-<project>-db (D30). */
         mode: z.enum(['external', 'managed']).default('external'),
+        image: z.string().min(1).default('postgres:16'),
         host: z.string().default('localhost'),
         port: z.number().int().default(5432),
         internalHost: z.string().default('db'),
@@ -282,8 +300,23 @@ export const projectConfigSchema = z
     extraSql: z.array(z.string()).default([]),
     hooks: z.array(hookSchema).default([]),
   })
-  .strict();
+  .strict()
+  .superRefine((cfg, ctx) => {
+    if (!cfg.repo.path && !(cfg.repo.url && cfg.repo.mirrorDir)) {
+      ctx.addIssue({ code: 'custom', path: ['repo', 'url'], message: 'нужны repo.url и repo.mirrorDir (адрес репозитория и копия приложения)' });
+    }
+    // The folder is a per-branch choice: one clone has one checked-out branch.
+    for (const s of STAGES) {
+      if (cfg.stages[s]?.folder != null) ctx.addIssue({ code: 'custom', path: ['stages', s, 'folder'], message: 'folder задаётся только в настройках ветки' });
+    }
+    cfg.branchRules.forEach((r, i) => {
+      if (r.overrides?.folder != null) ctx.addIssue({ code: 'custom', path: ['branchRules', i, 'overrides', 'folder'], message: 'folder задаётся только в настройках ветки' });
+    });
+  });
 export type ProjectConfig = z.infer<typeof projectConfigSchema>;
+
+/** Project created before D33: the app worked inside the user's repository (`repo.path`). It can only be deleted. */
+export const isLegacyProject = (cfg: ProjectConfig): boolean => !cfg.repo.url || !cfg.repo.mirrorDir;
 export type ProjectConfigInput = z.input<typeof projectConfigSchema>;
 
 export const notificationKinds = ['buildReady', 'buildFailed', 'testsFailed', 'newBackup', 'lowDisk'] as const;

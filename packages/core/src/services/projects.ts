@@ -1,10 +1,12 @@
+import crypto from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import YAML from 'yaml';
-import { BmError, type ProjectConfig, type ProjectSummary } from '@bm/shared';
+import { BmError, isLegacyProject, projectConfigSchema, type ProjectConfig, type ProjectSummary } from '@bm/shared';
 import type { Ctx } from '../context';
 import { projects } from '../db/schema';
 import { bus } from '../events';
 import { detectedPassword, lastDetectedPassword } from '../detect';
+import { pgPing } from '../pg';
 import { audit, lineDiff } from './audit';
 import { ensureBranchRow, relayoutProductionBranch } from './branch-rows';
 import { nowIso } from '../util/time';
@@ -23,17 +25,20 @@ export function syncProjectRows(ctx: Ctx): void {
           id: e.id,
           name: cfg?.name ?? e.id,
           configPath: e.path,
-          repoPath: cfg?.repo.path ?? '',
+          repoPath: cfg ? repoLabel(cfg) : '',
           enabled: cfg?.enabled ?? true,
           createdAt: nowIso(),
         })
         .run();
     } else if (cfg) {
-      ctx.db.update(projects).set({ name: cfg.name, repoPath: cfg.repo.path, enabled: cfg.enabled, configPath: e.path }).where(eq(projects.id, e.id)).run();
+      ctx.db.update(projects).set({ name: cfg.name, repoPath: repoLabel(cfg), enabled: cfg.enabled, configPath: e.path }).where(eq(projects.id, e.id)).run();
     }
     if (cfg) ensureBranchRow(ctx, cfg, cfg.production.branch, 'production', 'rule');
   }
 }
+
+/** What the project's code comes from: the remote URL (D33), for a legacy project — the user's repository. */
+const repoLabel = (cfg: ProjectConfig): string => cfg.repo.url ?? cfg.repo.path ?? '';
 
 export function summaries(ctx: Ctx): ProjectSummary[] {
   return ctx.store.list().map((e) => summary(ctx, e.id));
@@ -46,7 +51,8 @@ export function summary(ctx: Ctx, id: string): ProjectSummary {
   return {
     id,
     name: e.config?.name ?? id,
-    repoPath: e.config?.repo.path ?? row?.repoPath ?? '',
+    repoPath: (e.config ? repoLabel(e.config) : null) ?? row?.repoPath ?? '',
+    legacy: !!e.config && isLegacyProject(e.config),
     enabled: e.config?.enabled ?? false,
     configPath: e.path,
     configError: e.error,
@@ -86,15 +92,41 @@ export function getProject(ctx: Ctx, id: string) {
   };
 }
 
+/** Password of a new project: generated for the app's own Postgres (managed), detected for an existing one (D11). */
+function fillPassword(doc: YAML.Document): void {
+  const pw = doc.getIn(['postgres', 'password']);
+  if (pw && pw !== PASSWORD_MASK) return;
+  if (doc.getIn(['postgres', 'mode']) === 'managed') {
+    doc.setIn(['postgres', 'password'], crypto.randomBytes(18).toString('base64url'));
+    return;
+  }
+  const key = String(doc.getIn(['repo', 'mirrorDir']) ?? '');
+  doc.setIn(['postgres', 'password'], detectedPassword(key) || lastDetectedPassword() || '');
+}
+
+/** Wizard check of an external Postgres before the project is created. */
+export async function checkPostgres(yaml: string): Promise<{ ok: boolean; text: string }> {
+  const doc = YAML.parseDocument(yaml);
+  fillPassword(doc);
+  const parsed = projectConfigSchema.safeParse(doc.toJS());
+  if (!parsed.success) return { ok: false, text: `Настройки не прошли проверку: ${parsed.error.issues[0]?.message ?? ''}` };
+  const pg = parsed.data.postgres;
+  if (pg.mode === 'managed') return { ok: true, text: 'Postgres поднимет приложение' };
+  try {
+    const v = await pgPing(pg);
+    return { ok: true, text: `${pg.host}:${pg.port}, PostgreSQL ${v}` };
+  } catch (err) {
+    return { ok: false, text: (err as Error).message };
+  }
+}
+
 export function createProject(ctx: Ctx, yaml: string): ProjectSummary {
   const doc = YAML.parseDocument(yaml);
-  const repoPath = String(doc.getIn(['repo', 'path']) ?? '');
-  const pw = doc.getIn(['postgres', 'password']);
-  if (!pw || pw === PASSWORD_MASK) doc.setIn(['postgres', 'password'], detectedPassword(repoPath) || lastDetectedPassword() || '');
+  fillPassword(doc);
   const text = `# Настройки проекта Odoo Branch Manager. Правка файла подхватывается автоматически.\n${doc.toString()}`;
   const cfg = ctx.store.putProject(text, { create: true });
   syncProjectRows(ctx);
-  audit(ctx, { projectId: cfg.id, action: 'project.create', target: cfg.id, params: { repo: cfg.repo.path } });
+  audit(ctx, { projectId: cfg.id, action: 'project.create', target: cfg.id, params: { repo: cfg.repo.url ?? null } });
   bus.emit({ type: 'project.changed', projectId: cfg.id });
   return summary(ctx, cfg.id);
 }

@@ -9,6 +9,7 @@ import { refreshContainers } from './docker/watch';
 import { containerStates } from './docker/state';
 import { listDatabases, dropDatabase } from './pg';
 import * as git from './git';
+import { repoDir } from './git/worktrees';
 import { ownedRegistry } from './registry';
 import { templateToRegex, SQL_IDENT_RE } from './config/templates';
 import { runtimeState } from './state';
@@ -138,7 +139,7 @@ export async function reconcile(ctx: Ctx): Promise<void> {
 
     // Worktrees
     try {
-      const wts = await git.worktreeList(cfg.repo.path);
+      const wts = await git.worktreeList(repoDir(cfg));
       const mine = toPosix(path.join(cfg.repo.worktreesDir, cfg.id));
       for (const w of wts) {
         if (!isInside(mine, w.path)) continue;
@@ -204,7 +205,7 @@ export async function cleanupOrphans(ctx: Ctx, items: { kind: string; name: stri
         }
         case 'worktree': {
           if (!cfg || !isInside(path.join(cfg.repo.worktreesDir, cfg.id), it.name)) throw new BmError('NOT_OWNED', 'worktree вне папки проекта');
-          await git.worktreeRemove(cfg.repo.path, it.name, true);
+          await git.worktreeRemove(repoDir(cfg), it.name, true);
           break;
         }
         default:

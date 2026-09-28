@@ -6,7 +6,7 @@ import { dbSubcommandOptions, serverBaseArgs } from '../src/builds/odoo-cli';
 const inputs: PresetInputs = {
   id: 'demz',
   name: 'x',
-  repoPath: 'E:/r',
+  repo: { url: 'https://github.com/o/r.git', mirrorDir: 'C:/bm/repos/r.git', localFolder: null },
   github: null,
   remote: 'origin',
   projectRoot: 'E:/demz-odoo-19',

@@ -70,7 +70,7 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
           </Group>
           <Text size="sm" c="dimmed">
             debugpy слушает в контейнере; порт опубликован только на 127.0.0.1. Attach из VS Code по конфигурации ниже, pathMappings указывают на
-            worktree ветки.
+            папку с кодом ветки (worktree или вашу папку).
           </Text>
           {launch.data && (
             <Code block style={{ maxHeight: 180, overflow: 'auto' }}>
@@ -100,7 +100,7 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
                 }
               }}
             >
-              Добавить в .vscode/launch.json worktree
+              Добавить в .vscode/launch.json папки кода
             </Button>
           </Group>
         </Stack>

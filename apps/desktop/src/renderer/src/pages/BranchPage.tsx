@@ -53,6 +53,8 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
   if (!b) return null;
   const active = tab ?? 'history';
   const github = project.data?.summary.github;
+  const cfgUrl = project.data?.config?.repo.url;
+  const repoUrl = cfgUrl ? cfgUrl.replace(/^(https:\/\/)[^@/]+@/, '$1') : github ? `https://github.com/${github}.git` : null;
   const live = b.liveBuild;
   const setTab = (t: string | null) => nav(`/projects/${projectId}/branches/${branchId}/${t ?? 'history'}`);
 
@@ -85,7 +87,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
               )}
             </Group>
             <Text size="xs" c="dimmed">
-              {b.slug} · tracking: {b.tracking} · {b.worktreePath ?? 'worktree ещё не создан'}
+              {b.slug} · {b.folder ? `код из вашей папки ${b.folder}` : `код с GitHub · ${b.worktreePath ?? 'worktree ещё не создан'}`}
               {b.url ? ` · ${b.url}` : ''}
             </Text>
           </Stack>
@@ -97,10 +99,10 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
                 </Button>
               </Menu.Target>
               <Menu.Dropdown>
-                <Menu.Item disabled={!b.worktreePath} onClick={() => void window.bm.desktop.copy(b.worktreePath ?? '')}>
-                  Скопировать путь worktree
+                <Menu.Item disabled={!b.codeDir} onClick={() => void window.bm.desktop.copy(b.codeDir ?? '')}>
+                  Скопировать путь к коду
                 </Menu.Item>
-                <Menu.Item disabled={!github} onClick={() => void window.bm.desktop.copy(`git clone -b ${b.name} https://github.com/${github}.git`)}>
+                <Menu.Item disabled={!repoUrl} onClick={() => void window.bm.desktop.copy(`git clone -b ${b.name} ${repoUrl}`)}>
                   Скопировать команду git clone
                 </Menu.Item>
               </Menu.Dropdown>

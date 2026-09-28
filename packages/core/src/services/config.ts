@@ -8,6 +8,7 @@ import { resolveBranchScope } from '../config/effective';
 import { bus } from '../events';
 import { audit, lineDiff } from './audit';
 import { branchRow } from './branch-rows';
+import { localWatcher } from './watch-local';
 import { getProject, updateProject } from './projects';
 
 export function configGet(ctx: Ctx, p: { projectId?: string; level: Level; branchId?: number }): { yaml: string; value: unknown } {
@@ -73,7 +74,14 @@ export function setBranchOverrides(ctx: Ctx, branchId: number, overrides: z.infe
   const b = branchRow(ctx, branchId);
   if (!b) throw new BmError('NO_BRANCH', 'Ветка не найдена');
   const prev = YAML.stringify(b.overrides ?? {});
-  ctx.db.update(branches).set({ overrides }).where(eq(branches.id, branchId)).run();
+  const folderChanged = (b.overrides?.folder ?? null) !== (overrides.folder ?? null);
+  // Another folder: its HEAD becomes the new starting point (LocalWatcher records it without triggering a build).
+  ctx.db
+    .update(branches)
+    .set(folderChanged ? { overrides, lastSeenLocalSha: null } : { overrides })
+    .where(eq(branches.id, branchId))
+    .run();
+  if (folderChanged) void localWatcher()?.sync();
   audit(ctx, { projectId: b.projectId, action: 'settings.branch', target: b.name, diff: lineDiff(prev, YAML.stringify(overrides)) });
   bus.emit({ type: 'branch.changed', projectId: b.projectId, branchId });
 }

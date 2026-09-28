@@ -6,13 +6,10 @@ type PgCfg = ProjectConfig['postgres'];
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
-/** Safety rule 1: only the local Postgres published by Docker. */
+/** Safety rule 1: only the local Postgres published by Docker (external or the app's own, managed). */
 function assertLocal(cfg: PgCfg): void {
   if (!LOCAL_HOSTS.has(cfg.host)) {
     throw new BmError('PG_NOT_LOCAL', `postgres.host = «${cfg.host}»: приложение работает только с локальным Postgres (localhost). Исправьте настройки проекта.`);
-  }
-  if (cfg.mode === 'managed') {
-    throw new BmError('STAGE2', 'postgres.mode: managed (свой контейнер Postgres) появится на этапе 2. Укажите mode: external и контейнер Postgres проекта.');
   }
 }
 

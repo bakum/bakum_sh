@@ -7,7 +7,7 @@ const cfg = projectConfigSchema.parse(
   demzPreset({
     id: 'demz',
     name: 'DEMZ',
-    repoPath: 'E:/demz-odoo-19/repositories/demz-odoo',
+    repo: { url: 'https://github.com/demz-ua/demz-odoo.git', mirrorDir: 'C:/bm/repos/demz-odoo.git', localFolder: 'E:/demz-odoo-19/repositories/demz-odoo' },
     github: null,
     remote: 'origin',
     projectRoot: 'E:/demz-odoo-19',

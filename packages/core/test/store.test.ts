@@ -12,7 +12,7 @@ function cfg(id: string, over: Partial<ProjectConfig['naming']> = {}): ProjectCo
     genericPreset({
       id,
       name: id,
-      repoPath: 'C:/r',
+      repo: { url: 'https://github.com/o/r.git', mirrorDir: 'C:/bm/repos/r.git', localFolder: null },
       github: null,
       remote: 'origin',
       projectRoot: null,

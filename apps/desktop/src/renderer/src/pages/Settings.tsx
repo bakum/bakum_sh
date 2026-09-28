@@ -16,7 +16,6 @@ function stageFields(stage: keyof typeof STAGE_NAMES): FieldDef[] {
   return [
     { path: p('database'), label: 'База данных', type: 'text', inherit: inh, description: stage === 'production' ? 'backup' : 'fresh | copy:production | copy:<ветка>' },
     { path: p('onNewCommit'), label: 'Новый коммит', type: 'select', options: ['none', 'update', 'new'], inherit: inh },
-    { path: p('tracking'), label: 'Код ветки (tracking)', type: 'select', options: ['local', 'remote'], inherit: inh },
     { path: p('updateModules'), label: 'Обновлять модули (-u)', type: 'select', options: ['changed', 'all'], inherit: inh },
     { path: p('install'), label: 'Установка для fresh', type: 'select', options: ['my', 'roots', 'full'], inherit: inh },
     { path: p('withDemo'), label: 'Демо-данные (fresh)', type: 'switch' },
@@ -36,11 +35,13 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
       {
         fields: [
           { path: ['name'], label: 'Название проекта', type: 'text' },
-          { path: ['repo', 'path'], label: 'Папка репозитория', type: 'text' },
+          { path: ['repo', 'url'], label: 'Адрес репозитория', type: 'text', description: 'откуда берётся код сборок' },
+          { path: ['repo', 'mirrorDir'], label: 'Копия приложения', type: 'text', description: 'своя копия репозитория приложения, в ней не работают' },
+          { path: ['repo', 'localFolder'], label: 'Ваша папка с клоном', type: 'text', nullable: true, description: 'подсказка для «своей папки» у веток Development' },
           { path: ['repo', 'remote'], label: 'Remote', type: 'text' },
           { path: ['repo', 'github'], label: 'GitHub (owner/repo)', type: 'text', nullable: true },
           { path: ['repo', 'fetchIntervalMin'], label: 'Fetch каждые, мин', type: 'number', description: '0 — только вручную' },
-          { path: ['repo', 'worktreesDir'], label: 'Папка worktree', type: 'text' },
+          { path: ['repo', 'worktreesDir'], label: 'Папка веток (worktree)', type: 'text' },
           { path: ['repo', 'protectedBranches'], label: 'Защищённые ветки', type: 'tags' },
           { path: ['repo', 'moduleRoots'], label: 'Корни модулей', type: 'tags', description: 'пусто — весь репозиторий' },
           { path: ['repo', 'modulesToInstall'], label: 'Файл «моих» модулей', type: 'text', nullable: true },
@@ -107,7 +108,14 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
     groups: [
       {
         fields: [
-          { path: ['postgres', 'mode'], label: 'Режим', type: 'select', options: ['external'], description: 'managed — этап 2' },
+          {
+            path: ['postgres', 'mode'],
+            label: 'Режим',
+            type: 'select',
+            options: ['external', 'managed'],
+            description: 'external — существующий Postgres; managed — свой контейнер приложения bm-<проект>-db',
+          },
+          { path: ['postgres', 'image'], label: 'Образ (managed)', type: 'text' },
           { path: ['postgres', 'host'], label: 'Хост (с машины)', type: 'text' },
           { path: ['postgres', 'port'], label: 'Порт (с машины)', type: 'number' },
           { path: ['postgres', 'internalHost'], label: 'Хост в Docker-сети', type: 'text' },
@@ -200,6 +208,13 @@ export function SettingsPage() {
             </Group>
           )}
         </Group>
+        {project.data?.summary.legacy && (
+          <Alert color="red" title="Проект старой схемы">
+            Приложение работало внутри вашего репозитория ({project.data.summary.repoPath}), поэтому Git мешал переключать ветки. Сборки и fetch для
+            этого проекта отключены. Удалите проект кнопкой «Удалить проект…» (он удаляется полностью) и добавьте заново: код сборок будет браться с
+            GitHub через копию приложения, а свою папку можно подключить у веток Development.
+          </Alert>
+        )}
         {project.data?.summary.configError && (
           <Alert color="red" title="Файл настроек содержит ошибку">
             {project.data.summary.configError}

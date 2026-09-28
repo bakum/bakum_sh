@@ -1,21 +1,41 @@
-// Development sandbox project (prompt rule 5): DB prefix o19_bmdev_, hosts {slug}.dev.localhost, its own clone of
-// demz-odoo with a local bare "origin" (tmp/sandbox), worktrees and filestore under tmp/sandbox.
-// Runtime values (image, network, mounts, Postgres) come from detecting the real repo; nothing there is modified.
+// Development sandbox project (prompt rule 5): DB prefix o19_bmdev_, hosts {slug}.dev.localhost. Its "GitHub" is the
+// local bare repository tmp/sandbox/origin.git (D33: the app keeps its own mirror of it); tmp/sandbox/demz-odoo is the
+// user's clone. Runtime values (image, network, mounts, Postgres) come from detecting the real repo; nothing there is
+// modified.
 import YAML from 'yaml';
 import { bm } from './pw.mjs';
 
 export const SANDBOX = 'E:/bakum_sh/tmp/sandbox';
+export const ORIGIN_URL = `file:///${SANDBOX}/origin.git`;
 
-export async function ensureSandbox(win, { id = 'bmdev' } = {}) {
+export async function waitJob(win, jobId, timeoutMs = 1800000) {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    const j = await bm(win, 'jobs.get', { jobId });
+    if (['success', 'failed', 'cancelled', 'interrupted'].includes(j.status)) return j;
+    if (Date.now() > until) throw new Error('job timeout: ' + JSON.stringify(j));
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
+
+/** Sandbox project from the DEMZ preset; `stages` overrides stage settings (e.g. fresh Development databases). */
+export async function ensureSandbox(win, { id = 'bmdev', stages = null, mirror = null } = {}) {
   const state = await bm(win, 'system.state');
   if (state.firstRun) await bm(win, 'system.completeFirstRun', {});
   const list = await bm(win, 'projects.list');
   if (list.some((p) => p.id === id)) return id;
-  const d = await bm(win, 'projects.detect', { path: 'E:/demz-odoo-19/repositories/demz-odoo' });
+  let dir = mirror;
+  if (!dir) {
+    const r = await bm(win, 'repo.clone', { url: ORIGIN_URL, mirror: true, shallow: false });
+    const j = await waitJob(win, r.jobId);
+    if (j.status !== 'success') throw new Error('mirror: ' + j.error);
+    dir = r.dir;
+  }
+  const d = await bm(win, 'projects.detect', { mirror: dir, url: ORIGIN_URL, folder: 'E:/demz-odoo-19/repositories/demz-odoo' });
   const cfg = structuredClone(d.proposals.demz);
   cfg.id = id;
   cfg.name = 'Sandbox (demz-odoo)';
-  cfg.repo.path = `${SANDBOX}/demz-odoo`;
+  cfg.repo.localFolder = `${SANDBOX}/demz-odoo`;
   cfg.repo.github = null;
   cfg.repo.issueUrl = null;
   cfg.repo.worktreesDir = `${SANDBOX}/worktrees`;
@@ -24,6 +44,7 @@ export async function ensureSandbox(win, { id = 'bmdev' } = {}) {
   cfg.naming.host = '{slug}.dev.localhost';
   cfg.runtime.filestore.hostDir = `${SANDBOX}/filestore`;
   cfg.runtime.debug.pathMappings = [{ local: '{worktree}', remote: cfg.runtime.repoMount }];
+  if (stages) for (const [k, v] of Object.entries(stages)) cfg.stages[k] = { ...cfg.stages[k], ...v };
   await bm(win, 'projects.create', { yaml: YAML.stringify(cfg) });
   return id;
 }
