@@ -362,7 +362,8 @@ async function boot(): Promise<void> {
   registerIpc();
   core = new CoreHost({
     configDir,
-    dataDirOverride: process.env.BM_DATA_DIR ?? null,
+    // A dev profile never touches the dataDir configured in app.yaml.
+    dataDirOverride: process.env.BM_DATA_DIR ?? (profile ? localDir : null),
     appVersion: app.getVersion(),
     resourcesPath: process.resourcesPath,
     log,

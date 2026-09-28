@@ -2,9 +2,10 @@
 // ELECTRON_RUN_AS_NODE=1, which would make Electron start as plain Node.
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
-const cli = require.resolve('electron-vite/bin/electron-vite.js');
+const cli = path.join(path.dirname(require.resolve('electron-vite/package.json')), 'bin', 'electron-vite.js');
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 const res = spawnSync(process.execPath, [cli, ...process.argv.slice(2)], { stdio: 'inherit', env });

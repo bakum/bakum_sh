@@ -213,7 +213,10 @@ export const projectConfigSchema = z
         filestore: z
           .object({
             hostDir: z.string().min(1),
-            containerDir: z.string().startsWith('/').default('/var/lib/odoo/filestore'),
+            containerDir: z
+              .string()
+              .regex(/^\/.*\/filestore$/,'должен заканчиваться на /filestore (родитель — data_dir Odoo)')
+              .default('/var/lib/odoo/filestore'),
             copy: z.enum(['hardlink', 'copy']).default('hardlink'),
           })
           .strict(),

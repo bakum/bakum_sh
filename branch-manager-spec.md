@@ -150,7 +150,7 @@ Backups · Tools · Settings**; кнопки **Rebuild** и **GitHub**.
 
 - **Добавить проект**: выбрать папку репозитория (нативный диалог) → автоопределение:
   - `origin` и GitHub-репозиторий (`owner/name`) для ссылок и PR;
-  - корни модулей (каталоги с `__manifest__.py` на глубине до 3) и файл списка модулей;
+  - корни модулей (каталоги с `__manifest__.py` на глубине до 4 — в DEMZ есть `demzua/perevertum/crm/<модуль>`) и файл списка модулей;
   - `docker-compose.yml` / `Dockerfile` / `odoo.conf` выше по дереву → образ, сеть, монтирования, путь репозитория в контейнере;
   - запущенный Postgres в этой сети;
   - кандидат на Production (`master`, `main` или ветка вида `<версия>`, например `19.0`).
@@ -414,17 +414,19 @@ runtime:
   odooVersion: '19.0'
   network: demz-odoo-19_default
   repoMount: /mnt/repositories/demz-odoo # сюда монтируется worktree ветки (вложенный bind mount)
-  mounts:
-    - { host: E:/demz-odoo-19/repositories,       container: /mnt/repositories }
+  mounts:                                # общие папки проекта — только для чтения (docs/decisions.md D8)
+    - { host: E:/demz-odoo-19/repositories,       container: /mnt/repositories, readOnly: true }
     - { host: E:/demz-odoo-19/enterprise,         container: /mnt/enterprise, readOnly: true }
-    - { host: E:/demz-odoo-19/custom_addons,      container: /mnt/extra-addons }
-    - { host: E:/demz-odoo-19/data/filestore,     container: /var/lib/odoo }
+    - { host: E:/demz-odoo-19/custom_addons,      container: /mnt/extra-addons, readOnly: true }
     - { host: E:/demz-odoo-19/data/backups,       container: /backups, readOnly: true }
     - { host: E:/demz-odoo-19/config/odoo.conf,   container: /etc/odoo/odoo.conf, readOnly: true }
+  # filestore монтируется отдельно: hostDir → containerDir; data_dir Odoo = родитель containerDir (D7),
+  # поэтому filestore сборки лежит в E:/demz-odoo-19/data/filestore/<db>
   filestore: { hostDir: E:/demz-odoo-19/data/filestore, containerDir: /var/lib/odoo/filestore, copy: hardlink }
   env: { HOST: db }                      # USER / PASSWORD — из postgres
   command: [python3, -Xfrozen_modules=off, -m, debugpy, --listen, '0.0.0.0:5678',
-            /usr/bin/odoo, -c, /etc/odoo/odoo.conf, -d, '{db}', '--db-filter=^{db}$', --proxy-mode]
+            /usr/bin/odoo, -c, /etc/odoo/odoo.conf, --data-dir=/var/lib/odoo,
+            -d, '{db}', '--db-filter=^{db}$', --proxy-mode]
   debug:
     containerPort: 5678
     pathMappings:
@@ -526,7 +528,7 @@ desktop:
 ### 9.4 Пресеты
 
 - **Generic Odoo**: `database: fresh`, `install: my`, `withDemo: true`, `onNewCommit: new` для Development — поведение odoo.sh
-  по умолчанию; `postgres.mode: managed`.
+  по умолчанию; `postgres.mode: managed` (этап 2; до него пресет берёт `external` с Postgres, найденным мастером, D9).
 - **DEMZ**: пример 9.3.
 - Свой пресет — «Сохранить как пресет» из любого проекта (без паролей и локальных путей по выбору).
 

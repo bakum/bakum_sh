@@ -1,0 +1,12 @@
+import { launch, shot } from './pw.mjs';
+const { app, win } = await launch();
+win.on('console', (m) => console.log('console', m.type(), m.text().slice(0, 300)));
+win.on('pageerror', (e) => console.log('pageerror', e.message));
+await win.waitForTimeout(3000);
+await win.evaluate(() => { location.hash = '#/projects/new'; });
+await win.waitForTimeout(1500);
+await win.fill('input[placeholder*="demz-odoo"]', 'E:\demz-odoo-19\repositories\demz-odoo');
+await win.click('button:has-text("Определить")');
+await win.waitForTimeout(8000);
+await shot(win, 'debug');
+await app.close();
