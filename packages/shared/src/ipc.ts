@@ -60,6 +60,18 @@ export interface ProjectDeletePreview {
   registry: { jobs: number; audit: number; kv: number };
 }
 
+/** What «Перевести на свой Postgres» does for a project on an external Postgres. */
+export interface PgMigratePreview {
+  /** Why the move is impossible now (not external, Docker down…); null — it can start. */
+  blocker: string | null;
+  source: { host: string; port: number; container: string | null; version: string | null; error: string | null };
+  target: { container: string; image: string; port: number | null; network: string };
+  /** Databases of the project's builds (test copies and snapshots included) copied with pg_dump / pg_restore. */
+  databases: { name: string; sizeBytes: number | null }[];
+  /** Live builds recreated in the new network; running ones are stopped for the copy. */
+  builds: string[];
+}
+
 export interface JobRef {
   jobId: number;
 }
@@ -115,6 +127,9 @@ export const methods = {
     z.object({ projectId }).strict(),
   ),
   'projects.delete': m<JobRef>()(z.object({ projectId, confirm: z.string() }).strict()),
+  /** External Postgres → the app's own container (postgres.mode: managed) with the databases of the builds. */
+  'projects.pgMigratePreview': m<PgMigratePreview>()(z.object({ projectId }).strict()),
+  'projects.pgMigrate': m<JobRef>()(z.object({ projectId }).strict()),
 
   'config.get': m<{ yaml: string; value: unknown }>()(
     z.object({ projectId: projectId.optional(), level: levelSchema, branchId: id.optional() }).strict(),

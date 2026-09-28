@@ -137,6 +137,77 @@ async function doEnsure(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void):
   if (!upToDate) say(`Postgres ${name} работает на 127.0.0.1:${pg.port}`);
 }
 
+export interface ExternalPgContainer {
+  id: string;
+  name: string;
+  image: string;
+  running: boolean;
+}
+
+/**
+ * The container behind an external Postgres (e.g. `db` of the user's own compose project): in the project network
+ * under the alias `postgres.internalHost`, or publishing `postgres.port`. Branch containers are never candidates.
+ */
+export async function externalPgContainer(cfg: ProjectConfig): Promise<ExternalPgContainer | null> {
+  const pg = cfg.postgres;
+  const net = cfg.runtime.network;
+  const list = await docker.listContainers({ all: true }).catch(() => []);
+  const names = (c: (typeof list)[number]) => c.Names.map((n) => n.replace(/^\//, ''));
+  const candidates = list.filter((c) => !c.Labels['bm.project'] && (c.NetworkSettings?.Networks?.[net] || names(c).some((n) => pg.protectedContainers.includes(n))));
+  for (const c of candidates) {
+    const info = await docker.getContainer(c.Id).inspect().catch(() => null);
+    if (!info) continue;
+    const ep = info.NetworkSettings.Networks?.[net] as { Aliases?: string[] | null; DNSNames?: string[] | null } | undefined;
+    const alias = [...(ep?.Aliases ?? []), ...(ep?.DNSNames ?? [])].includes(pg.internalHost);
+    const port = info.HostConfig.PortBindings?.['5432/tcp']?.some((b: { HostPort?: string }) => b.HostPort === String(pg.port));
+    if (alias || port) return { id: info.Id, name: info.Name.replace(/^\//, ''), image: info.Config.Image, running: info.State.Running };
+  }
+  return null;
+}
+
+/**
+ * `postgres.mode: external`: a stopped Postgres container of the user's stack (found by `externalPgContainer`) is
+ * started before a branch needs it — otherwise Odoo loops on «could not translate host name "db"».
+ */
+async function ensureExternalPostgres(cfg: ProjectConfig, say: (l: string) => void): Promise<void> {
+  const pg = cfg.postgres;
+  let first: Error;
+  try {
+    await pgPing(pg);
+    return;
+  } catch (err) {
+    first = err as Error;
+  }
+  if (!runtimeState.docker.ok) throw first;
+  const c = await externalPgContainer(cfg);
+  if (!c) throw first;
+  if (!c.running) {
+    say(`Postgres ${pg.host}:${pg.port} недоступен: запускаю контейнер ${c.name} (docker start)`);
+    try {
+      await docker.getContainer(c.id).start();
+    } catch (err) {
+      throw new BmError('PG_START', `Не удалось запустить контейнер Postgres ${c.name}: ${(err as Error).message}`);
+    }
+  }
+  const deadline = Date.now() + 90_000;
+  for (;;) {
+    try {
+      const v = await pgPing(pg);
+      runtimeState.postgres.set(cfg.id, { ok: true, text: `${pg.host}:${pg.port}, PostgreSQL ${v}` });
+      say(`Postgres ${c.name} работает`);
+      return;
+    } catch (err) {
+      if (Date.now() > deadline) throw new BmError('PG_CONNECT', `Postgres ${c.name} не отвечает: ${(err as Error).message}`);
+      await new Promise((res) => setTimeout(res, 1500));
+    }
+  }
+}
+
+/** Postgres of the project is up before a branch container starts: the app's own (managed) or the user's (external). */
+export function ensurePostgres(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void = () => {}): Promise<void> {
+  return cfg.postgres.mode === 'managed' ? ensureManagedPostgres(ctx, cfg, say) : ensureExternalPostgres(cfg, say);
+}
+
 /** Project deletion: container, data volume, compose folder and the project network (Traefik is detached first). */
 export async function removeManagedPostgres(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void): Promise<void> {
   if (cfg.postgres.mode !== 'managed') return;

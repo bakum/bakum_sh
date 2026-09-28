@@ -33,6 +33,7 @@ import { registerBuildHandlers } from './services/build-actions';
 import { deletePreview, requestDelete } from './services/branch-delete';
 import { mergeUrl } from './services/merge';
 import { projectDeletePreview, requestProjectDelete } from './services/project-delete';
+import { pgMigratePreview, requestPgMigrate } from './services/pg-migrate';
 import { readLogs } from './services/logs';
 import { cleanupOrphans } from './reconcile';
 
@@ -76,6 +77,8 @@ export function registerHandlers(ctx: Ctx): void {
     'projects.setEnabled': (p) => setEnabled(ctx, p.projectId, p.enabled),
     'projects.deletePreview': (p) => projectDeletePreview(ctx, p.projectId),
     'projects.delete': (p) => requestProjectDelete(ctx, p.projectId, p.confirm),
+    'projects.pgMigratePreview': (p) => pgMigratePreview(ctx, p.projectId),
+    'projects.pgMigrate': (p) => requestPgMigrate(ctx, p.projectId),
 
     'config.get': (p) => configGet(ctx, p),
     'config.put': (p) => configPut(ctx, p),

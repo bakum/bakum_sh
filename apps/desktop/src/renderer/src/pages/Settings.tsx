@@ -7,6 +7,7 @@ import { useBm, useBmMutation } from '../lib/query';
 import { YamlEditor } from '../components/YamlEditor';
 import { YamlForm, type FieldDef, type FieldGroup } from '../components/YamlForm';
 import { DeleteProjectButton } from '../components/dialogs/DeleteProject';
+import { MigratePostgresCard } from '../components/dialogs/MigratePostgres';
 import { UpdatesCard } from '../components/UpdatesCard';
 
 const STAGE_NAMES = { production: 'Production', staging: 'Staging', development: 'Development' } as const;
@@ -251,6 +252,9 @@ export function SettingsPage() {
                     <Box mb="md">
                       <EditionLine edition={project.data.summary.edition} />
                     </Box>
+                  )}
+                  {k === 'postgres' && !project.data.summary.legacy && (
+                    <MigratePostgresCard projectId={pid!} external={project.data.config.postgres.mode === 'external'} />
                   )}
                   <YamlForm text={project.data.yaml} groups={t.groups} onSave={saveProject} saving={update.isPending} />
                 </Card>

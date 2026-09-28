@@ -20,6 +20,9 @@ export type Executor = (ctx: Ctx, job: JobRow, jc: JobContext) => Promise<void>;
 /** Job types that count against maxParallelBuilds. */
 const HEAVY: ReadonlySet<string> = new Set(['build', 'import_backup']);
 
+/** Project-wide jobs: start when nothing else of the project runs; later jobs of the project wait for them. */
+const EXCLUSIVE: ReadonlySet<string> = new Set(['migrate_postgres']);
+
 /**
  * Persistent job queue (spec 8.3 «Очередь»): one active job per branch, maxParallelBuilds heavy jobs
  * over all projects, one fetch per project. State lives in SQLite so a Core restart can mark
@@ -109,10 +112,17 @@ export class JobQueue {
       const all = this.ctx.db.select().from(jobs).where(inArray(jobs.status, ['queued', 'running'])).orderBy(asc(jobs.id)).all();
       const busyBranches = new Set(all.filter((j) => j.status === 'running' && j.branchId).map((j) => j.branchId!));
       const busyFetch = new Set(all.filter((j) => j.status === 'running' && j.type === 'fetch').map((j) => j.projectId));
+      const busyProjects = new Set(all.filter((j) => j.status === 'running' && j.projectId).map((j) => j.projectId!));
+      const lockedProjects = new Set(all.filter((j) => j.status === 'running' && EXCLUSIVE.has(j.type)).map((j) => j.projectId));
       let heavy = all.filter((j) => j.status === 'running' && HEAVY.has(j.type)).length;
       const max = this.ctx.store.app.limits.maxParallelBuilds;
       for (const j of all) {
         if (j.status !== 'queued') continue;
+        if (j.projectId && lockedProjects.has(j.projectId)) continue;
+        if (EXCLUSIVE.has(j.type)) {
+          lockedProjects.add(j.projectId);
+          if (busyProjects.has(j.projectId!)) continue;
+        }
         if (j.branchId && busyBranches.has(j.branchId)) continue;
         if (j.type === 'fetch' && busyFetch.has(j.projectId)) continue;
         if (HEAVY.has(j.type)) {
@@ -121,6 +131,7 @@ export class JobQueue {
         }
         if (j.branchId) busyBranches.add(j.branchId);
         if (j.type === 'fetch') busyFetch.add(j.projectId);
+        if (j.projectId) busyProjects.add(j.projectId);
         this.start(j);
       }
       const queued = all.filter((j) => j.status === 'queued').length;

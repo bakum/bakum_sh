@@ -8,6 +8,7 @@ import type { JobContext, JobQueue } from '../jobs/queue';
 import { dockerCli } from '../docker/client';
 import { generateCompose } from '../docker/compose';
 import { ensureTraefik } from '../docker/traefik';
+import { ensurePostgres } from '../docker/postgres';
 import { refreshContainers } from '../docker/watch';
 import { resolveBranchScope } from '../config/effective';
 import { codeSource } from '../git/worktrees';
@@ -36,7 +37,7 @@ function liveCompose(ctx: Ctx, b: BuildRow): string {
   return file;
 }
 
-async function compose(ctx: Ctx, b: BuildRow, args: string[], jc: JobContext): Promise<void> {
+export async function compose(ctx: Ctx, b: BuildRow, args: string[], jc: JobContext): Promise<void> {
   const file = liveCompose(ctx, b);
   const r = await dockerCli(['compose', '-p', b.composeProject, '-f', file, ...args], { onLine: jc.log, signal: jc.signal, timeoutMs: 300_000 });
   if (r.exitCode !== 0) throw new BmError('COMPOSE', `docker compose ${args[0]}: ${(r.stderr || r.stdout).trim().split('\n').slice(-2).join(' ')}`);
@@ -64,15 +65,14 @@ const done = (ctx: Ctx, b: BuildRow, action: string): void => {
   publishTray(ctx);
 };
 
-/** «Применить» (spec 9.1): recreate the container with the current configuration, the database is kept. */
-async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
-  const b = mustBuild(ctx, job.buildId);
-  const br = branchRow(ctx, b.branchId)!;
+/** Rewrites compose.yml of a live build from the current configuration; returns the new config hash. */
+export function writeLiveCompose(ctx: Ctx, b: BuildRow): string {
+  const br = branchRow(ctx, b.branchId);
+  if (!br) throw new BmError('NO_BRANCH', 'Ветка сборки удалена');
   const cfg = ctx.store.require(b.projectId);
   const scope = resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope;
   const code = codeSource(cfg, br, scope).dir;
   if (!code) throw new BmError('NO_WORKTREE', 'Worktree ветки не найден — нужен Rebuild');
-  await ensureTraefik(ctx);
   const file = path.join(branchDir(ctx, cfg.id, br.slug), 'compose.yml');
   const text = generateCompose({
     cfg,
@@ -83,14 +83,20 @@ async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void>
   });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text, 'utf8');
+  return configHash(cfg, scope, ctx.proxyPort ?? ctx.store.app.proxyPort);
+}
+
+/** «Применить» (spec 9.1): recreate the container with the current configuration, the database is kept. */
+async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
+  const b = mustBuild(ctx, job.buildId);
+  const cfg = ctx.store.require(b.projectId);
+  await ensureTraefik(ctx);
+  await ensurePostgres(ctx, cfg, jc.log);
+  const hash = writeLiveCompose(ctx, b);
   jc.log('docker compose up -d (пересоздание контейнера, БД не трогается)');
   await compose(ctx, b, ['up', '-d', '--remove-orphans'], jc);
   await waitHealthy(b.id, cfg.runtime.healthcheck.timeoutSec, jc);
-  ctx.db
-    .update(builds)
-    .set({ configHash: configHash(cfg, scope, ctx.proxyPort ?? ctx.store.app.proxyPort), status: 'running' })
-    .where(eq(builds.id, b.id))
-    .run();
+  ctx.db.update(builds).set({ configHash: hash, status: 'running' }).where(eq(builds.id, b.id)).run();
   done(ctx, b, 'applyConfig');
 }
 
@@ -100,6 +106,7 @@ async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> 
   const cfg = ctx.store.require(b.projectId);
   const p = job.params as { install?: string[]; update?: string[] };
   const file = liveCompose(ctx, b);
+  await ensurePostgres(ctx, cfg, jc.log);
   await compose(ctx, b, ['stop'], jc);
   try {
     const cmd = ['odoo', ...serverBaseArgs(cfg), '-d', b.dbName, '--stop-after-init', '--no-http'];
@@ -129,6 +136,7 @@ export function registerBuildExecutors(q: JobQueue): void {
   });
   q.register('start', async (ctx, job, jc) => {
     const b = mustBuild(ctx, job.buildId);
+    await ensurePostgres(ctx, ctx.store.require(b.projectId), jc.log);
     await compose(ctx, b, ['up', '-d', '--remove-orphans'], jc);
     done(ctx, b, 'start');
   });
@@ -139,6 +147,7 @@ export function registerBuildExecutors(q: JobQueue): void {
   });
   q.register('restart', async (ctx, job, jc) => {
     const b = mustBuild(ctx, job.buildId);
+    await ensurePostgres(ctx, ctx.store.require(b.projectId), jc.log);
     await compose(ctx, b, ['restart'], jc);
     done(ctx, b, 'restart');
   });

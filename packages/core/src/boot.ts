@@ -7,6 +7,7 @@ import { deleteBranchExecutor } from './services/branch-delete';
 import { deleteProjectExecutor } from './services/project-delete';
 import { cloneExecutor } from './services/repo';
 import { ensureAllManagedPostgres, setupProjectExecutor } from './services/project-setup';
+import { pgMigrateExecutor } from './services/pg-migrate';
 import { ensureTraefik } from './docker/traefik';
 import { startDockerWatch, stopDockerWatch } from './docker/watch';
 import { failInterruptedBuilds, reconcile } from './reconcile';
@@ -26,6 +27,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
   queue.register('delete_project', deleteProjectExecutor);
   queue.register('clone', cloneExecutor);
   queue.register('setup_project', setupProjectExecutor);
+  queue.register('migrate_postgres', pgMigrateExecutor);
   registerBuildExecutors(queue);
 
   // Tray «building» follows the queue: re-published after a job starts or finishes (a build publishing the tray

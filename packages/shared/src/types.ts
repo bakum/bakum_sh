@@ -19,7 +19,8 @@ export type JobType =
   | 'modules'
   | 'delete_project'
   | 'clone'
-  | 'setup_project';
+  | 'setup_project'
+  | 'migrate_postgres';
 export type JobStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled' | 'interrupted';
 
 export const BUILD_STEPS = [

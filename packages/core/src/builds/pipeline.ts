@@ -11,7 +11,7 @@ import { assertFolderUsable, codeSource, ensureWorktree, type CodeSource } from 
 import { docker, dockerCli } from '../docker/client';
 import { ODOO_SERVICE, dataDirOf, generateCompose } from '../docker/compose';
 import { ensureTraefik } from '../docker/traefik';
-import { ensureManagedPostgres, pullImage } from '../docker/postgres';
+import { ensurePostgres, pullImage } from '../docker/postgres';
 import { refreshContainers } from '../docker/watch';
 import * as pg from '../pg';
 import { assertOwned } from '../safety';
@@ -610,11 +610,10 @@ export async function runBuild(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
   log(`==> ${cfg.id}/${branch.name} сборка #${build0.number} (${build0.kind}, ${build0.dbSource}, trigger ${build0.trigger})${startIdx ? ` с шага ${from}` : ''} ${nowIso()}`);
   let current: BuildStepName = 'code';
   try {
-    if (cfg.postgres.mode === 'managed') {
-      // «Odoo in Docker»: the app's own Postgres and the official Odoo image must be there before any step (D30).
-      await ensureManagedPostgres(ctx, cfg, log);
-      await pullImage(scope.image, log, jc.signal);
-    }
+    // Postgres must be up before any step: the app's own (D30) or the user's container, started when stopped.
+    await ensurePostgres(ctx, cfg, log);
+    // «Odoo in Docker»: the official Odoo image is pulled by the app.
+    if (cfg.postgres.mode === 'managed') await pullImage(scope.image, log, jc.signal);
     // A compose file is needed by one-off runs from the database step on (image, mounts, network).
     for (let i = startIdx; i < BUILD_STEPS.length; i++) {
       const name = BUILD_STEPS[i]!;
