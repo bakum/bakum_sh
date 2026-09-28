@@ -11,3 +11,6 @@ export interface ContainerState {
 }
 
 export const containerStates = new Map<string, ContainerState>();
+
+/** False until the first successful poll: before it, a missing entry means "unknown", not "container gone". */
+export const containerPoll = { loaded: false };

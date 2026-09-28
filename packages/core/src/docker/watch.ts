@@ -2,7 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { Ctx } from '../context';
 import { builds } from '../db/schema';
 import { docker } from './client';
-import { containerStates, type ContainerState } from './state';
+import { containerPoll, containerStates, type ContainerState } from './state';
 import { runtimeState } from '../state';
 import { bus } from '../events';
 import { log } from '../util/logger';
@@ -36,6 +36,7 @@ export async function refreshContainers(ctx: Ctx): Promise<void> {
     const prev = containerStates.get(k);
     if (!prev || prev.state !== v.state || prev.buildId !== v.buildId || prev.health !== v.health) changed = true;
   }
+  containerPoll.loaded = true;
   containerStates.clear();
   for (const [k, v] of next) containerStates.set(k, v);
 

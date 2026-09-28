@@ -3,7 +3,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { BuildView, ProjectConfig, ResolvedBranchScope } from '@bm/shared';
 import type { Ctx } from '../context';
 import { builds, type BranchRow, type BuildRow } from '../db/schema';
-import { containerStates } from '../docker/state';
+import { containerPoll, containerStates } from '../docker/state';
 
 /**
  * Hash of everything that shapes the build container but not its database (spec 9.1 «конфигурация изменилась»):
@@ -69,7 +69,7 @@ export function toBuildView(
     droppedAt: row.droppedAt,
     errorMessage: row.errorMessage,
     url: isLive || row.status === 'building' ? buildUrl(row.host, port) : null,
-    containerState: isLive && cs && cs.buildId === row.id ? cs.state : isLive ? (cs?.state ?? 'missing') : null,
+    containerState: !containerPoll.loaded ? null : isLive && cs && cs.buildId === row.id ? cs.state : isLive ? (cs?.state ?? 'missing') : null,
     isLive,
     dropAt,
   };
