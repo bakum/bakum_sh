@@ -27,6 +27,8 @@ import { getQueue } from './jobs/queue';
 import { registerBuildHandlers } from './services/build-actions';
 import { deletePreview, requestDelete } from './services/branch-delete';
 import { mergeUrl } from './services/merge';
+import { readLogs } from './services/logs';
+import { cleanupOrphans } from './reconcile';
 
 /** All RPC methods of Core. */
 export function registerHandlers(ctx: Ctx): void {
@@ -89,6 +91,8 @@ export function registerHandlers(ctx: Ctx): void {
       return { ok: true as const };
     },
     'audit.list': (p) => listAudit(ctx, p.projectId, p.limit),
+    'logs.read': (p) => readLogs(ctx, p),
+    'system.cleanupOrphans': (p) => cleanupOrphans(ctx, p.items),
   });
   registerBuildHandlers(ctx);
 }

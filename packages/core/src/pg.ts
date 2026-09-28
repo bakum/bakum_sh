@@ -45,7 +45,7 @@ export async function withPg<T>(cfg: PgCfg, database: string, fn: (c: pg.Client)
 
 export async function pgPing(cfg: PgCfg): Promise<string> {
   return withPg(cfg, 'postgres', async (c) => {
-    const r = await c.query<{ v: string }>('SHOW server_version');
+    const r = await c.query<{ v: string }>("SELECT current_setting('server_version') AS v");
     return r.rows[0]?.v ?? '?';
   });
 }
