@@ -40,6 +40,12 @@ export interface FieldGroup {
 
 const key = (p: (string | number)[]) => p.join('.');
 
+/** getIn returns collections as YAML nodes (YAMLSeq / YAMLMap), scalars as values. */
+const valueAt = (doc: YAML.Document, p: (string | number)[]): unknown => {
+  const v = doc.getIn(p);
+  return YAML.isNode(v) ? v.toJS(doc) : v;
+};
+
 function toInput(v: unknown, f: FieldDef): unknown {
   if (f.type === 'keyvalue') return v && typeof v === 'object' ? Object.entries(v as Record<string, string>).map(([k, x]) => `${k}=${x}`) : [];
   if (f.type === 'tags') return Array.isArray(v) ? v.map(String) : [];
@@ -55,7 +61,7 @@ function toInput(v: unknown, f: FieldDef): unknown {
 export function YamlForm(props: { text: string; groups: FieldGroup[]; onSave: (text: string) => Promise<unknown>; saving?: boolean }) {
   const doc = useMemo(() => YAML.parseDocument(props.text), [props.text]);
   const fields = props.groups.flatMap((g) => g.fields);
-  const initial = useMemo(() => Object.fromEntries(fields.map((f) => [key(f.path), toInput(doc.getIn(f.path), f)])), [doc]); // eslint-disable-line react-hooks/exhaustive-deps
+  const initial = useMemo(() => Object.fromEntries(fields.map((f) => [key(f.path), toInput(valueAt(doc, f.path), f)])), [doc]); // eslint-disable-line react-hooks/exhaustive-deps
   const [values, setValues] = useState<Record<string, unknown>>(initial);
   useEffect(() => setValues(initial), [initial]);
   const dirty = fields.filter((f) => JSON.stringify(values[key(f.path)]) !== JSON.stringify(initial[key(f.path)]));
