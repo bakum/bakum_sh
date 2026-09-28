@@ -119,10 +119,10 @@ export function LogsTab({ branch }: { branch: BranchView }) {
     [builds.data],
   );
 
-  if (!builds.data?.items.length) return <Alert color="gray">Сборок ещё не было.</Alert>;
 
   return (
     <Stack h="calc(100vh - 250px)" gap="xs">
+      {builds.data && !builds.data.items.length && <Alert color="gray">Сборок ещё не было.</Alert>}
       <Group gap="xs">
         <SegmentedControl
           size="xs"

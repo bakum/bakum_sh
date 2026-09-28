@@ -28,6 +28,7 @@ await bm(win, 'branches.setOverrides', { branchId: roman.id, overrides: { ...ov,
 console.log('after branch override:', JSON.stringify(await field('idleStopHours')));
 await win.evaluate((id) => (location.hash = `#/projects/bmdev/branches/${id}/settings`), roman.id);
 await win.waitForTimeout(2500);
+await win.locator('[data-field="idleStopHours"]').scrollIntoViewIfNeeded();
 await shot(win, 'c9-settings-levels');
 
 const live = (await bm(win, 'branches.get', { branchId: roman.id })).liveBuild;
