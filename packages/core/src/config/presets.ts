@@ -85,6 +85,8 @@ export interface PresetInputs {
   postgres: { host: string; port: number; internalHost: string; user: string; password: string; protectedContainers: string[] };
   /** Directories (relative to the repo root, '' = root) that directly contain modules. */
   addonsDirs: string[];
+  /** The detected Odoo container runs debugpy (Generic preset keeps it; otherwise plain `odoo`). */
+  debugpy?: boolean;
   productionBranch: string;
   odooVersion: string;
 }
@@ -248,8 +250,9 @@ export function genericPreset(i: PresetInputs): ProjectConfigInput {
       filestore: { hostDir: i.filestoreHostDir, containerDir: '/var/lib/odoo/filestore', copy: 'hardlink' },
       env: i.postgres.password ? { PGPASSWORD: i.postgres.password } : {},
       command: [
-        'python3', '-Xfrozen_modules=off', '-m', 'debugpy', '--listen', '0.0.0.0:5678',
-        '/usr/bin/odoo', '--data-dir=/var/lib/odoo',
+        // debugpy only when the detected Odoo container already runs it (the official odoo image has no debugpy).
+        ...(i.debugpy ? ['python3', '-Xfrozen_modules=off', '-m', 'debugpy', '--listen', '0.0.0.0:5678', '/usr/bin/odoo'] : ['odoo']),
+        '--data-dir=/var/lib/odoo',
         `--addons-path=${['/usr/lib/python3/dist-packages/odoo/addons', ...i.addonsDirs.map((d) => (d ? `${i.repoMount}/${d}` : i.repoMount))].join(',')}`,
         `--db_host=${i.postgres.internalHost}`, '--db_port=5432', `--db_user=${i.postgres.user}`,
         '-d', '{db}', '--db-filter=^{db}$', '--proxy-mode',

@@ -170,6 +170,7 @@ export async function detectProject(input: string, opts: { worktreesFallback: st
       protectedContainers: [odooContainer?.Name.replace(/^\//, ''), pg?.container].filter((x): x is string => !!x),
     },
     addonsDirs,
+    debugpy: !!command?.some((a) => a === 'debugpy'),
     productionBranch: productionCandidate ?? currentBranch ?? 'main',
     odooVersion: odooContainer?.Config.Env?.find((e) => e.startsWith('ODOO_VERSION='))?.split('=')[1] ?? '19.0',
   };

@@ -3,7 +3,8 @@ import { execa } from 'execa';
 import { BmError } from '@bm/shared';
 
 /** Local Docker Desktop engine only (named pipe). */
-export const docker = new Docker({ socketPath: '//./pipe/docker_engine' });
+// BM_DOCKER_PIPE exists only for the Docker-outage check without stopping Docker Desktop (docs/acceptance.md, 14).
+export const docker = new Docker({ socketPath: process.env.BM_DOCKER_PIPE ?? '//./pipe/docker_engine' });
 
 export async function dockerAlive(): Promise<{ ok: boolean; version: string | null; error: string | null }> {
   try {

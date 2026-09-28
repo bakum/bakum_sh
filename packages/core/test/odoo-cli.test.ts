@@ -20,6 +20,7 @@ const inputs: PresetInputs = {
   filestoreHostDir: 'E:/fs',
   postgres: { host: 'localhost', port: 5433, internalHost: 'db', user: 'odoo', password: 'x', protectedContainers: [] },
   addonsDirs: ['', 'addons'],
+  debugpy: true,
   productionBranch: '19.0',
   odooVersion: '19.0',
 };
