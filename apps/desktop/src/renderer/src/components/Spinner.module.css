@@ -1,0 +1,9 @@
+.spin {
+  animation: bm-spin 1s linear infinite;
+}
+
+@keyframes bm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

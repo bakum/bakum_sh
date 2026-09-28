@@ -16,7 +16,8 @@ import {
   Timeline,
   Tooltip,
 } from '@mantine/core';
-import { IconCheck, IconChevronDown, IconClock, IconLoader2, IconPlayerPlay, IconX } from '@tabler/icons-react';
+import { IconCheck, IconChevronDown, IconClock, IconPlayerPlay, IconX } from '@tabler/icons-react';
+import { Spinner } from '../../components/Spinner';
 import { notifications } from '@mantine/notifications';
 import type { BranchView, BuildView } from '@bm/shared';
 import { useBm } from '../../lib/query';
@@ -154,7 +155,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
               FAILED
             </Badge>
           ) : building ? (
-            <Badge color="orange" size="lg" leftSection={<IconLoader2 size={12} />}>
+            <Badge color="orange" size="lg" leftSection={b.status === 'queued' ? <IconClock size={12} /> : <Spinner size={12} />}>
               {b.status === 'queued' ? 'В ОЧЕРЕДИ' : 'СБОРКА'}
             </Badge>
           ) : null}
@@ -174,7 +175,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
               size="sm"
               variant={s.status === 'pending' ? 'outline' : 'light'}
               color={s.status === 'success' ? 'teal' : s.status === 'failed' ? 'red' : s.status === 'running' ? 'orange' : 'gray'}
-              leftSection={s.status === 'success' ? <IconCheck size={10} /> : s.status === 'failed' ? <IconX size={10} /> : s.status === 'running' ? <IconLoader2 size={10} /> : null}
+              leftSection={s.status === 'success' ? <IconCheck size={10} /> : s.status === 'failed' ? <IconX size={10} /> : s.status === 'running' ? <Spinner size={10} /> : null}
             >
               {s.name}
               {s.note ? ` · ${s.note}` : ''}
