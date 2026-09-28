@@ -212,7 +212,7 @@ export interface DetectResult {
   repoMount: string | null;
   mounts: { host: string; container: string; readOnly: boolean }[];
   command: string[] | null;
-  postgres: { container: string; host: string; port: number; internalHost: string; user: string; hasPassword: boolean } | null;
+  postgres: { container: string; image: string; host: string; port: number; internalHost: string; user: string; hasPassword: boolean } | null;
   /** Odoo series of the repository (manifest versions, production branch), e.g. «19.0». */
   odooVersion: string;
   suggestedPreset: PresetId;

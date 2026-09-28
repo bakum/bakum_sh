@@ -94,15 +94,18 @@ export function getProject(ctx: Ctx, id: string) {
   };
 }
 
-/** Password of a new project: generated for the app's own Postgres (managed), detected for an existing one (D11). */
+/**
+ * Password of a new project (D11): the detected one when the user's Odoo was found — its odoo.conf keeps working with
+ * the app's own Postgres too; otherwise generated for the app's own Postgres (managed).
+ */
 function fillPassword(doc: YAML.Document): void {
   const pw = doc.getIn(['postgres', 'password']);
   if (pw && pw !== PASSWORD_MASK) return;
+  const key = String(doc.getIn(['repo', 'mirrorDir']) ?? '');
   if (doc.getIn(['postgres', 'mode']) === 'managed') {
-    doc.setIn(['postgres', 'password'], crypto.randomBytes(18).toString('base64url'));
+    doc.setIn(['postgres', 'password'], detectedPassword(key) || crypto.randomBytes(18).toString('base64url'));
     return;
   }
-  const key = String(doc.getIn(['repo', 'mirrorDir']) ?? '');
   doc.setIn(['postgres', 'password'], detectedPassword(key) || lastDetectedPassword() || '');
 }
 

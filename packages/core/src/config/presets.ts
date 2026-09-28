@@ -90,6 +90,11 @@ export interface PresetInputs {
   mounts: { host: string; container: string; readOnly: boolean }[];
   filestoreHostDir: string;
   postgres: { host: string; port: number; internalHost: string; user: string; password: string; protectedContainers: string[] };
+  /**
+   * The app's own Postgres (D30), the default for new projects: bm-<id>-db in the network bm-<id>, with the detected
+   * user and internal host (the stack's odoo.conf keeps working). Without it the detected Postgres is used (external).
+   */
+  managedPg?: { image: string; port: number };
   /** Directories (relative to the repo root, '' = root) that directly contain modules. */
   addonsDirs: string[];
   /** The detected Odoo container runs debugpy (Generic preset keeps it; otherwise plain `odoo`). */
@@ -97,6 +102,25 @@ export interface PresetInputs {
   productionBranch: string;
   odooVersion: string;
 }
+
+/** postgres section of the DEMZ / Generic presets: the app's own container or the detected one. */
+function pgSection(i: PresetInputs, protectedDbs: string[]) {
+  const common = { internalHost: i.postgres.internalHost, user: i.postgres.user, password: i.postgres.password, protectedDbs };
+  if (!i.managedPg) {
+    return { mode: 'external' as const, host: i.postgres.host, port: i.postgres.port, ...common, protectedContainers: i.postgres.protectedContainers };
+  }
+  return {
+    mode: 'managed' as const,
+    image: i.managedPg.image,
+    host: 'localhost',
+    port: i.managedPg.port,
+    ...common,
+    protectedContainers: [...new Set([...i.postgres.protectedContainers, `bm-${i.id}-db`])],
+  };
+}
+
+/** The app's own Postgres lives in its own network; the detected one — in the network of the user's stack. */
+const networkOf = (i: PresetInputs): string => (i.managedPg ? `bm-${i.id}` : i.network);
 
 const DEMZ_VERIFY_SQL =
   "SELECT count(*) FROM ir_config_parameter WHERE key IN ('database.enterprise_code', 'database.expiration_date', " +
@@ -139,7 +163,7 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
     runtime: {
       image: i.image,
       odooVersion: i.odooVersion,
-      network: i.network,
+      network: networkOf(i),
       repoMount: i.repoMount,
       mounts: i.mounts,
       filestore: { hostDir: i.filestoreHostDir, containerDir: '/var/lib/odoo/filestore', copy: 'hardlink' },
@@ -159,16 +183,7 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
       healthcheck: { path: '/web/login', timeoutSec: 180 },
       composeTemplate: null,
     },
-    postgres: {
-      mode: 'external',
-      host: i.postgres.host,
-      port: i.postgres.port,
-      internalHost: i.postgres.internalHost,
-      user: i.postgres.user,
-      password: i.postgres.password,
-      protectedDbs: ['postgres', 'o19_test'],
-      protectedContainers: i.postgres.protectedContainers,
-    },
+    postgres: pgSection(i, ['postgres', 'o19_test']),
     production: {
       branch: i.productionBranch,
       slug: 'prod',
@@ -372,7 +387,7 @@ export function genericPreset(i: PresetInputs): ProjectConfigInput {
     runtime: {
       image: i.image,
       odooVersion: i.odooVersion,
-      network: i.network,
+      network: networkOf(i),
       repoMount: i.repoMount,
       mounts: i.mounts,
       filestore: { hostDir: i.filestoreHostDir, containerDir: '/var/lib/odoo/filestore', copy: 'hardlink' },
@@ -389,16 +404,7 @@ export function genericPreset(i: PresetInputs): ProjectConfigInput {
       healthcheck: { path: '/web/login', timeoutSec: 180 },
       composeTemplate: null,
     },
-    postgres: {
-      mode: 'external',
-      host: i.postgres.host,
-      port: i.postgres.port,
-      internalHost: i.postgres.internalHost,
-      user: i.postgres.user,
-      password: i.postgres.password,
-      protectedDbs: ['postgres'],
-      protectedContainers: i.postgres.protectedContainers,
-    },
+    postgres: pgSection(i, ['postgres']),
     production: {
       branch: i.productionBranch,
       slug: 'prod',

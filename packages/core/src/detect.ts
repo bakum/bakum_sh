@@ -141,6 +141,7 @@ export async function detectProject(
         const name = (c.Names[0] ?? '').replace(/^\//, '');
         pg = {
           container: name,
+          image: c.Image,
           host: 'localhost',
           port: port ?? 5432,
           internalHost: service === internalHost || name === internalHost ? internalHost : (service ?? name),
@@ -194,6 +195,8 @@ export async function detectProject(
       password: '',
       protectedContainers: [odooContainer?.Name.replace(/^\//, ''), pg?.container].filter((x): x is string => !!x),
     },
+    // New projects get the app's own Postgres; the image of the detected one keeps its extensions (pgvector…).
+    managedPg: { image: pg?.image ?? 'postgres:16', port: opts.pgPort },
     addonsDirs,
     debugpy: !!command?.some((a) => a === 'debugpy'),
     productionBranch: productionCandidate ?? currentBranch ?? 'main',

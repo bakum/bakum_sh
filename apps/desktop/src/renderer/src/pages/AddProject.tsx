@@ -35,7 +35,9 @@ const PRESET_TEXT: Record<PresetId, string> = {
   odoo:
     'Приложение само поднимает официальный образ Odoo и свой Postgres в Docker — ничего, кроме репозитория, не нужно. ' +
     'Production — чистая БД с вашими модулями (с папкой бэкапов — зеркало прода), Staging — копия Production, Development — чистая БД с демо-данными и новая сборка на каждый коммит.',
-  generic: 'Уже настроенный Odoo в Docker: образ, сеть и Postgres берутся из найденного контейнера. Development — чистая БД с «моими» модулями, новая сборка на каждый коммит.',
+  generic:
+    'Уже настроенный Odoo в Docker: образ и монтирования берутся из найденного контейнера, Postgres — свой контейнер приложения. ' +
+    'Development — чистая БД с «моими» модулями, новая сборка на каждый коммит.',
   demz: 'Production = 19.0 (зеркало прода из бэкапа), Staging = 19.0-demz-crm и 19.0-demz-prerelease, Development — копия зеркала прода и обновление модулей на новый коммит.',
 };
 
@@ -125,10 +127,13 @@ export function AddProject() {
       base.naming.pr.targets = swap(base.naming.pr.targets);
       if (base.naming.branch.base === origProd) base.naming.branch.base = base.production.branch;
     }
+    if (base.postgres.mode === 'managed' && base.id !== origId) {
+      // The app's own Postgres and its network are named after the project id.
+      base.runtime.network = `bm-${base.id}`;
+      base.postgres.protectedContainers = base.postgres.protectedContainers.map((c) => (c === `bm-${origId}-db` ? `bm-${base.id}-db` : c));
+    }
     if (preset === 'odoo' && base.id !== origId) {
       // Resource names of «Odoo в Docker» are derived from the project id.
-      base.runtime.network = `bm-${base.id}`;
-      base.postgres.protectedContainers = [`bm-${base.id}-db`];
       base.naming.db = `bm_${base.id.replace(/-/g, '_')}_{slug_}_{build}`;
       base.naming.host = `{slug}.${base.id}.localhost`;
       base.runtime.filestore.hostDir = base.runtime.filestore.hostDir.replace(new RegExp(`/${origId}$`), `/${base.id}`);
@@ -137,7 +142,9 @@ export function AddProject() {
     doc.commentBefore =
       preset === 'odoo'
         ? ` Проект ${base.name}. Пресет: Odoo в Docker. Пароль своего Postgres приложение сгенерирует при создании.`
-        : ` Проект ${base.name}. Пресет: ${PRESET_LABEL[preset]}. Пароль Postgres будет подставлен из найденного контейнера.`;
+        : base.postgres.mode === 'managed'
+          ? ` Проект ${base.name}. Пресет: ${PRESET_LABEL[preset]}. Свой Postgres приложения; пароль будет подставлен из найденного Odoo (или сгенерирован).`
+          : ` Проект ${base.name}. Пресет: ${PRESET_LABEL[preset]}. Пароль Postgres будет подставлен из найденного контейнера.`;
     return doc.toString({ lineWidth: 120 });
   }, [d, preset, edits]);
 
@@ -165,16 +172,28 @@ export function AddProject() {
     }
   };
 
+  /** The app's own Postgres needs no connection check: it is started after the project is created. */
+  const managed = () => {
+    try {
+      return YAML.parse(yaml)?.postgres?.mode === 'managed';
+    } catch {
+      return false;
+    }
+  };
+
   const doCreate = () =>
     create.mutate(
       { yaml },
       {
         onSuccess: (s) => {
-          if (preset === 'odoo') {
+          if (managed()) {
             notifications.show({
               color: 'blue',
               autoClose: 10000,
-              message: 'Готовлю Postgres и образ Odoo (первая загрузка — несколько минут). Затем нажмите Rebuild на ветке Production.',
+              message:
+                preset === 'odoo'
+                  ? 'Готовлю Postgres и образ Odoo (первая загрузка — несколько минут). Затем нажмите Rebuild на ветке Production.'
+                  : 'Готовлю свой Postgres проекта (первая загрузка образа — несколько минут).',
             });
           }
           nav(`/projects/${s.id}/branches`);
@@ -183,7 +202,7 @@ export function AddProject() {
     );
 
   const onCreate = async () => {
-    if (preset === 'odoo') return doCreate();
+    if (managed()) return doCreate();
     setChecking(true);
     try {
       const r = await call('projects.checkPostgres', { yaml });
@@ -315,11 +334,25 @@ export function AddProject() {
                         <Row k="Папка проекта" v={d.projectRoot ?? '—'} />
                         <Row k="compose / Dockerfile / odoo.conf" v={[d.composeFile, d.dockerfile, d.odooConf].filter(Boolean).length + ' из 3'} />
                         <Row k="Образ" v={<>{ok(d.image)} {d.image ?? 'не найден'}</>} />
-                        <Row k="Сеть" v={<>{ok(d.network)} {d.network ?? 'не найдена'}</>} />
+                        {d.proposals[preset].postgres.mode === 'managed' ? (
+                          <Row k="Docker-сеть" v={<Code>bm-{edits.id || d.proposals[preset].id}</Code>} />
+                        ) : (
+                          <Row k="Сеть" v={<>{ok(d.network)} {d.network ?? 'не найдена'}</>} />
+                        )}
                         <Row k="Репозиторий в контейнере" v={d.repoMount ?? '—'} />
                         <Row k="Монтирования" v={`${d.mounts.length}`} />
+                        {d.proposals[preset].postgres.mode === 'managed' && (
+                          <Row
+                            k="Postgres"
+                            v={
+                              <>
+                                свой контейнер <Code>{d.proposals[preset].postgres.image}</Code> на 127.0.0.1:{d.proposals[preset].postgres.port}
+                              </>
+                            }
+                          />
+                        )}
                         <Row
-                          k="Postgres"
+                          k={d.proposals[preset].postgres.mode === 'managed' ? 'Найденный Postgres' : 'Postgres'}
                           v={
                             <>
                               {ok(d.postgres)}{' '}
