@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+onlyBuiltDependencies:
+  - electron
+  - better-sqlite3
+  - esbuild
+  - cpu-features
+  - ssh2
+  - protobufjs

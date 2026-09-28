@@ -1,0 +1,10 @@
+# Foreign: 1C publication config (ibsrv) — not part of this repo
+/build/
+node_modules/
+out/
+dist/
+*.log
+.vite/
+coverage/
+test-results/
+/tmp/

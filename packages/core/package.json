@@ -1,0 +1,36 @@
+{
+  "name": "@bm/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node scripts/run-vitest.mjs"
+  },
+  "dependencies": {
+    "@bm/shared": "workspace:*",
+    "better-sqlite3": "^13.0.3",
+    "chokidar": "^4.0.3",
+    "croner": "^9.1.0",
+    "dockerode": "^4.0.9",
+    "drizzle-orm": "^0.44.7",
+    "execa": "^9.6.0",
+    "jsonc-parser": "^3.3.1",
+    "pg": "^8.16.3",
+    "pino": "^9.14.0",
+    "yaml": "^2.8.1",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/dockerode": "^3.3.44",
+    "@types/node": "^22.18.0",
+    "@types/pg": "^8.15.5",
+    "electron": "44.4.5",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
