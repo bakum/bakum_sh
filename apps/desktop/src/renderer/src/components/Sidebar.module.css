@@ -1,0 +1,44 @@
+.sidebar {
+  width: 300px;
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-default);
+  min-height: 0;
+}
+.group {
+  padding: 6px 0 4px;
+  border-radius: 4px;
+  margin: 0 4px;
+}
+.over {
+  background: var(--mantine-color-teal-light);
+  outline: 1px dashed var(--mantine-color-teal-6);
+}
+.groupHead {
+  height: 26px;
+  align-items: center;
+}
+.row {
+  padding: 5px 12px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  user-select: none;
+}
+.row:hover {
+  background: var(--mantine-color-default-hover);
+}
+.selected {
+  background: var(--mantine-color-teal-light);
+  border-left-color: var(--mantine-color-teal-6);
+}
+.mergeOver {
+  outline: 2px dashed var(--mantine-color-plum-5, #a74584);
+}
+.flag {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mantine-color-orange-5);
+}

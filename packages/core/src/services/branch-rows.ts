@@ -61,3 +61,14 @@ export function relayoutProductionBranch(ctx: Ctx, cfg: ProjectConfig, oldName: 
     ctx.db.update(branches).set({ stage: 'production', slug: cfg.production.slug, assignedBy: 'rule', stageChangedAt: nowIso() }).where(eq(branches.id, next.id)).run();
   } else ensureBranchRow(ctx, cfg, cfg.production.branch, 'production', 'rule');
 }
+
+/** Branches deleted by the user are not re-added by autoAddBranches until added manually again. */
+export function setAutoAddSkip(ctx: Ctx, projectId: string, name: string, skip: boolean): void {
+  const key = `autoadd-skip:${projectId}:${name}`;
+  if (skip) ctx.sqlite.prepare('INSERT OR REPLACE INTO kv(key, value) VALUES (?, ?)').run(key, nowIso());
+  else ctx.sqlite.prepare('DELETE FROM kv WHERE key = ?').run(key);
+}
+
+export function isAutoAddSkipped(ctx: Ctx, projectId: string, name: string): boolean {
+  return !!ctx.sqlite.prepare('SELECT 1 FROM kv WHERE key = ?').get(`autoadd-skip:${projectId}:${name}`);
+}

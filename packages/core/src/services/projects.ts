@@ -110,11 +110,15 @@ export function updateProject(ctx: Ctx, id: string, yaml: string): ProjectSummar
 }
 
 /** Reactions to a settings change (form, YAML editor or hand edit). */
+/** Background services react to settings changes (fetch timers, rules). */
+export const configChangeHooks: (() => void)[] = [];
+
 export function onProjectConfigChanged(ctx: Ctx, prev: ProjectConfig | null, cfg: ProjectConfig): void {
   syncProjectRows(ctx);
   if (prev && prev.production.branch !== cfg.production.branch) relayoutProductionBranch(ctx, cfg, prev.production.branch);
   bus.emit({ type: 'project.changed', projectId: cfg.id });
   bus.emit({ type: 'config.changed', projectId: cfg.id });
+  for (const h of configChangeHooks) h();
 }
 
 export function setEnabled(ctx: Ctx, id: string, enabled: boolean): ProjectSummary {

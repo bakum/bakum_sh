@@ -9,8 +9,9 @@ import { ConfigStore } from './config/store';
 import { openDb } from './db';
 import { setCtx, type Ctx } from './context';
 import { registerHandlers } from './handlers';
-import { onProjectConfigChanged, syncProjectRows } from './services/projects';
+import { configChangeHooks, onProjectConfigChanged, syncProjectRows } from './services/projects';
 import { startRuntime, stopRuntime, handleHook } from './runtime';
+import { bootServices } from './boot';
 
 export type { CoreHost, PortLike } from './util/port';
 
@@ -57,6 +58,8 @@ export function startCore(host: CoreHost): void {
         setCtx(ctx);
         syncProjectRows(ctx);
         registerHandlers(ctx);
+        const services = bootServices(ctx);
+        configChangeHooks.push(services.onConfigChanged);
         store.watch(({ app, projectIds }) => {
           if (!ctx) return;
           if (app) ctx.toMain({ kind: 'appConfig', config: ctx.store.app });
