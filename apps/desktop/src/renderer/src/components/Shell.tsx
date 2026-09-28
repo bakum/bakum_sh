@@ -23,6 +23,7 @@ import { useCoreEvents } from '../lib/events';
 import { fmtAgo } from '../lib/format';
 import { HEADER_BG } from '../theme';
 import classes from './Shell.module.css';
+import { AppFooter } from './AppFooter';
 
 const JOB_LABELS: Record<string, string> = {
   build: 'Сборка',
@@ -64,7 +65,7 @@ export function Shell() {
         <UnstyledButton className={classes.logo} onClick={() => nav('/')}>
           <IconGitBranch size={20} />
           <Text fw={700} c="white" size="sm">
-            Branch&nbsp;Manager
+            Odoo&nbsp;Branch&nbsp;Manager
           </Text>
         </UnstyledButton>
         {current ? (
@@ -161,6 +162,7 @@ export function Shell() {
       <Box className={classes.main}>
         <Outlet />
       </Box>
+      <AppFooter />
     </Box>
   );
 }

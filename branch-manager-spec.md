@@ -1,4 +1,4 @@
-# ТЗ: DEMZ Branch Manager — локальный odoo.sh
+# ТЗ: Odoo Branch Manager — локальный odoo.sh
 
 ## 1. Назначение
 
@@ -365,8 +365,8 @@ Backups · Tools · Settings**; кнопки **Rebuild** и **GitHub**.
 по ключам, списки заменяются). В UI у каждого поля видно действующее значение и уровень-источник, есть «Сбросить».
 
 Файлы:
-- `%APPDATA%\DEMZ Branch Manager\app.yaml` — уровень приложения (десктоп, лимиты, Traefik, пути программ);
-- `%APPDATA%\DEMZ Branch Manager\projects\<project>.yaml` — проект, стадии, правила;
+- `%APPDATA%\Odoo Branch Manager\app.yaml` — уровень приложения (десктоп, лимиты, Traefik, пути программ);
+- `%APPDATA%\Odoo Branch Manager\projects\<project>.yaml` — проект, стадии, правила;
 - переопределения ветки — в SQLite (`Branch.overrides`), видны и редактируются в Settings ветки и во вкладке YAML.
 
 Правка через формы или YAML-редактор (Monaco со схемой, автодополнением и проверкой zod). Правка файла руками
@@ -382,7 +382,7 @@ Backups · Tools · Settings**; кнопки **Rebuild** и **GitHub**.
 ### 9.3 Пример: проект DEMZ (пресет)
 
 ```yaml
-# %APPDATA%\DEMZ Branch Manager\projects\demz.yaml
+# %APPDATA%\Odoo Branch Manager\projects\demz.yaml
 id: demz
 name: DEMZ Odoo 19
 
@@ -512,7 +512,7 @@ hooks: []
 `app.yaml` (уровень приложения):
 
 ```yaml
-dataDir: '%LOCALAPPDATA%/DEMZ Branch Manager'
+dataDir: '%LOCALAPPDATA%/Odoo Branch Manager'
 proxyPort: 80
 debugPortRange: [5700, 5799]
 limits: { maxParallelBuilds: 2, maxRunningBuilds: 4, enforce: false, minFreeDiskGb: 20 }

@@ -1,7 +1,8 @@
 # Packaging (spec 4): NSIS per-user installer and portable exe, no signing, no auto-update.
 # build/ in the repo root belongs to the 1C publication — resources and output live elsewhere.
-appId: ua.demz.branch-manager
-productName: DEMZ Branch Manager
+appId: ua.bakum.odoo-branch-manager
+productName: Odoo Branch Manager
+copyright: Copyright © 2026 Bakum Viacheslav
 directories:
   buildResources: resources
   output: dist

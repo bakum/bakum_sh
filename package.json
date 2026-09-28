@@ -1,17 +1,23 @@
 {
-  "name": "demz-branch-manager",
+  "name": "odoo-branch-manager",
   "private": true,
   "version": "0.1.0",
-  "description": "Local odoo.sh: per-branch Odoo builds on Docker Desktop",
+  "description": "Odoo Branch Manager: local odoo.sh — per-branch Odoo builds on Docker Desktop",
   "packageManager": "pnpm@10.34.5",
-  "engines": { "node": ">=22.12" },
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "dev": "pnpm --filter @bm/desktop dev",
     "build": "pnpm --filter @bm/desktop build",
     "start": "pnpm --filter @bm/desktop start",
     "package": "pnpm --filter @bm/desktop package",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "node scripts/version.mjs check && pnpm -r typecheck",
     "test": "pnpm --filter @bm/core test",
-    "postinstall": "pnpm --filter @bm/desktop rebuild-native"
-  }
+    "postinstall": "pnpm --filter @bm/desktop rebuild-native",
+    "version:check": "node scripts/version.mjs check",
+    "version:info": "node scripts/version.mjs info",
+    "release": "node scripts/version.mjs release"
+  },
+  "author": "Bakum Viacheslav"
 }

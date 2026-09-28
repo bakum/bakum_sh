@@ -12,6 +12,7 @@ import { registerHandlers } from './handlers';
 import { configChangeHooks, onProjectConfigChanged, syncProjectRows } from './services/projects';
 import { startRuntime, stopRuntime, handleHook } from './runtime';
 import { bootServices } from './boot';
+import { audit } from './services/audit';
 
 export type { CoreHost, PortLike } from './util/port';
 
@@ -42,6 +43,12 @@ export function startCore(host: CoreHost): void {
         const logsDir = path.join(dataDir, 'logs');
         initLogger(logsDir);
         const { db, sqlite } = openDb(path.join(dataDir, 'registry.sqlite'));
+        // Renamed from «DEMZ Branch Manager» (docs/decisions.md D28): build log paths follow the moved data folder.
+        if (!dataDir.includes('DEMZ Branch Manager')) {
+          sqlite
+            .prepare("UPDATE builds SET log_path = REPLACE(log_path, 'DEMZ Branch Manager', 'Odoo Branch Manager') WHERE log_path LIKE '%DEMZ Branch Manager%'")
+            .run();
+        }
         ctx = {
           store,
           db,
@@ -56,6 +63,7 @@ export function startCore(host: CoreHost): void {
           proxyPort: null,
         };
         setCtx(ctx);
+        recordVersion(ctx);
         syncProjectRows(ctx);
         registerHandlers(ctx);
         const services = bootServices(ctx);
@@ -73,7 +81,7 @@ export function startCore(host: CoreHost): void {
         host.postToMain({ kind: 'appConfig', config: store.app });
         for (const p of pendingPorts.splice(0)) rpc.attach(p, 'client');
         host.postToMain({ kind: 'ready', pid: process.pid });
-        log().info({ pid: process.pid, dataDir, configDir: msg.configDir }, 'core started');
+        log().info({ pid: process.pid, version: msg.appVersion, dataDir, configDir: msg.configDir }, 'core started');
         void startRuntime(ctx);
         break;
       }
@@ -95,4 +103,14 @@ export function startCore(host: CoreHost): void {
         break;
     }
   });
+}
+
+/** Remembers the running version; a change is written to the audit log (base for future data migrations). */
+function recordVersion(ctx: Ctx): void {
+  const row = ctx.sqlite.prepare("SELECT value FROM kv WHERE key = 'app.version'").get() as { value: string } | undefined;
+  const semver = (v: string | undefined) => v?.split('+')[0];
+  if (semver(row?.value) === semver(ctx.appVersion)) return;
+  ctx.sqlite.prepare("INSERT OR REPLACE INTO kv(key, value) VALUES ('app.version', ?)").run(ctx.appVersion);
+  audit(ctx, { action: row ? 'app.upgraded' : 'app.installed', target: ctx.appVersion, params: { from: row?.value ?? null } });
+  log().info({ from: row?.value ?? null, to: ctx.appVersion }, 'app version changed');
 }

@@ -31,7 +31,7 @@ export async function completeFirstRun(ctx: Ctx, proxyPort?: number): Promise<{ 
     port = busy.has(80) ? 8080 : 80;
   }
   const next = ctx.store.updateApp((doc) => {
-    doc.commentBefore = ' Настройки уровня приложения DEMZ Branch Manager (раздел 9 ТЗ). Правка файла подхватывается автоматически.';
+    doc.commentBefore = ' Настройки уровня приложения Odoo Branch Manager (раздел 9 ТЗ). Правка файла подхватывается автоматически.';
     doc.set('proxyPort', port);
   });
   ctx.toMain({ kind: 'appConfig', config: next });

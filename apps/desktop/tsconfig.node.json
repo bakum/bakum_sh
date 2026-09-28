@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "types": ["node", "electron-vite/node"], "lib": ["ES2023", "DOM", "DOM.Iterable"] },
-  "include": ["electron.vite.config.ts", "src/main", "src/preload", "scripts"]
+  "include": ["electron.vite.config.ts", "build-info.ts", "src/main", "src/preload", "src/build-info.d.ts", "scripts"]
 }

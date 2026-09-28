@@ -8,7 +8,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { launch, bm, cleanEnv, electronExe, appDir } from './pw.mjs';
 import { ensureSandbox, waitJobs, branch, lastBuild } from './sandbox.mjs';
 
-const mainLog = () => fs.readFileSync(path.join(process.env.LOCALAPPDATA, 'DEMZ Branch Manager (dev)', 'logs', 'main.log'), 'utf8').split('\n');
+const mainLog = () => fs.readFileSync(path.join(process.env.LOCALAPPDATA, 'Odoo Branch Manager (dev)', 'logs', 'main.log'), 'utf8').split('\n');
 
 console.log('=== criterion 13');
 const { app, win } = await launch();

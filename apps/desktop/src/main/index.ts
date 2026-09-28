@@ -19,16 +19,19 @@ import type { AppConfig, CoreToMain, TrayProject } from '@bm/shared';
 import { CoreHost } from './core-host';
 import { drawIcon, trayImage, type TrayState } from './icons';
 import { isAllowedExternal } from './security';
+import { resolveDirs } from './migrate-dirs';
 
-const PRODUCT = 'DEMZ Branch Manager';
+const PRODUCT = 'Odoo Branch Manager';
 /** BM_PROFILE=dev keeps development runs away from the real configuration and registry. */
 const profile = process.env.BM_PROFILE?.replace(/[^a-z0-9-]/gi, '') || '';
-const dirName = profile ? `${PRODUCT} (${profile})` : PRODUCT;
-const configDir = path.join(process.env.APPDATA ?? app.getPath('appData'), dirName);
-const localDir = path.join(process.env.LOCALAPPDATA ?? app.getPath('appData'), dirName);
+const suffix = profile ? ` (${profile})` : '';
+const dirName = `${PRODUCT}${suffix}`;
+const dirs = resolveDirs(process.env.APPDATA ?? app.getPath('appData'), process.env.LOCALAPPDATA ?? app.getPath('appData'), PRODUCT, suffix);
+const configDir = dirs.configDir;
+const localDir = dirs.localDir;
 
 app.setName(dirName);
-app.setAppUserModelId(profile ? `ua.demz.branch-manager.${profile}` : 'ua.demz.branch-manager');
+app.setAppUserModelId(profile ? `ua.bakum.odoo-branch-manager.${profile}` : 'ua.bakum.odoo-branch-manager');
 app.setPath('userData', path.join(localDir, 'electron'));
 
 const isHook = process.argv.includes('--hook');
@@ -38,6 +41,8 @@ const log = pino(
   { level: 'info', base: { proc: 'main' } },
   pino.destination({ dest: path.join(localDir, 'logs', 'main.log'), sync: true, mkdir: true }),
 );
+
+for (const n of dirs.notes) log.info({ migration: n }, 'renamed from DEMZ Branch Manager');
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -353,7 +358,9 @@ function registerIpc(): void {
     return r.response;
   });
   ipcMain.handle('bm:info', () => ({
-    version: app.getVersion(),
+    version: __BM_VERSION__,
+    commit: __BM_COMMIT__,
+    buildDate: __BM_BUILD_DATE__,
     profile,
     corePid: core?.pid ?? null,
     sleepBlocked: blockerId !== null && powerSaveBlocker.isStarted(blockerId),
@@ -367,12 +374,14 @@ function registerIpc(): void {
 // ---------- boot ----------
 async function boot(): Promise<void> {
   const t0 = Date.now();
+  log.info({ version: __BM_VERSION__, commit: __BM_COMMIT__, buildDate: __BM_BUILD_DATE__, profile }, 'Odoo Branch Manager starting');
   registerIpc();
   core = new CoreHost({
     configDir,
     // A dev profile never touches the dataDir configured in app.yaml.
     dataDirOverride: process.env.BM_DATA_DIR ?? (profile ? localDir : null),
-    appVersion: app.getVersion(),
+    // SemVer build metadata: 0.1.1+abc1234 (docs/decisions.md D27).
+    appVersion: `${__BM_VERSION__}+${__BM_COMMIT__}`,
     resourcesPath: process.resourcesPath,
     log,
   });

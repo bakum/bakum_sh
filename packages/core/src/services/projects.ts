@@ -91,7 +91,7 @@ export function createProject(ctx: Ctx, yaml: string): ProjectSummary {
   const repoPath = String(doc.getIn(['repo', 'path']) ?? '');
   const pw = doc.getIn(['postgres', 'password']);
   if (!pw || pw === PASSWORD_MASK) doc.setIn(['postgres', 'password'], detectedPassword(repoPath) || lastDetectedPassword() || '');
-  const text = `# Настройки проекта DEMZ Branch Manager. Правка файла подхватывается автоматически.\n${doc.toString()}`;
+  const text = `# Настройки проекта Odoo Branch Manager. Правка файла подхватывается автоматически.\n${doc.toString()}`;
   const cfg = ctx.store.putProject(text, { create: true });
   syncProjectRows(ctx);
   audit(ctx, { projectId: cfg.id, action: 'project.create', target: cfg.id, params: { repo: cfg.repo.path } });

@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Center, Code, Group, List, Stack, Stepper, Text, Title } from '@mantine/core';
 import { IconGitBranch } from '@tabler/icons-react';
 import { useBm, useBmMutation } from '../lib/query';
+import { COPYRIGHT_HOLDER, useBuildInfo } from '../components/AppFooter';
 
 /** First-run wizard (spec 7): explains what the app does, writes app.yaml, then goes to "add project". */
 export function Welcome() {
@@ -9,6 +10,7 @@ export function Welcome() {
   const state = useBm('system.state', {});
   const status = useBm('system.status', { refresh: true });
   const finish = useBmMutation('system.completeFirstRun');
+  const build = useBuildInfo().data;
 
   return (
     <Center h="100vh" bg="var(--mantine-color-gray-light)">
@@ -16,7 +18,7 @@ export function Welcome() {
         <Stack>
           <Group gap="sm">
             <IconGitBranch size={32} color="#714b67" />
-            <Title order={2}>DEMZ Branch Manager</Title>
+            <Title order={2}>Odoo Branch Manager</Title>
           </Group>
           <Text>
             Локальный odoo.sh: ветки git-репозитория раскладываются по стадиям Production / Staging / Development, на каждую
@@ -54,6 +56,10 @@ export function Welcome() {
               Далее: добавить проект
             </Button>
           </Group>
+          <Text size="xs" c="dimmed" ta="center">
+            Odoo Branch Manager {build ? `v${build.version}` : ''} · © {build ? new Date(build.buildDate).getFullYear() : new Date().getFullYear()}{' '}
+            {COPYRIGHT_HOLDER}
+          </Text>
         </Stack>
       </Card>
     </Center>

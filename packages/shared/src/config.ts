@@ -291,7 +291,7 @@ export type NotificationKind = (typeof notificationKinds)[number];
 
 export const appConfigSchema = z
   .object({
-    dataDir: z.string().default('%LOCALAPPDATA%/DEMZ Branch Manager'),
+    dataDir: z.string().default('%LOCALAPPDATA%/Odoo Branch Manager'),
     proxyPort: z.number().int().min(1).max(65535).default(80),
     debugPortRange: z.tuple([z.number().int(), z.number().int()]).default([5700, 5799]),
     limits: z

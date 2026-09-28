@@ -1,4 +1,4 @@
-# DEMZ Branch Manager — локальный odoo.sh
+# Odoo Branch Manager — локальный odoo.sh
 
 Десктопное приложение для Windows 10 и Docker Desktop. Ветки git-репозитория с модулями Odoo раскладываются по стадиям
 Production / Staging / Development. На каждую ветку собирается изолированная сборка: контейнер Odoo, своя БД и свой код
@@ -40,12 +40,12 @@ pnpm test        # unit-тесты Core (Vitest под ELECTRON_RUN_AS_NODE=1)
 
 | Что | Где |
 |---|---|
-| Настройки приложения | `%APPDATA%\DEMZ Branch Manager\app.yaml` |
-| Настройки проектов | `%APPDATA%\DEMZ Branch Manager\projects\<id>.yaml` — правка вручную подхватывается сразу |
-| Реестр (SQLite) | `%LOCALAPPDATA%\DEMZ Branch Manager\registry.sqlite` |
-| compose-файлы сборок | `%LOCALAPPDATA%\DEMZ Branch Manager\projects\<id>\branches\<slug>\compose.yml` |
-| Логи | `%LOCALAPPDATA%\DEMZ Branch Manager\logs\` — `main.log`, `core.log`, `builds\<project>\<slug>-<n>.log`, `jobs\<id>-<type>.log` |
-| Traefik | `%LOCALAPPDATA%\DEMZ Branch Manager\traefik\compose.yml`, контейнер `bm-traefik` |
+| Настройки приложения | `%APPDATA%\Odoo Branch Manager\app.yaml` |
+| Настройки проектов | `%APPDATA%\Odoo Branch Manager\projects\<id>.yaml` — правка вручную подхватывается сразу |
+| Реестр (SQLite) | `%LOCALAPPDATA%\Odoo Branch Manager\registry.sqlite` |
+| compose-файлы сборок | `%LOCALAPPDATA%\Odoo Branch Manager\projects\<id>\branches\<slug>\compose.yml` |
+| Логи | `%LOCALAPPDATA%\Odoo Branch Manager\logs\` — `main.log`, `core.log`, `builds\<project>\<slug>-<n>.log`, `jobs\<id>-<type>.log` |
+| Traefik | `%LOCALAPPDATA%\Odoo Branch Manager\traefik\compose.yml`, контейнер `bm-traefik` |
 | Worktree веток | `<repo.worktreesDir>\<project>\<slug>` (DEMZ: `E:\demz-odoo-19\worktrees\demz\...`) |
 | filestore сборок | `<runtime.filestore.hostDir>\<БД>` (DEMZ: `E:\demz-odoo-19\data\filestore\o19_br_*`) |
 
@@ -69,10 +69,36 @@ pnpm test        # unit-тесты Core (Vitest под ELECTRON_RUN_AS_NODE=1)
    и worktree, созданные приложением. Остатки после сбоев показываются на Status в «Сиротах», там их можно удалить
    после подтверждения.
 2. Остановите и удалите Traefik: `docker compose -p bm-traefik down`.
-3. Закройте приложение (трей → Выход) и удалите папки `%APPDATA%\DEMZ Branch Manager` и
-   `%LOCALAPPDATA%\DEMZ Branch Manager`. Установленную версию удалите через «Приложения» Windows.
+3. Закройте приложение (трей → Выход) и удалите папки `%APPDATA%\Odoo Branch Manager` и
+   `%LOCALAPPDATA%\Odoo Branch Manager`. Установленную версию удалите через «Приложения» Windows.
 4. Git-репозиторий, его ветки и контейнеры проекта (например `odoo19`, `odoo19-db`) приложение не трогает. Пустую
    папку `worktrees` проекта можно удалить вручную.
+
+## Версии
+
+Версия одна на всё приложение и записана в `package.json` в корне. Во всех пакетах (`apps/desktop`, `packages/*`) стоит
+та же версия, это проверяет `pnpm version:check` (он же запускается первым шагом `pnpm typecheck`). Нумерация — SemVer:
+
+| Часть | Когда растёт |
+|---|---|
+| MAJOR | Несовместимые изменения: формат YAML-настроек или реестра, которые не мигрируют автоматически и требуют ручных шагов. |
+| MINOR | Новые возможности. До 1.0.0 MINOR совпадает с этапом ТЗ: этап 1 — `0.1.x`, этап 2 — `0.2.x`, этап 3 — `0.3.x`, после этапа 3 — `1.0.0`. |
+| PATCH | Исправления и мелкие улучшения без изменения настроек. |
+
+Выпуск версии:
+
+```powershell
+# 1. Опишите изменения в CHANGELOG.md, раздел «## [Unreleased]», и закоммитьте их.
+pnpm release patch     # или minor / major / 0.2.0
+# Версия меняется во всех package.json, [Unreleased] становится «[X.Y.Z] — дата»,
+# создаются коммит «Release vX.Y.Z» и тег vX.Y.Z. Скрипт ничего не пушит.
+pnpm package           # установщик «dist/Odoo Branch Manager-Setup-X.Y.Z.exe»
+```
+
+При сборке в приложение встраиваются версия, короткий хеш коммита (с `-dirty`, если были незакоммиченные правки) и
+дата сборки. Они видны в нижней строке окна (клик копирует их для баг-репорта), на странице Status и в `main.log`.
+При смене версии Core пишет в Audit Logs запись `app.upgraded`. Эта запись — точка для будущих миграций данных. Схема
+SQLite мигрирует сама (`PRAGMA user_version`). История изменений — [CHANGELOG.md](CHANGELOG.md).
 
 ## Устройство
 
@@ -83,3 +109,7 @@ pnpm test        # unit-тесты Core (Vitest под ELECTRON_RUN_AS_NODE=1)
 - `packages/shared` — zod-схемы настроек (раздел 9) и IPC-контракта (раздел 10).
 
 UI и Core общаются через MessagePort. Если Core падает, main перезапускает его, а UI показывает баннер.
+
+---
+
+© 2026 Bakum Viacheslav

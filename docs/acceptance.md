@@ -8,7 +8,7 @@
 Сценарии проверки — это скрипты в `apps/desktop/scripts/`. Они управляют настоящим приложением через Playwright
 (Electron) и вызывают те же методы `window.bm`, что и UI, ничего не подменяя. Вывод скриптов приведён ниже,
 скриншоты лежат в `tmp/shots/` (папка в `.gitignore`, в репозиторий не попадает). Логи приложения:
-`%LOCALAPPDATA%\DEMZ Branch Manager\logs\` (`main.log`, `core.log`, `builds\demz\*.log`, `jobs\*.log`).
+`%LOCALAPPDATA%\Odoo Branch Manager\logs\` (`main.log`, `core.log`, `builds\demz\*.log`, `jobs\*.log`).
 
 | # | Критерий | Статус |
 |---|---|---|

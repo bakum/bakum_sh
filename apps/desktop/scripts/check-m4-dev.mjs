@@ -52,7 +52,7 @@ if (!t999) {
 }
 console.log('fork:', t999.name, t999.stage, t999.slug);
 const b1 = await waitBuild(win, pid, t999);
-const mainLog = fs.readFileSync(path.join(process.env.LOCALAPPDATA, 'DEMZ Branch Manager (dev)', 'logs', 'main.log'), 'utf8').split('\n').filter((l) => l.includes('notification')).slice(-2);
+const mainLog = fs.readFileSync(path.join(process.env.LOCALAPPDATA, 'Odoo Branch Manager (dev)', 'logs', 'main.log'), 'utf8').split('\n').filter((l) => l.includes('notification')).slice(-2);
 console.log('notifications (main.log):', mainLog.join('\n'));
 
 const wt = (await bm(win, 'branches.get', { branchId: t999.id })).worktreePath;

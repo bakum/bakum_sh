@@ -2,6 +2,9 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'electron-vite';
 import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { buildInfo } from './build-info';
+
+const define = buildInfo();
 
 /** Strict CSP for the packaged renderer (dev server needs inline preamble + HMR websocket). */
 function cspPlugin(): Plugin {
@@ -28,6 +31,7 @@ function cspPlugin(): Plugin {
 
 export default defineConfig({
   main: {
+    define,
     build: {
       externalizeDeps: { exclude: ['@bm/core', '@bm/shared'] },
       rollupOptions: {
@@ -45,6 +49,7 @@ export default defineConfig({
     },
   },
   renderer: {
+    define,
     root: resolve(__dirname, 'src/renderer'),
     plugins: [react(), cspPlugin()],
     build: {

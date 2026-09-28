@@ -32,6 +32,7 @@ const ORPHAN_KIND: Record<string, string> = {
 export function StatusPage() {
   const st = useBm('system.status', { refresh: true }, { refetchInterval: 10000 });
   const cleanup = useBmMutation('system.cleanupOrphans', { success: 'Очистка выполнена' });
+  const appState = useBm('system.state', {});
   const [selected, setSelected] = useState<string[]>([]);
   const s = st.data;
   if (!s) return null;
@@ -169,7 +170,8 @@ export function StatusPage() {
         <Alert variant="light" color="gray">
           <Group justify="space-between">
             <Text size="sm">
-              Настройки: <Code>{s.paths.configDir}</Code> · Данные: <Code>{s.paths.dataDir}</Code>
+              Версия: <Code>{appState.data?.version ?? '…'}</Code> · Настройки: <Code>{s.paths.configDir}</Code> · Данные:{' '}
+              <Code>{s.paths.dataDir}</Code>
             </Text>
             <Button variant="default" onClick={() => void window.bm.call('shell.open', { target: 'logs-dir' })}>
               Открыть папку логов

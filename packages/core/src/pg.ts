@@ -28,7 +28,7 @@ export async function withPg<T>(cfg: PgCfg, database: string, fn: (c: pg.Client)
     password: cfg.password,
     database,
     connectionTimeoutMillis: 5000,
-    application_name: 'demz-branch-manager',
+    application_name: 'odoo-branch-manager',
   });
   try {
     await client.connect();

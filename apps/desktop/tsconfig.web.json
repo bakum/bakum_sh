@@ -5,5 +5,5 @@
     "jsx": "react-jsx",
     "types": ["vite/client"]
   },
-  "include": ["src/renderer/src", "src/preload/api.d.ts"]
+  "include": ["src/renderer/src", "src/preload/api.d.ts", "src/build-info.d.ts"]
 }

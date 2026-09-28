@@ -22,8 +22,8 @@
 ## D3. Профиль разработки `BM_PROFILE`
 
 - **Контекст.** Ручные проверки при разработке не должны портить боевой реестр и настройки (правило 5 промпта).
-- **Решение.** Переменная `BM_PROFILE=dev` добавляет суффикс ` (dev)` к каталогам `%APPDATA%\DEMZ Branch Manager` и
-  `%LOCALAPPDATA%\DEMZ Branch Manager`, к AppUserModelId и к single-instance lock. Без переменной используются пути из ТЗ.
+- **Решение.** Переменная `BM_PROFILE=dev` добавляет суффикс ` (dev)` к каталогам `%APPDATA%\Odoo Branch Manager` и
+  `%LOCALAPPDATA%\Odoo Branch Manager`, к AppUserModelId и к single-instance lock. Без переменной используются пути из ТЗ.
 - **Альтернатива.** Отдельные переменные для каждого каталога: неудобно и легко ошибиться.
 
 ## D4. `ELECTRON_RUN_AS_NODE` в окружении
@@ -200,3 +200,26 @@
 
 - **Решение.** Команда Generic-пресета запускает Odoo через `debugpy`, только если найденный контейнер проекта уже
   запускался так. В официальном образе `odoo:19` debugpy нет, поэтому там команда — просто `odoo …`.
+
+## D27. Система версий
+
+- **Контекст.** Нужна понятная нумерация выпусков и способ по установленной программе узнать, из какого кода она
+  собрана.
+- **Решение.** SemVer, единая версия в корневом `package.json`, копии во всех пакетах, проверка
+  `scripts/version.mjs check` (первый шаг `pnpm typecheck`). До 1.0.0 MINOR соответствует этапу ТЗ.
+  `pnpm release <patch|minor|major|X.Y.Z>` меняет версию, переносит `[Unreleased]` в CHANGELOG, делает коммит и
+  аннотированный тег `vX.Y.Z` и ничего не пушит. electron-vite встраивает `__BM_VERSION__`, `__BM_COMMIT__`
+  (`-dirty` при незакоммиченных правках) и `__BM_BUILD_DATE__`. Core получает `appVersion` вида `0.1.1+abc1234`, а
+  смену SemVer-части записывает в `kv app.version` и в Audit Logs (`app.upgraded`). Это точка для будущих миграций
+  настроек и данных.
+- **Альтернатива.** changesets или semantic-release: для одного десктопного приложения без публикации пакетов это
+  лишнее.
+
+## D28. Переименование в Odoo Branch Manager
+
+- **Решение.** Название продукта — «Odoo Branch Manager», AppUserModelId и appId — `ua.bakum.odoo-branch-manager`,
+  папки — `%APPDATA%\Odoo Branch Manager` и `%LOCALAPPDATA%\Odoo Branch Manager`. При первом запуске main
+  переименовывает старые папки `DEMZ Branch Manager` (с суффиксом профиля) в новые. Core заменяет старый путь в
+  `builds.log_path`, а `app.yaml` исправляется, если в `dataDir` явно указана старая папка. Если перенос не удался
+  (старая версия ещё запущена и держит файлы), приложение работает со старыми папками. Контейнеры, БД, worktree и
+  метки `bm.*` переименование не затрагивает. «DEMZ» осталось только в имени пресета и проекта DEMZ.

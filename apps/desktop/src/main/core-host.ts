@@ -34,7 +34,7 @@ export class CoreHost extends EventEmitter {
     this.generation++;
     const entry = path.join(__dirname, 'core.js');
     const proc = utilityProcess.fork(entry, [], {
-      serviceName: 'DEMZ Branch Manager Core',
+      serviceName: 'Odoo Branch Manager Core',
       stdio: 'pipe',
       env: { ...process.env },
     });
