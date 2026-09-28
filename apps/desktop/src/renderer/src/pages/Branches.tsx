@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, Box, Button, Center, Group, Modal, Select, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -11,9 +11,28 @@ import { MergeDialog } from '../components/dialogs/MergeDialog';
 
 const STAGE_LABEL: Record<Stage, string> = { production: 'Production', staging: 'Staging', development: 'Development' };
 
+const lastBranchKey = (projectId: string) => `bm.lastBranch.${projectId}`;
+
+function storeLastBranch(projectId: string, value: string): void {
+  try {
+    localStorage.setItem(lastBranchKey(projectId), value);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** `<branchId>` or `<branchId>/<tab>` of the branch last open in the project. */
+function readLastBranch(projectId: string): string | null {
+  try {
+    return localStorage.getItem(lastBranchKey(projectId));
+  } catch {
+    return null;
+  }
+}
+
 /** Branches page (spec 6): sidebar with stages + selected branch. */
 export function BranchesPage() {
-  const { pid, bid } = useParams();
+  const { pid, bid, tab } = useParams();
   const nav = useNavigate();
   const projectId = pid!;
   const list = useBm('branches.list', { projectId }, { refetchInterval: 15000 });
@@ -29,6 +48,20 @@ export function BranchesPage() {
   const fetching = !!jobs.data?.some((j) => j.type === 'fetch');
 
   const all = list.data ? [...list.data.production, ...list.data.staging, ...list.data.development] : [];
+
+  // The open branch (and its tab) is remembered per project: coming back from Settings, Builds or another project
+  // opens it again; the first time — the Production branch.
+  useEffect(() => {
+    if (bid) storeLastBranch(projectId, `${bid}${tab ? `/${tab}` : ''}`);
+  }, [projectId, bid, tab]);
+  useEffect(() => {
+    if (bid || !list.data) return;
+    const last = readLastBranch(projectId);
+    const lastId = last ? Number(last.split('/')[0]) : null;
+    const target = lastId && all.some((b) => b.id === lastId) ? last : (list.data.production[0]?.id ?? null);
+    if (target) nav(`/projects/${projectId}/branches/${target}`, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, bid, list.data]);
 
   const onContext = async (b: BranchView, action: string) => {
     try {
