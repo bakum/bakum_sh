@@ -417,6 +417,12 @@ export async function diffNames(repo: string, from: string, to: string): Promise
   return out.split('\n').filter(Boolean);
 }
 
+/** Whether two commits have the same content (same root tree), whatever their history. */
+export async function sameTree(repo: string, a: string, b: string): Promise<boolean> {
+  const [ta, tb] = (await git(repo, ['rev-parse', `${a}^{tree}`, `${b}^{tree}`])).split('\n').map((s) => s.trim());
+  return !!ta && ta === tb;
+}
+
 export async function isAncestor(repo: string, a: string, b: string): Promise<boolean> {
   const r = await execa('git', ['merge-base', '--is-ancestor', a, b], { cwd: repo, reject: false, windowsHide: true });
   return r.exitCode === 0;

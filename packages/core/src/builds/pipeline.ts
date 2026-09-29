@@ -616,11 +616,17 @@ async function stepModules(r: Run): Promise<string> {
     // D47: a copy made by newer code than the branch has: its modules are about to be updated with older code.
     if (base && build.kind === 'new' && build.dbSource.startsWith('copy:')) {
       const lag = await computeCodeLag(src(r).repo, base, sha, roots).catch(() => null);
-      if (lag && lag.behind > 0) {
+      if (lag && lag.behind > 0 && lag.modules.length) {
         r.log(
           `[warn] ветка отстаёт на ${commits(lag.behind)} от кода, которым обновлена БД-источник (${base.slice(0, 7)}): ` +
-            `модули ${lag.modules.join(', ') || '—'} будут обновлены более старым кодом. Если шаг упадёт — подтяните ` +
+            `модули ${lag.modules.join(', ')} будут обновлены более старым кодом. Если шаг упадёт — подтяните ` +
             `${build.dbSource === 'copy:production' ? cfg.production.branch : build.dbSource.slice(5)} в ветку.`,
+        );
+      } else if (lag && lag.behind > 0) {
+        // Missing commits that change no module: nothing gets older code, as the badge says («Rebuild безопасен»).
+        r.log(
+          `ветка отстаёт на ${commits(lag.behind)} от кода, которым обновлена БД-источник (${base.slice(0, 7)}), ` +
+            'но недостающие коммиты не меняют модули — обновлению это не мешает',
         );
       }
     }

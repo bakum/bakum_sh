@@ -1,7 +1,8 @@
 // Code lag (D47) on a tiny «Odoo in Docker» project (own Postgres, odoo:19.0): after a deploy to production the
 // Development branch that copies the mirror but lacks the new commit gets «behind-source» (with the module) instead
 // of «mirror newer», a Rebuild from the copy writes a warning into build.log, merging main into the branch clears it;
-// a branch fully merged into main and left behind gets «merged-behind».
+// a branch fully merged into main and left behind gets «merged-behind». A PR merged with a merge commit (same code,
+// one commit behind) is not a lag; missing commits that change no module leave a plain line in build.log, not [warn].
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -138,6 +139,38 @@ async function run(win) {
     return !v.codeLag && !kinds(v).includes('behind-source') ? v : null;
   });
   check('после merge бейджа нет', !!f4, kinds(f4).join());
+
+  // 5. The PR is merged into main with a merge commit, feature is not fast-forwarded: one commit behind, same code —
+  // no lag, and a Rebuild writes nothing about it (journal DEMZ 2026-09-29).
+  git(WORK, 'merge', '-q', '--no-ff', '--no-edit', 'feature');
+  const merge = git(WORK, 'rev-parse', 'HEAD');
+  git(WORK, 'push', '-q', 'origin', 'main');
+  await bm(win, 'git.fetch', { projectId: ID });
+  await waitJobs(win, ID);
+  const prod5 = await lastBuild(win, prodBr.id);
+  check('прод обновлён до merge-коммита', prod5.commitSha === merge && prod5.status === 'running', `${prod5.commitSha} ${prod5.status}`);
+  await pause(3000);
+  const f5 = await bm(win, 'branches.get', { branchId: feat.id });
+  check('merge-коммит, код тот же: отставания нет', f5.codeLag === null && !kinds(f5).includes('behind-source'), JSON.stringify(f5.badges));
+  await waitJob(win, (await bm(win, 'builds.rebuild', { branchId: feat.id })).jobId);
+  const log5 = (await bm(win, 'logs.read', { buildId: (await lastBuild(win, feat.id)).id, kind: 'build', tail: 3000 })).lines.join('\n');
+  check('build.log: об отставании ни слова', !/ветка отстаёт/.test(log5));
+
+  // 6. main gets a commit outside the modules: feature is behind, but Rebuild is safe — a plain line, no [warn].
+  fs.writeFileSync(`${WORK}/NOTES.md`, 'notes\n');
+  git(WORK, 'add', '-A');
+  git(WORK, 'commit', '-q', '-m', 'notes');
+  git(WORK, 'push', '-q', 'origin', 'main');
+  await bm(win, 'git.fetch', { projectId: ID });
+  await waitJobs(win, ID);
+  const f6 = await waitFor('отставание без модулей', async () => {
+    const v = await bm(win, 'branches.get', { branchId: feat.id });
+    return v.codeLag ? v : null;
+  });
+  check('feature: отстаёт на 2 коммита (merge и notes), модулей нет', f6.codeLag.behind === 2 && f6.codeLag.modules.length === 0, JSON.stringify(f6.codeLag));
+  await waitJob(win, (await bm(win, 'builds.rebuild', { branchId: feat.id })).jobId);
+  const log6 = (await bm(win, 'logs.read', { buildId: (await lastBuild(win, feat.id)).id, kind: 'build', tail: 3000 })).lines.join('\n');
+  check('build.log: без [warn], «не меняют модули»', !/\[warn\] ветка отстаёт/.test(log6) && /недостающие коммиты не меняют модули/.test(log6));
 }
 
 const { app, win } = await launch();

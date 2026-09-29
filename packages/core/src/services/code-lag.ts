@@ -16,7 +16,11 @@ import { log } from '../util/logger';
  * computed in git (the app's mirror, or the user's folder) and cached per commit pair.
  */
 
-/** Commits and modules of `srcSha` missing in `head`; null when a commit is unknown to the repository. */
+/**
+ * Commits and modules of `srcSha` missing in `head`; null when a commit is unknown to the repository. A branch whose
+ * code is identical to the source (its PR merged with a merge commit, the branch not fast-forwarded) is not behind:
+ * the missing commits bring no code.
+ */
 export async function computeCodeLag(
   repo: string,
   srcSha: string,
@@ -24,8 +28,9 @@ export async function computeCodeLag(
   roots: string[],
 ): Promise<{ behind: number; ahead: number; modules: string[] } | null> {
   if (!(await git.revParse(repo, srcSha)) || !(await git.revParse(repo, head))) return null;
-  const behind = await git.countBetween(repo, head, srcSha);
+  let behind = await git.countBetween(repo, head, srcSha);
   const ahead = await git.countBetween(repo, srcSha, head);
+  if (behind && (await git.sameTree(repo, head, srcSha))) behind = 0;
   if (!behind) return { behind, ahead, modules: [] };
   const base = await git.mergeBase(repo, srcSha, head);
   if (!base) return { behind, ahead, modules: [] };

@@ -75,6 +75,24 @@ describe('code lag of a branch behind the copied database (D47)', () => {
     expect(codeLagText({ ...lag, source: 'crm', production: false, behind: 21 })).toMatch(/нет 21 коммита из crm, которыми уже обновлена БД сборки ветки crm/);
   });
 
+  it('is zero when the source only adds a merge commit of the branch (same code)', async () => {
+    // PR merged with a merge commit: main gets one commit more, the branch is not fast-forwarded (journal DEMZ).
+    git('checkout', '-q', '-b', 'pr', prod);
+    write('addons/a/models.py', '# pr');
+    const pr = commit('pr work');
+    git('checkout', '-q', '-b', 'main-pr', prod);
+    git('merge', '-q', '--no-ff', '--no-edit', 'pr');
+    const mergeCommit = git('rev-parse', 'HEAD');
+    expect(await computeCodeLag(dir, mergeCommit, pr, ['addons'])).toEqual({ behind: 0, ahead: 0, modules: [] });
+    // Same history but different code (main moved on before the merge): still behind.
+    git('checkout', '-q', '-b', 'main-moved', prod);
+    write('addons/b/models.py', '# prod 3');
+    commit('prod 3');
+    git('merge', '-q', '--no-ff', '--no-edit', 'pr');
+    const moved = git('rev-parse', 'HEAD');
+    expect(await computeCodeLag(dir, moved, pr, ['addons'])).toEqual({ behind: 2, ahead: 0, modules: ['b'] });
+  });
+
   it('gives up on a commit the repository does not have', async () => {
     expect(await computeCodeLag(dir, '0123456789012345678901234567890123456789', feature, [])).toBeNull();
   });
