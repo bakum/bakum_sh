@@ -17,7 +17,9 @@ export type OwnedResource =
   | { kind: 'worktree'; path: string }
   /** The app's bare mirror of the project repository (D33), removed only together with the project. */
   | { kind: 'mirror'; path: string; reposRoot: string }
-  | { kind: 'filestore'; path: string; db: string };
+  | { kind: 'filestore'; path: string; db: string }
+  /** An anonymous volume (image VOLUME) of a build container, removed with the container (D55). */
+  | { kind: 'volume'; name: string; anonymous: boolean; container: { name: string; labels: Record<string, string> } };
 
 const SYSTEM_DBS = new Set(['postgres', 'template0', 'template1']);
 
@@ -71,6 +73,12 @@ export function assertOwned(cfg: ProjectConfig, r: OwnedResource, reg: OwnedRegi
       assertOwned(cfg, { kind: 'db', name: r.db }, reg);
       const expected = path.join(cfg.runtime.filestore.hostDir, r.db);
       if (!samePath(expected, r.path)) deny(`каталог «${r.path}» не является filestore БД ${r.db}`);
+      return;
+    }
+    case 'volume': {
+      // Named volumes (the managed Postgres data, the user's own) are never removed this way.
+      if (!r.anonymous) deny(`том «${r.name}» не анонимный`);
+      assertOwned(cfg, { kind: 'container', ...r.container }, reg);
       return;
     }
   }

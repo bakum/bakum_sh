@@ -6,6 +6,7 @@ import type { Ctx } from './context';
 import { branches, builds, snapshots, type JobRow } from './db/schema';
 import { docker, dockerCli } from './docker/client';
 import { refreshContainers } from './docker/watch';
+import { anonymousVolumes, removeUnusedVolumes } from './docker/volumes';
 import { containerStates } from './docker/state';
 import { listDatabases, dropDatabase } from './pg';
 import * as git from './git';
@@ -205,9 +206,12 @@ export async function cleanupOrphans(ctx: Ctx, items: { kind: string; name: stri
           if (!labels['bm.project'] || c.Name.replace(/^\//, '') === TRAEFIK_PROJECT) throw new BmError('NOT_OWNED', 'У контейнера нет метки bm.project');
           const protectedNames = ctx.store.list().flatMap((e) => e.config?.postgres.protectedContainers ?? []);
           if (protectedNames.includes(c.Name.replace(/^\//, ''))) throw new BmError('PROTECTED', 'Контейнер защищён');
+          // D55: anonymous volumes passed on by a recreate survive `down -v`; they go once nothing uses them.
+          const volumes = await anonymousVolumes(c.Id);
           const cp = labels['com.docker.compose.project'];
           if (cp && cp.startsWith('bm-')) await dockerCli(['compose', '-p', cp, 'down', '-v', '--remove-orphans']);
           else await docker.getContainer(it.name).remove({ force: true, v: true });
+          await removeUnusedVolumes(volumes, (l) => log().info({ container: it.name }, l));
           break;
         }
         case 'worktree': {

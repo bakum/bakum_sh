@@ -53,6 +53,14 @@ describe('assertOwned', () => {
     expect(() => assertOwned(cfg, { kind: 'container', name: 'x', labels: { 'bm.project': 'other' } }, reg)).toThrow(/метки/);
   });
 
+  it('removes only anonymous volumes of the project containers (D55)', () => {
+    const own = { name: 'bm-demz-crm-odoo-1', labels: { 'bm.project': 'demz' } };
+    expect(() => assertOwned(cfg, { kind: 'volume', name: 'a1b2', anonymous: true, container: own }, reg)).not.toThrow();
+    expect(() => assertOwned(cfg, { kind: 'volume', name: 'bm-demz-pgdata', anonymous: false, container: own }, reg)).toThrow(/не анонимный/);
+    expect(() => assertOwned(cfg, { kind: 'volume', name: 'a1b2', anonymous: true, container: { name: 'odoo19', labels: own.labels } }, reg)).toThrow(/защищён/);
+    expect(() => assertOwned(cfg, { kind: 'volume', name: 'a1b2', anonymous: true, container: { name: 'x', labels: {} } }, reg)).toThrow(/метки/);
+  });
+
   it('checks compose projects', () => {
     expect(() => assertOwned(cfg, { kind: 'compose', name: 'bm-demz-crm' }, reg)).not.toThrow();
     expect(() => assertOwned(cfg, { kind: 'compose', name: 'demz-odoo-19' }, reg)).toThrow(/шаблону/);

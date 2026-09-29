@@ -6,6 +6,7 @@ import { branchDir, type Ctx } from '../context';
 import { branchRow } from '../services/branch-rows';
 import { builds, snapshots, type BuildRow } from '../db/schema';
 import { docker, dockerCli } from '../docker/client';
+import { anonymousVolumes, removeUnusedVolumes } from '../docker/volumes';
 import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
 import { dbExists, dropDatabase } from '../pg';
@@ -39,6 +40,9 @@ export async function dropBuildResources(ctx: Ctx, cfg: ProjectConfig, b: BuildR
   // 1. Containers of this build (service container if it serves this build, leftover one-off containers).
   for (const c of await buildContainers(b.id)) {
     assertOwned(cfg, { kind: 'container', name: c.name, labels: c.labels }, reg);
+    // D55: after a recreate the container's anonymous volumes are no longer its own; `down -v` leaves them behind.
+    const volumes = await anonymousVolumes(c.id);
+    for (const v of volumes) assertOwned(cfg, { kind: 'volume', name: v, anonymous: true, container: c }, reg);
     if (!c.oneoff) {
       assertOwned(cfg, { kind: 'compose', name: b.composeProject }, reg);
       log(`docker compose -p ${b.composeProject} down -v`);
@@ -56,6 +60,7 @@ export async function dropBuildResources(ctx: Ctx, cfg: ProjectConfig, b: BuildR
       log(`remove one-off container ${c.name}`);
       await docker.getContainer(c.id).remove({ force: true, v: true }).catch(() => {});
     }
+    await removeUnusedVolumes(volumes, log);
   }
   // 2. Database (shared by an `update` chain: drop only when no other live/failed build keeps it).
   const sharing = ctx.db
