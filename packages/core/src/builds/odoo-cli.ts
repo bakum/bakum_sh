@@ -1,13 +1,40 @@
 import { BmError, type ProjectConfig, type TestsResult } from '@bm/shared';
 import { dockerCli } from '../docker/client';
 import { dataDirOf, oneOffArgs } from '../docker/compose';
+import { renderTemplate, type TemplateVars } from '../config/templates';
+import { addonsDirsOfCode } from '../modules';
 import { OdooLogParser, type OdooLogSummary } from '../odoo-log';
+import { toPosix } from '../util/paths';
+
+/**
+ * `{addonsPath}` (D48): the module folders of the build's own code as seen in the container, comma-separated —
+ * a branch that adds a module folder brings it along. Computed only when `runtime.command` uses the variable.
+ */
+export function addonsPathVar(cfg: ProjectConfig, codeDir: string | null): string | undefined {
+  if (!codeDir || !cfg.runtime.command.some((a) => a.includes('{addonsPath}'))) return undefined;
+  const dirs = addonsDirsOfCode(codeDir, cfg.repo.moduleRoots);
+  if (!dirs.length) {
+    throw new BmError(
+      'NO_MODULES',
+      `В коде ${toPosix(codeDir)} нет модулей Odoo (__manifest__.py) в папках repo.moduleRoots (${cfg.repo.moduleRoots.join(', ') || 'весь репозиторий'}), ` +
+        'поэтому {addonsPath} пуст. Проверьте moduleRoots в настройках проекта или уберите {addonsPath} из runtime.command.',
+    );
+  }
+  const mount = cfg.runtime.repoMount.replace(/\/+$/, '');
+  return dirs.map((d) => (d ? `${mount}/${d}` : mount)).join(',');
+}
+
+/** Variables of the build's code for server options of one-off runs: {worktree}, {repoMount}, {addonsPath}. */
+export function codeVars(cfg: ProjectConfig, codeDir: string | null): TemplateVars {
+  return { worktree: codeDir ? toPosix(codeDir) : undefined, repoMount: cfg.runtime.repoMount, addonsPath: addonsPathVar(cfg, codeDir) };
+}
 
 /**
  * Server options of the configured command, reusable for one-off runs: everything after the Odoo executable
  * except the per-build ones (-d, --db-filter, --proxy-mode). DEMZ: `-c /etc/odoo/odoo.conf --data-dir=/var/lib/odoo`.
+ * Options with template variables are kept when `vars` defines them (`codeVars`), otherwise dropped.
  */
-export function serverBaseArgs(cfg: ProjectConfig): string[] {
+export function serverBaseArgs(cfg: ProjectConfig, vars: TemplateVars = {}): string[] {
   const cmd = cfg.runtime.command;
   const i = cmd.findIndex((a) => /(^|\/)(odoo|odoo-bin)$/.test(a));
   const rest = i >= 0 ? cmd.slice(i + 1) : [];
@@ -19,7 +46,14 @@ export function serverBaseArgs(cfg: ProjectConfig): string[] {
       continue;
     }
     if (a.startsWith('--database=') || a.startsWith('--db-filter') || a === '--proxy-mode') continue;
-    if (a.includes('{')) continue;
+    if (a.includes('{')) {
+      try {
+        out.push(renderTemplate(a, vars));
+      } catch {
+        /* a variable this run does not know */
+      }
+      continue;
+    }
     out.push(a);
   }
   if (!out.some((a) => a.startsWith('--data-dir') || a === '-D')) out.push(`--data-dir=${dataDirOf(cfg)}`);
@@ -46,9 +80,9 @@ export function demoArgs(cfg: ProjectConfig, withDemo: boolean): string[] {
  * Options for `odoo db …` / `odoo neutralize`: Odoo 19 must not get `-c` before the subcommand, the config comes
  * from ODOO_RC (/etc/odoo/odoo.conf). Connection and addons options of the server command are passed after it.
  */
-export function dbSubcommandOptions(cfg: ProjectConfig): string[] {
+export function dbSubcommandOptions(cfg: ProjectConfig, vars: TemplateVars = {}): string[] {
   const out = [`-D`, dataDirOf(cfg)];
-  for (const a of serverBaseArgs(cfg)) {
+  for (const a of serverBaseArgs(cfg, vars)) {
     if (a.startsWith('--addons-path=') || a.startsWith('--db_host=') || a.startsWith('--db_port=')) out.push(a);
     else if (a.startsWith('--db_user=')) out.push('-r', a.slice('--db_user='.length));
   }
@@ -60,9 +94,9 @@ export function dbSubcommandOptions(cfg: ProjectConfig): string[] {
  * --db_password …` to a command starting with `odoo` (Odoo 16–18 always, 19 without PG* variables), i.e. after the
  * subcommand's own arguments, where `odoo db` rejects them. The password reaches libpq as PGPASSWORD.
  */
-export function dbSubcommand(cfg: ProjectConfig, sub: string[]): { cmd: string[]; env: Record<string, string> } {
+export function dbSubcommand(cfg: ProjectConfig, sub: string[], vars: TemplateVars = {}): { cmd: string[]; env: Record<string, string> } {
   return {
-    cmd: ['/usr/bin/odoo', 'db', ...dbSubcommandOptions(cfg), ...sub],
+    cmd: ['/usr/bin/odoo', 'db', ...dbSubcommandOptions(cfg, vars), ...sub],
     env: cfg.postgres.password ? { PGPASSWORD: cfg.postgres.password } : {},
   };
 }
@@ -84,9 +118,9 @@ export function testArgs(tests: { tags: string; extraArgs: string[] }, modules: 
  * `odoo neutralize -d <db>` after restoring a `.dump` (spec 8.4). Like `odoo db` (D38), called by its path: the
  * subcommand parses the server options after it, the password reaches libpq as PGPASSWORD.
  */
-export function neutralizeCommand(cfg: ProjectConfig, db: string): { cmd: string[]; env: Record<string, string> } {
+export function neutralizeCommand(cfg: ProjectConfig, db: string, vars: TemplateVars = {}): { cmd: string[]; env: Record<string, string> } {
   return {
-    cmd: ['/usr/bin/odoo', 'neutralize', ...serverBaseArgs(cfg), '-d', db],
+    cmd: ['/usr/bin/odoo', 'neutralize', ...serverBaseArgs(cfg, vars), '-d', db],
     env: cfg.postgres.password ? { PGPASSWORD: cfg.postgres.password } : {},
   };
 }

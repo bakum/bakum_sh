@@ -4,9 +4,9 @@ import type Docker from 'dockerode';
 import { BmError, ODOO_VERSIONS, projectConfigSchema, type DetectResult } from '@bm/shared';
 import * as git from './git';
 import { docker } from './docker/client';
-import { addonsDirsFrom, manifestVersion, moduleRootsFrom, modulesFromTree } from './modules';
+import { manifestVersion, moduleRootsFrom, modulesFromTree } from './modules';
 import { repoNameFromUrl } from './services/repo';
-import { demzPreset, genericPreset, odooPreset, type PresetInputs } from './config/presets';
+import { demzPreset, genericPreset, odooPreset, stackAddons, type PresetInputs } from './config/presets';
 import { isInside, samePath, toPosix } from './util/paths';
 
 /** Secrets found during detection stay in Core; the renderer only learns that a password exists. */
@@ -56,7 +56,6 @@ export async function detectProject(
     .filter((m) => m.dir.split('/').length <= 4 && !m.dir.split('/').some((p) => p.startsWith('.')))
     .sort((a, b) => a.dir.localeCompare(b.dir));
   const moduleRoots = moduleRootsFrom(modules);
-  const addonsDirs = addonsDirsFrom(modules);
   if (!modules.length) warnings.push('В репозитории не найдено ни одного модуля Odoo (__manifest__.py на глубине до 4).');
   const modulesToInstall = findModuleList(files);
   const repoPath = folder;
@@ -202,7 +201,7 @@ export async function detectProject(
     },
     // New projects get the app's own Postgres; the image of the detected one keeps its extensions (pgvector…).
     managedPg: { image: pg?.image ?? 'postgres:16', port: opts.pgPort },
-    addonsDirs,
+    stackAddons: stackAddons(readConf(odooConf, 'addons_path'), repoMount ?? `/mnt/repositories/${repoName}`),
     debugpy: !!command?.some((a) => a === 'debugpy'),
     productionBranch: productionCandidate ?? currentBranch ?? 'main',
     // Build commands depend on the version (demo flags, D38): the stack's image, else the modules' series.
@@ -239,7 +238,6 @@ export async function detectProject(
     filestoreHostDir: toPosix(path.join(opts.filestoreRoot, id)),
     moduleRoots,
     modulesToInstall,
-    addonsDirs,
     productionBranch: inputs.productionBranch,
     odooVersion,
     pgPort: opts.pgPort,

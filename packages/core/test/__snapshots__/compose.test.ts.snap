@@ -17,6 +17,7 @@ services:
       - -c
       - /etc/odoo/odoo.conf
       - --data-dir=/var/lib/odoo
+      - --addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/repositories/demz-odoo/demzua/perevertum/crm,/mnt/repositories/demz-odoo/exchange
       - -d
       - o19_br_crm_3
       - --db-filter=^o19_br_crm_3$$

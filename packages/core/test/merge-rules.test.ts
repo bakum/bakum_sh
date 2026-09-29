@@ -22,7 +22,7 @@ const demz = projectConfigSchema.parse(
     mounts: [],
     filestoreHostDir: 'E:/demz-odoo-19/data/filestore',
     postgres: { host: 'localhost', port: 5433, internalHost: 'db', user: 'odoo', password: 'odoo', protectedContainers: ['odoo19', 'odoo19-db'] },
-    addonsDirs: [],
+    stackAddons: ['/usr/lib/python3/dist-packages/odoo/addons'],
     productionBranch: '19.0',
     odooVersion: '19.0',
   }),

@@ -20,7 +20,7 @@ import { bus } from '../events';
 import { buildContainers, dropBuild } from './drop';
 import { configHash } from './view';
 import { runBuild } from './pipeline';
-import { runOdooOneOff, assertOdooOk, serverBaseArgs } from './odoo-cli';
+import { runOdooOneOff, assertOdooOk, serverBaseArgs, addonsPathVar, codeVars } from './odoo-cli';
 import { docker } from '../docker/client';
 import { sleep } from '../util/time';
 
@@ -81,6 +81,7 @@ export function writeLiveCompose(ctx: Ctx, b: BuildRow): string {
     branch: { id: br.id, name: br.name, slug: br.slug, stage: br.stage },
     build: { id: b.id, number: b.number, dbName: b.dbName, host: b.host, composeProject: b.composeProject, debugPort: b.debugPort },
     worktree: code,
+    addonsPath: addonsPathVar(cfg, code),
   });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text, 'utf8');
@@ -113,7 +114,9 @@ async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> 
   await ensurePostgres(ctx, cfg, jc.log);
   await compose(ctx, b, ['stop'], jc);
   try {
-    const cmd = ['odoo', ...serverBaseArgs(cfg), '-d', b.dbName, '--stop-after-init', '--no-http'];
+    const br = branchRow(ctx, b.branchId);
+    const code = br ? codeSource(cfg, br, resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope).dir : null;
+    const cmd = ['odoo', ...serverBaseArgs(cfg, codeVars(cfg, code)), '-d', b.dbName, '--stop-after-init', '--no-http'];
     if (p.install?.length) cmd.push('-i', p.install.join(','));
     if (p.update?.length) cmd.push('-u', p.update.join(','));
     const r = await runOdooOneOff({ composeFile: file, project: b.composeProject, cmd, log: jc.log, signal: jc.signal });

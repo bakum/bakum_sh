@@ -60,6 +60,17 @@ export function addonsDirsFrom(mods: ModuleInfo[]): string[] {
   return [...new Set(mods.map((m) => m.dir.split('/').slice(0, -1).join('/')))].sort();
 }
 
+/**
+ * Module parent directories of a code folder (a build's worktree or the user's folder), limited to `roots`
+ * (repo.moduleRoots; empty = the whole repository). Same depth as project detection: a module at most 4 levels deep.
+ */
+export function addonsDirsOfCode(codeDir: string, roots: string[]): string[] {
+  const mods = roots.length
+    ? roots.flatMap((r) => scanModules(path.join(codeDir, r), 3).map((m) => ({ ...m, dir: `${r}/${m.dir}` })))
+    : scanModules(codeDir);
+  return addonsDirsFrom(mods);
+}
+
 const inRoots = (dir: string, roots: string[]): boolean => roots.length === 0 || roots.some((r) => dir === r || dir.startsWith(`${r}/`));
 
 /** Module of a changed file: nearest parent directory with __manifest__.py inside moduleRoots (spec 8.7). */

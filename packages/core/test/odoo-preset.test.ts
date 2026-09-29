@@ -22,7 +22,6 @@ const inputs: OdooPresetInputs = {
   filestoreHostDir: 'C:/Users/u/AppData/Local/Odoo Branch Manager/filestore/shop',
   moduleRoots: ['addons'],
   modulesToInstall: null,
-  addonsDirs: ['addons'],
   productionBranch: 'main',
   odooVersion: '18.0',
   pgPort: 55432,
@@ -37,7 +36,7 @@ describe('«Odoo в Docker» preset (D32)', () => {
     expect(cfg.runtime.image).toBe('odoo:18.0');
     expect(cfg.runtime.network).toBe('bm-shop');
     expect(cfg.runtime.enterprise).toBeNull();
-    expect(cfg.runtime.command).toContain('--addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/repo/shop/addons');
+    expect(cfg.runtime.command).toContain('--addons-path=/usr/lib/python3/dist-packages/odoo/addons,{addonsPath}');
   });
 
   it('builds Production fresh with all repository modules, Development fresh with demo', () => {

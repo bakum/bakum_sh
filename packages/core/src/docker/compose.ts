@@ -10,6 +10,8 @@ export interface ComposeInput {
   branch: { id: number; name: string; slug: string; stage: string };
   build: { id: number; number: number; dbName: string; host: string; composeProject: string; debugPort: number | null };
   worktree: string;
+  /** `{addonsPath}` computed from the build's code (`addonsPathVar`), when the command uses it. */
+  addonsPath?: string;
 }
 
 export const ODOO_SERVICE = 'odoo';
@@ -39,6 +41,7 @@ export function templateVarsFor(i: ComposeInput): TemplateVars {
     debugPort: i.build.debugPort ?? undefined,
     worktree: toPosix(i.worktree),
     repoMount: i.cfg.runtime.repoMount,
+    addonsPath: i.addonsPath,
   };
 }
 

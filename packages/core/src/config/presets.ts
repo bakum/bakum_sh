@@ -75,12 +75,28 @@ export interface PresetInputs {
    * user and internal host (the stack's odoo.conf keeps working). Without it the detected Postgres is used (external).
    */
   managedPg?: { image: string; port: number };
-  /** Directories (relative to the repo root, '' = root) that directly contain modules. */
-  addonsDirs: string[];
+  /** addons_path entries of the detected stack outside the repository (`stackAddons`), before `{addonsPath}`. */
+  stackAddons: string[];
   /** The detected Odoo container runs debugpy (Generic preset keeps it; otherwise plain `odoo`). */
   debugpy?: boolean;
   productionBranch: string;
   odooVersion: string;
+}
+
+export const ODOO_CORE_ADDONS = '/usr/lib/python3/dist-packages/odoo/addons';
+
+/**
+ * addons_path of the detected stack (its odoo.conf) without the repository: entries equal to, inside or above
+ * `repoMount` are replaced by the build's `{addonsPath}` (D48); core addons when the stack states nothing.
+ */
+export function stackAddons(addonsPath: string | null, repoMount: string): string[] {
+  const repo = repoMount.replace(/\/+$/, '');
+  const related = (p: string): boolean => p === repo || p.startsWith(`${repo}/`) || repo.startsWith(`${p}/`);
+  const kept = (addonsPath ?? '')
+    .split(',')
+    .map((p) => p.trim().replace(/\/+$/, ''))
+    .filter((p) => p.startsWith('/') && !related(p));
+  return kept.length ? [...new Set(kept)] : [ODOO_CORE_ADDONS];
 }
 
 /** postgres section of the DEMZ / Generic presets: the app's own container or the detected one. */
@@ -151,6 +167,8 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
       command: [
         'python3', '-Xfrozen_modules=off', '-m', 'debugpy', '--listen', '0.0.0.0:5678',
         '/usr/bin/odoo', '-c', '/etc/odoo/odoo.conf', '--data-dir=/var/lib/odoo',
+        // Overrides addons_path of the shared odoo.conf: module folders come from the build's own code (D48).
+        `--addons-path=${[...i.stackAddons, '{addonsPath}'].join(',')}`,
         '-d', '{db}', '--db-filter=^{db}$', '--proxy-mode',
       ],
       debug: {
@@ -213,7 +231,6 @@ export interface OdooPresetInputs {
   filestoreHostDir: string;
   moduleRoots: string[];
   modulesToInstall: string | null;
-  addonsDirs: string[];
   productionBranch: string;
   odooVersion: string;
   /** Host port of the project's own Postgres (127.0.0.1 only). */
@@ -234,8 +251,8 @@ export function odooPreset(i: OdooPresetInputs): ProjectConfigInput {
   const enterpriseMount = '/mnt/enterprise';
   const addons = [
     ...(i.enterpriseDir ? [enterpriseMount] : []),
-    '/usr/lib/python3/dist-packages/odoo/addons',
-    ...i.addonsDirs.map((d) => (d ? `${repoMount}/${d}` : repoMount)),
+    ODOO_CORE_ADDONS,
+    '{addonsPath}',
   ];
   const install = i.modulesToInstall ? ('my' as const) : ('roots' as const);
   return {
@@ -362,7 +379,7 @@ export function genericPreset(i: PresetInputs): ProjectConfigInput {
         // debugpy only when the detected Odoo container already runs it (the official odoo image has no debugpy).
         ...(i.debugpy ? ['python3', '-Xfrozen_modules=off', '-m', 'debugpy', '--listen', '0.0.0.0:5678', '/usr/bin/odoo'] : ['odoo']),
         '--data-dir=/var/lib/odoo',
-        `--addons-path=${['/usr/lib/python3/dist-packages/odoo/addons', ...i.addonsDirs.map((d) => (d ? `${i.repoMount}/${d}` : i.repoMount))].join(',')}`,
+        `--addons-path=${[...i.stackAddons, '{addonsPath}'].join(',')}`,
         `--db_host=${i.postgres.internalHost}`, '--db_port=5432', `--db_user=${i.postgres.user}`,
         '-d', '{db}', '--db-filter=^{db}$', '--proxy-mode',
       ],

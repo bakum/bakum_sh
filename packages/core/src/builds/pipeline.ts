@@ -19,7 +19,19 @@ import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
 import { assertSqlIdent } from '../config/templates';
 import { bumpedModules, changedModules, matchInstalled, modulesFromTree, parseModuleList, selectTestModules, splitInstallUpdate, type ModuleInfo } from '../modules';
-import { assertOdooOk, dbSubcommand, demoArgs, neutralizeCommand, runOdooOneOff, serverBaseArgs, testArgs, testsFailed, type OneOffResult } from './odoo-cli';
+import {
+  addonsPathVar,
+  assertOdooOk,
+  codeVars,
+  dbSubcommand,
+  demoArgs,
+  neutralizeCommand,
+  runOdooOneOff,
+  serverBaseArgs,
+  testArgs,
+  testsFailed,
+  type OneOffResult,
+} from './odoo-cli';
 import { copyDatabaseByDump, restoreDumpFile } from '../docker/pg-tools';
 import { buildContainers, dropBuildResources, markDropped } from './drop';
 import { buildUrl, configHash, liveBuild, testsLogPath } from './view';
@@ -60,6 +72,9 @@ const skip = (note: string): never => {
 /** Code source of the branch (mirror worktree or the user's folder, D33), with the current worktree path. */
 const src = (r: Run): CodeSource => codeSource(r.cfg, r.branch, r.scope);
 
+/** Template variables of the build's code for one-off Odoo runs ({addonsPath}, D48). */
+const vars = (r: Run) => codeVars(r.cfg, src(r).dir);
+
 function refreshBuild(r: Run): void {
   r.build = r.ctx.db.select().from(builds).where(eq(builds.id, r.build.id)).get()!;
 }
@@ -85,6 +100,7 @@ function writeBuildCompose(r: Run): void {
     branch: { id: r.branch.id, name: r.branch.name, slug: r.branch.slug, stage: r.branch.stage },
     build: { id: r.build.id, number: r.build.number, dbName: r.build.dbName, host: r.build.host, composeProject: r.build.composeProject, debugPort: r.build.debugPort },
     worktree: code,
+    addonsPath: addonsPathVar(r.cfg, code),
   });
   fs.mkdirSync(r.buildDir, { recursive: true });
   fs.writeFileSync(r.composeFile, text, 'utf8');
@@ -222,7 +238,7 @@ async function restoreDump(r: Run, file: string): Promise<void> {
   }
   if (res.exitCode !== 0) r.log(`[warn] pg_restore завершился с кодом ${res.exitCode}: часть объектов не восстановлена (обычно роли и права сервера прода), подробности выше`);
   r.log(`восстановлено: таблиц ${fp.tables}, установленных модулей ${fp.modules}`);
-  const { cmd, env } = neutralizeCommand(cfg, build.dbName);
+  const { cmd, env } = neutralizeCommand(cfg, build.dbName, vars(r));
   const n = await runOdooOneOff({ composeFile: r.composeFile, project: build.composeProject, cmd, env, log: r.log, signal: r.jc.signal });
   assertOdooOk(n, 'Нейтрализация (odoo neutralize)');
 }
@@ -241,7 +257,7 @@ async function stepDatabase(r: Run): Promise<string> {
     else {
       const inContainer = `/bm-backup/${path.basename(file)}`;
       // spec 8.4: `odoo db load -f -n` — restore DB + filestore and neutralize in one Odoo call (no -c before `db`).
-      const { cmd, env } = dbSubcommand(cfg, ['load', '-f', '-n', build.dbName, inContainer]);
+      const { cmd, env } = dbSubcommand(cfg, ['load', '-f', '-n', build.dbName, inContainer], vars(r));
       const res = await runOdooOneOff({
         composeFile: r.composeFile,
         project: build.composeProject,
@@ -418,7 +434,7 @@ async function wantedModules(r: Run, sha: string): Promise<Set<string>> {
 }
 
 async function runModules(r: Run, install: string[], update: string[], extra: string[] = [], log = r.log): Promise<OneOffResult> {
-  const cmd = ['odoo', ...serverBaseArgs(r.cfg), '-d', r.build.dbName, '--stop-after-init', '--no-http', ...extra];
+  const cmd = ['odoo', ...serverBaseArgs(r.cfg, vars(r)), '-d', r.build.dbName, '--stop-after-init', '--no-http', ...extra];
   if (install.length) cmd.push('-i', install.join(','));
   if (update.length) cmd.push('-u', update.join(','));
   const res = await runOdooOneOff({ composeFile: r.composeFile, project: r.build.composeProject, cmd, log, signal: r.jc.signal });
@@ -680,7 +696,7 @@ async function stepTests(r: Run): Promise<string> {
     const srcFs = path.join(cfg.runtime.filestore.hostDir, build.dbName);
     if (fs.existsSync(srcFs)) await copyTree(srcFs, fsDir, scope.filestoreCopy, r.log);
     tl.log(`[tests] модули: ${mods.join(', ')}`);
-    const cmd = ['odoo', ...serverBaseArgs(cfg), '-d', testDb, '--stop-after-init', '--no-http', '-u', mods.join(','), ...testArgs(scope.tests, mods)];
+    const cmd = ['odoo', ...serverBaseArgs(cfg, vars(r)), '-d', testDb, '--stop-after-init', '--no-http', '-u', mods.join(','), ...testArgs(scope.tests, mods)];
     const res = await runOdooOneOff({ composeFile: r.composeFile, project: build.composeProject, cmd, log: tl.log, signal: r.jc.signal });
     assertOdooOk(res, `Тесты на копии ${testDb}`);
     saveTests(r, res.summary.tests);

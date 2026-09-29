@@ -41,7 +41,7 @@ const inputs = (over: Partial<PresetInputs> = {}): PresetInputs => ({
   mounts: [],
   filestoreHostDir: 'C:/bm/filestore/shop',
   postgres: { host: 'localhost', port: 5432, internalHost: 'db', user: 'odoo', password: '', protectedContainers: [] },
-  addonsDirs: [''],
+  stackAddons: ['/usr/lib/python3/dist-packages/odoo/addons'],
   productionBranch: 'main',
   odooVersion: '19.0',
   ...over,

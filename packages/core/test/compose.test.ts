@@ -26,7 +26,7 @@ const cfg = projectConfigSchema.parse(
     ],
     filestoreHostDir: 'E:/demz-odoo-19/data/filestore',
     postgres: { host: 'localhost', port: 5433, internalHost: 'db', user: 'odoo', password: 'pa$s', protectedContainers: ['odoo19', 'odoo19-db'] },
-    addonsDirs: [],
+    stackAddons: ['/usr/lib/python3/dist-packages/odoo/addons'],
     productionBranch: '19.0',
     odooVersion: '19.0',
   }),
@@ -38,6 +38,7 @@ const input = {
   branch: { id: 7, name: '19.0-demz-crm', slug: 'crm', stage: 'development' },
   build: { id: 42, number: 3, dbName: 'o19_br_crm_3', host: 'crm.localhost', composeProject: 'bm-demz-crm', debugPort: 5701 },
   worktree: 'E:\\demz-odoo-19\\worktrees\\demz\\crm',
+  addonsPath: '/mnt/repositories/demz-odoo/demzua/perevertum/crm,/mnt/repositories/demz-odoo/exchange',
 };
 
 describe('generateCompose', () => {
@@ -49,6 +50,9 @@ describe('generateCompose', () => {
     const doc = YAML.parse(generateCompose(input));
     const svc = doc.services.odoo;
     expect(svc.command).toContain('--db-filter=^o19_br_crm_3$$');
+    expect(svc.command).toContain(
+      '--addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/repositories/demz-odoo/demzua/perevertum/crm,/mnt/repositories/demz-odoo/exchange',
+    );
     expect(svc.environment.PASSWORD).toBe('pa$$s');
     expect(svc.labels['bm.project']).toBe('demz');
     expect(svc.labels['bm.build']).toBe('42');

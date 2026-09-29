@@ -15,6 +15,7 @@ export const TEMPLATE_VARS = [
   'debugPort',
   'worktree',
   'repoMount',
+  'addonsPath',
   'sha',
   'shortSha',
   'name',

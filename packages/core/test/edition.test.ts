@@ -17,7 +17,7 @@ describe('odooEdition', () => {
     projectConfigSchema.parse(
       genericPreset({
         id: 'gen', name: 'gen', repo, github: null, remote: 'origin', projectRoot: null, worktreesDir: 'C:/w', moduleRoots: [], modulesToInstall: null,
-        image: 'odoo:19', network: 'n', repoMount: '/mnt/r', mounts, filestoreHostDir: 'C:/fs', postgres: pgIn, addonsDirs: [''], productionBranch: 'main', odooVersion: '19.0',
+        image: 'odoo:19', network: 'n', repoMount: '/mnt/r', mounts, filestoreHostDir: 'C:/fs', postgres: pgIn, stackAddons: ['/usr/lib/python3/dist-packages/odoo/addons'], productionBranch: 'main', odooVersion: '19.0',
       }),
     );
 
@@ -32,7 +32,7 @@ describe('odooEdition', () => {
     const odoo = projectConfigSchema.parse(
       odooPreset({
         id: 'shop', name: 'shop', repo, repoName: 'r', github: null, remote: 'origin', worktreesDir: 'C:/w', filestoreHostDir: 'C:/fs', moduleRoots: [],
-        modulesToInstall: null, addonsDirs: [''], productionBranch: 'main', odooVersion: '19.0', pgPort: 55432, enterpriseDir: 'D:/odoo/enterprise',
+        modulesToInstall: null, productionBranch: 'main', odooVersion: '19.0', pgPort: 55432, enterpriseDir: 'D:/odoo/enterprise',
       }),
     );
     expect(odooEdition(odoo)).toMatchObject({ kind: 'enterprise', source: 'D:/odoo/enterprise' });

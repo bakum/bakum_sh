@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   addonsDirsFrom,
+  addonsDirsOfCode,
   bumpedModules,
   changedModules,
   manifestVersion,
@@ -111,6 +112,24 @@ describe('module detection (spec 8.7)', () => {
       fs.writeFileSync(path.join(dir, f), '{}');
     }
     expect(scanModules(dir, 4).map((m) => m.dir)).toEqual(['a/b/c/m4', 'a/m2']);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('lists module folders of a code folder inside moduleRoots (D48)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bm-mods-'));
+    const files = [
+      'demzua/perevertum/crm/demz_crm_lead/__manifest__.py',
+      'demzua/sales/demz_sale/__manifest__.py',
+      'demzua/sales/demz_sale/tests/data/nested/__manifest__.py',
+      'exchange/ata_exchange_v4/__manifest__.py',
+      'tools/helper/__manifest__.py',
+    ];
+    for (const f of files) {
+      fs.mkdirSync(path.join(dir, path.dirname(f)), { recursive: true });
+      fs.writeFileSync(path.join(dir, f), '{}');
+    }
+    expect(addonsDirsOfCode(dir, ['demzua', 'exchange', 'missing'])).toEqual(['demzua/perevertum/crm', 'demzua/sales', 'exchange']);
+    expect(addonsDirsOfCode(dir, [])).toEqual(['demzua/perevertum/crm', 'demzua/sales', 'exchange', 'tools']);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

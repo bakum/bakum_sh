@@ -11,7 +11,7 @@ import { buildRow, buildUrl, listBuilds, liveBuild, toBuildView } from '../build
 import { requestBuildChecked } from '../builds/request';
 import { listBackups } from '../builds/backups';
 import { serviceContainer } from '../builds/pipeline';
-import { serverBaseArgs } from '../builds/odoo-cli';
+import { codeVars, serverBaseArgs } from '../builds/odoo-cli';
 import { resolveBranchScope } from '../config/effective';
 import { renderDeep } from '../config/templates';
 import * as git from '../git';
@@ -240,7 +240,7 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
       if (!c) throw new BmError('NOT_RUNNING', 'Контейнер сборки не найден: запустите сборку (Start)');
       const argv =
         p.target === 'odoo-shell'
-          ? ['docker', 'exec', '-it', c.name, 'odoo', 'shell', ...serverBaseArgs(cfg!), '-d', b!.dbName, '--no-http']
+          ? ['docker', 'exec', '-it', c.name, 'odoo', 'shell', ...serverBaseArgs(cfg!, codeVars(cfg!, br ? codeDir(ctx, br) : null)), '-d', b!.dbName, '--no-http']
           : ['docker', 'exec', '-it', c.name, 'bash'];
       return { ok: true, detail: await openTerminal(ctx, `${br?.name ?? ''} ${p.target}`, argv) };
     }
