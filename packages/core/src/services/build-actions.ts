@@ -37,7 +37,7 @@ function view(ctx: Ctx, id: number) {
   const br = branchRow(ctx, b.branchId);
   const cfg = ctx.store.get(b.projectId)?.config;
   const scope = cfg && br ? resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope : null;
-  return toBuildView(ctx, b, { branchName: br?.name ?? '?', dropAfterDays: scope?.dropAfterDays });
+  return toBuildView(ctx, b, { branchName: br?.name ?? '?', dropAfterDays: scope?.dropAfterDays, lastActiveAt: br?.lastActiveAt });
 }
 
 async function retry(ctx: Ctx, buildId: number, fromStep: string) {

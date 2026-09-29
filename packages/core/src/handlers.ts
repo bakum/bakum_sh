@@ -32,6 +32,7 @@ import { listAudit } from './services/audit';
 import { getQueue } from './jobs/queue';
 import { registerBuildHandlers } from './services/build-actions';
 import { snapshotHandlers } from './services/snapshots';
+import { monitorView } from './services/monitor';
 import { deletePreview, requestDelete } from './services/branch-delete';
 import { mergeUrl } from './services/merge';
 import { projectDeletePreview, requestProjectDelete } from './services/project-delete';
@@ -131,4 +132,5 @@ export function registerHandlers(ctx: Ctx): void {
   });
   registerBuildHandlers(ctx);
   ctx.rpc.register(snapshotHandlers(ctx));
+  ctx.rpc.register({ 'monitor.get': (p) => monitorView(ctx, p.buildId) });
 }

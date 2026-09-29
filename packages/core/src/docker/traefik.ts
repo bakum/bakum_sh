@@ -10,6 +10,8 @@ import { log } from '../util/logger';
 
 export const TRAEFIK_PROJECT = 'bm-traefik';
 const CONTAINER = 'bm-traefik';
+/** Bumped when the generated compose changes in a way an existing container must pick up (it is then recreated). */
+const CONFIG_VERSION = '2';
 
 /** Networks Traefik must join: the network of every configured project that exists in Docker. */
 async function projectNetworks(ctx: Ctx): Promise<string[]> {
@@ -41,7 +43,9 @@ export function traefikCompose(image: string, port: number, networks: string[]):
         ports: [`127.0.0.1:${port}:80`],
         volumes: [{ type: 'bind', source: '/var/run/docker.sock', target: '/var/run/docker.sock', read_only: true }],
         networks: networks.length ? networks : undefined,
-        labels: { 'bm.managed': 'traefik' },
+        labels: { 'bm.managed': 'traefik', 'bm.traefik-config': CONFIG_VERSION },
+        // The access log (stdout) is read for build activity (D45): bounded, it does not grow forever.
+        logging: { driver: 'json-file', options: { 'max-size': '20m', 'max-file': '3' } },
         restart: 'unless-stopped',
       },
     },
@@ -76,7 +80,11 @@ async function doEnsure(ctx: Ctx): Promise<void> {
     const bound = existing?.HostConfig.PortBindings?.['80/tcp']?.[0]?.HostPort;
     const attached = Object.keys(existing?.NetworkSettings.Networks ?? {});
     const upToDate =
-      existing?.State.Running && bound === String(port) && existing.Config.Image === image && nets.every((n) => attached.includes(n));
+      existing?.State.Running &&
+      bound === String(port) &&
+      existing.Config.Image === image &&
+      existing.Config.Labels?.['bm.traefik-config'] === CONFIG_VERSION &&
+      nets.every((n) => attached.includes(n));
     if (!upToDate) {
       if (!existing?.State.Running || bound !== String(port)) {
         const busy = await listeningPorts();

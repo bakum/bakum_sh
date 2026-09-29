@@ -53,6 +53,13 @@ const MIGRATIONS: string[] = [
   UPDATE builds SET stage = 'development' WHERE stage = 'staging';
   ALTER TABLE branches ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
   `,
+  // D45: requests to builds per minute from the Traefik access log (Monitor); kept for 24 hours.
+  `
+  CREATE TABLE http_stats (
+    build_id INTEGER NOT NULL, minute TEXT NOT NULL, count INTEGER NOT NULL, total_ms REAL NOT NULL,
+    max_ms REAL NOT NULL, errors INTEGER NOT NULL, PRIMARY KEY (build_id, minute)
+  );
+  `,
 ];
 
 export function openDb(file: string): { db: Db; sqlite: Database.Database } {

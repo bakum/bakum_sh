@@ -177,6 +177,26 @@ export interface BuildView {
   dropAt: string | null;
 }
 
+/** Monitor tab of a build (spec 8.9): the last hour of resources and requests, sizes, lifecycle dates. */
+export interface MonitorView {
+  buildId: number;
+  running: boolean;
+  /** CPU % (of one core = 100) and RAM, sampled every 30 s while the container runs. */
+  resources: { at: string; cpu: number; memMb: number }[];
+  memLimitMb: number | null;
+  /** Requests through Traefik per minute (background websocket / longpolling excluded). */
+  requests: { minute: string; count: number; avgMs: number; maxMs: number; errors: number }[];
+  dbSizeBytes: number | null;
+  filestoreBytes: number | null;
+  lastActiveAt: string | null;
+  /** When the build stops for inactivity (idleStopHours); null — never. */
+  idleStopAt: string | null;
+  /** After this date the build may be dropped (dropAfterDays); null — never. */
+  expiresAt: string | null;
+  idleStopHours: number;
+  dropAfterDays: number;
+}
+
 /** Snapshot of a live build's database + filestore (spec 8.9 Backups): `<db>_snap_<n>`. */
 export interface SnapshotView {
   id: number;

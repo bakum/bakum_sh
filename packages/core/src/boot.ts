@@ -3,6 +3,9 @@ import { JobQueue, setQueue } from './jobs/queue';
 import { fetchExecutor, requestFetch, scheduleFetches, stopFetches } from './services/fetch';
 import { LocalWatcher, setLocalWatcher } from './services/watch-local';
 import { BackupWatcher } from './services/backup-watch';
+import { ActivityCollector, setActivityCollector } from './services/activity';
+import { startMonitor, stopMonitor } from './services/monitor';
+import { startLifecycle, stopLifecycle } from './services/lifecycle';
 import { applyRules } from './services/branches';
 import { deleteBranchExecutor } from './services/branch-delete';
 import { deleteProjectExecutor } from './services/project-delete';
@@ -42,6 +45,8 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
   const watcher = new LocalWatcher(ctx);
   setLocalWatcher(watcher);
   const backups = new BackupWatcher(ctx);
+  const activity = new ActivityCollector(ctx);
+  setActivityCollector(activity);
 
   ctx.rpc.registerTopics({
     'build.log': (p, emit) => subscribeBuildLog(ctx, p.buildId, p.file, emit),
@@ -56,6 +61,8 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
     scheduleFetches(ctx);
     watcher.start();
     backups.sync();
+    startMonitor(ctx);
+    startLifecycle(ctx);
     publishTray(ctx);
     // First fetch right after start (criterion 3: the sidebar matches odoo.sh after the first fetch).
     requestFetch(ctx);
@@ -63,6 +70,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
   runtime.onDockerUp(async () => {
     startDockerWatch(ctx);
     await ensureTraefik(ctx);
+    activity.start();
     await ensureAllManagedPostgres(ctx);
     await reconcile(ctx);
   });
@@ -71,6 +79,9 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
     stopDockerWatch();
     watcher.stop();
     backups.stop();
+    activity.stop();
+    stopMonitor();
+    stopLifecycle();
     if (cancel) queue.cancelAll();
     else await queue.drain(3000);
     queue.stop();

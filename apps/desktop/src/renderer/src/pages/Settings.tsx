@@ -39,8 +39,18 @@ function stageFields(stage: keyof typeof STAGE_NAMES): FieldDef[] {
     { path: p('buildOnAdd'), label: 'Собирать при добавлении ветки', type: 'switch' },
     { path: p('protected'), label: 'Защита от удаления', type: 'switch' },
     { path: p('onForcePush'), label: 'Force-push', type: 'select', options: ['pause', 'new'], inherit: inh },
-    { path: p('idleStopHours'), label: 'Остановка без активности, ч', type: 'number', stage: 'этап 2' },
-    { path: p('dropAfterDays'), label: 'Отбросить через, дней', type: 'number', stage: 'этап 2' },
+    {
+      path: p('idleStopHours'),
+      label: 'Остановка без активности, ч',
+      type: 'number',
+      description: 'живая сборка останавливается, если столько часов к ней не было запросов; 0 — никогда. Start поднимает её снова',
+    },
+    {
+      path: p('dropAfterDays'),
+      label: 'Срок хранения, дней',
+      type: 'number',
+      description: 'после стольких дней без новых сборок и заходов — напоминание «можно отбросить»; сама сборка не удаляется. 0 — без срока',
+    },
   ];
 }
 
@@ -398,6 +408,7 @@ function AppSettings({ text, onSave, saving }: { text: string; onSave: (t: strin
         { path: ['desktop', 'notifications', 'testsFailed'], label: 'Тесты упали', type: 'switch' },
         { path: ['desktop', 'notifications', 'newBackup'], label: 'Найден новый бэкап прода', type: 'switch' },
         { path: ['desktop', 'notifications', 'lowDisk'], label: 'Мало места', type: 'switch' },
+        { path: ['desktop', 'notifications', 'buildExpired'], label: 'Истёк срок хранения сборки (dropAfterDays)', type: 'switch' },
       ],
     },
   ];

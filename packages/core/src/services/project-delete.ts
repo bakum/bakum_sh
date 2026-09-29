@@ -160,6 +160,11 @@ export async function deleteProjectExecutor(ctx: Ctx, job: JobRow, jc: JobContex
 
   const buildIds = ctx.db.select({ id: builds.id }).from(builds).where(eq(builds.projectId, cfg.id)).all().map((b) => b.id);
   if (buildIds.length) ctx.db.delete(snapshots).where(inArray(snapshots.buildId, buildIds)).run();
+  // Monitor and lifecycle traces of the builds (D45).
+  for (const id of buildIds) {
+    ctx.sqlite.prepare('DELETE FROM http_stats WHERE build_id = ?').run(id);
+    ctx.sqlite.prepare('DELETE FROM kv WHERE key = ?').run(`drop-warned:${id}`);
+  }
   ctx.db.delete(builds).where(eq(builds.projectId, cfg.id)).run();
   ctx.db.delete(branches).where(eq(branches.projectId, cfg.id)).run();
   ctx.db.delete(projects).where(eq(projects.id, cfg.id)).run();

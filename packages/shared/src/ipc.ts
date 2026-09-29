@@ -17,6 +17,7 @@ import type {
   GitBranchInfo,
   JobView,
   ProjectSummary,
+  MonitorView,
   RepoProbe,
   SnapshotView,
   SystemStatus,
@@ -222,6 +223,8 @@ export const methods = {
 
   'backups.list': m<BackupFile[]>()(z.object({ projectId }).strict()),
   'backups.import': m<JobRef>()(z.object({ projectId, path: z.string().min(1) }).strict()),
+
+  'monitor.get': m<MonitorView>()(z.object({ buildId: id }).strict()),
 
   /** Snapshots of the live build's database (spec 8.9 Backups). */
   'snapshots.list': m<SnapshotView[]>()(z.object({ branchId: id }).strict()),

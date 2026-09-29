@@ -24,6 +24,7 @@ import { HistoryTab } from './branch/HistoryTab';
 import { ShellTab } from './branch/ShellTab';
 import { EditorTab } from './branch/EditorTab';
 import { LogsTab } from './branch/LogsTab';
+import { MonitorTab } from './branch/MonitorTab';
 import { BackupsTab } from './branch/BackupsTab';
 import { ToolsTab } from './branch/ToolsTab';
 import { SettingsTab } from './branch/SettingsTab';
@@ -186,7 +187,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
             <EditorTab branch={b} />
           </Tabs.Panel>
           <Tabs.Panel value="monitor">
-            <Stage2 what="Monitor: CPU / RAM контейнера, запросы и время ответа, размер БД и filestore" />
+            <MonitorTab branch={b} />
           </Tabs.Panel>
           <Tabs.Panel value="logs" h="100%">
             <LogsTab branch={b} />

@@ -72,7 +72,7 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
   if (live && live.sourceMirrorBuildId && prodLive && prodLive.id !== live.sourceMirrorBuildId && b.stage !== 'production') {
     badges.push({ kind: 'mirror-newer', text: 'Зеркало прода новее вашей БД' });
   }
-  const liveView = live ? toBuildView(ctx, live, { branchName: b.name, currentHash: hash, dropAfterDays: r.scope.dropAfterDays }) : null;
+  const liveView = live ? toBuildView(ctx, live, { branchName: b.name, currentHash: hash, dropAfterDays: r.scope.dropAfterDays, lastActiveAt: b.lastActiveAt }) : null;
   if (liveView && liveView.containerState === 'missing') badges.push({ kind: 'discrepancy', text: 'Контейнер сборки не найден в Docker' });
   return {
     id: b.id,

@@ -319,7 +319,7 @@ export type ProjectConfig = z.infer<typeof projectConfigSchema>;
 export const isLegacyProject = (cfg: ProjectConfig): boolean => !cfg.repo.url || !cfg.repo.mirrorDir;
 export type ProjectConfigInput = z.input<typeof projectConfigSchema>;
 
-export const notificationKinds = ['buildReady', 'buildFailed', 'testsFailed', 'newBackup', 'lowDisk'] as const;
+export const notificationKinds = ['buildReady', 'buildFailed', 'testsFailed', 'newBackup', 'lowDisk', 'buildExpired'] as const;
 export type NotificationKind = (typeof notificationKinds)[number];
 
 export const appConfigSchema = z
@@ -365,6 +365,8 @@ export const appConfigSchema = z
             testsFailed: z.boolean().default(true),
             newBackup: z.boolean().default(true),
             lowDisk: z.boolean().default(true),
+            /** A live build passed its dropAfterDays (D45): it may be dropped. */
+            buildExpired: z.boolean().default(true),
           })
           .strict()
           .prefault({}),

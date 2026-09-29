@@ -124,9 +124,13 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
               {fmtDuration(b.createdAt, b.finishedAt)}
             </Badge>
             {b.dropAt && (
-              <Tooltip label="dropAfterDays: автоматическое удаление — этап 2">
-                <Badge variant="light" color="orange" size="sm">
-                  будет удалена {fmtDate(b.dropAt).slice(0, 10)}
+              <Tooltip
+                multiline
+                w={320}
+                label="dropAfterDays: срок хранения живой сборки считается от последнего захода или новой сборки. По истечении приходит напоминание; отбросить — CONNECT ▾ → «Отбросить сборку…». Сама сборка не удаляется."
+              >
+                <Badge variant="light" color={new Date(b.dropAt).getTime() <= Date.now() ? 'red' : 'orange'} size="sm">
+                  {new Date(b.dropAt).getTime() <= Date.now() ? 'срок хранения истёк — можно отбросить' : `хранить до ${fmtDate(b.dropAt).slice(0, 10)}`}
                 </Badge>
               </Tooltip>
             )}
@@ -269,6 +273,25 @@ export function ConnectButton({ b }: { b: BuildView }) {
             <Menu.Item onClick={() => void act(call('builds.action', { buildId: b.id, action: 'apply-config' }), 'Контейнер пересоздаётся…')}>
               Применить конфигурацию
             </Menu.Item>
+          )}
+          {/* spec 11: the production mirror's database changes only through a backup import. */}
+          {b.stage !== 'production' && (
+            <>
+              <Menu.Divider />
+              <Menu.Item
+                color="red"
+                onClick={async () => {
+                  const r = await window.bm.desktop.confirm({
+                    message: `Отбросить живую сборку #${b.number}?`,
+                    detail: `Будут удалены контейнер, БД ${b.dbName}, её filestore и снапшоты. Ветка и её код остаются, собрать заново — Rebuild.`,
+                    buttons: ['Отбросить', 'Отмена'],
+                  });
+                  if (r === 0) await act(call('builds.drop', { buildId: b.id }), 'Сборка отбрасывается');
+                }}
+              >
+                Отбросить сборку…
+              </Menu.Item>
+            </>
           )}
         </Menu.Dropdown>
       </Menu>

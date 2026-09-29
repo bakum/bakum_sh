@@ -4,6 +4,8 @@ import type { BuildView, MethodParamsParsed, ProjectConfig, ResolvedBranchScope 
 import type { Ctx } from '../context';
 import { branches, builds, type BranchRow, type BuildRow } from '../db/schema';
 import { containerPoll, containerStates } from '../docker/state';
+import { resolveBranchScope } from '../config/effective';
+import { lifecycleState } from './lifecycle-state';
 
 /**
  * Hash of everything that shapes the build container but not its database (spec 9.1 «конфигурация изменилась»):
@@ -40,15 +42,16 @@ export function buildUrl(host: string, proxyPort: number | null): string {
 export function toBuildView(
   ctx: Ctx,
   row: BuildRow,
-  extra: { branchName: string; currentHash?: string | null; dropAfterDays?: number },
+  extra: { branchName: string; currentHash?: string | null; dropAfterDays?: number; lastActiveAt?: string | null },
 ): BuildView {
   const cs = containerStates.get(row.composeProject);
   const isLive = row.live && (row.status === 'running' || row.status === 'stopped');
   const port = ctx.proxyPort ?? ctx.store.app.proxyPort;
-  let dropAt: string | null = null;
-  if (isLive && extra.dropAfterDays && extra.dropAfterDays > 0) {
-    dropAt = new Date(new Date(row.finishedAt ?? row.createdAt).getTime() + extra.dropAfterDays * 86400_000).toISOString();
-  }
+  // D45: the date after which the live build may be dropped — counted from its last activity.
+  const expiresAt = isLive
+    ? lifecycleState({ running: false, startedAt: null, finishedAt: row.finishedAt ?? row.createdAt, lastActiveAt: extra.lastActiveAt ?? null, idleStopHours: 0, dropAfterDays: extra.dropAfterDays ?? 0, now: Date.now() }).expiresAt
+    : null;
+  const dropAt = expiresAt === null ? null : new Date(expiresAt).toISOString();
   return {
     id: row.id,
     branchId: row.branchId,
@@ -100,8 +103,17 @@ export function listBuilds(ctx: Ctx, p: MethodParamsParsed<'builds.list'>): { it
   const where = conds.length ? and(...conds) : undefined;
   const total = ctx.db.select({ n: sql<number>`count(*)` }).from(builds).where(where).get()?.n ?? 0;
   const rows = ctx.db.select().from(builds).where(where).orderBy(desc(builds.id)).limit(p.limit).offset(p.offset).all();
-  const names = new Map(ctx.db.select({ id: branches.id, name: branches.name }).from(branches).all().map((b) => [b.id, b.name]));
-  return { items: rows.map((r) => toBuildView(ctx, r, { branchName: names.get(r.branchId) ?? '?' })), total };
+  const brs = new Map(ctx.db.select().from(branches).all().map((b) => [b.id, b]));
+  // Live builds show their «may be dropped after» date (D45): it needs the branch's effective dropAfterDays.
+  const dropDays = (r: BuildRow): number => {
+    const br = brs.get(r.branchId);
+    const cfg = r.live ? ctx.store?.get(r.projectId)?.config : undefined;
+    return br && cfg ? resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope.dropAfterDays : 0;
+  };
+  return {
+    items: rows.map((r) => toBuildView(ctx, r, { branchName: brs.get(r.branchId)?.name ?? '?', dropAfterDays: dropDays(r), lastActiveAt: brs.get(r.branchId)?.lastActiveAt })),
+    total,
+  };
 }
 
 export function buildRow(ctx: Ctx, id: number): BuildRow | undefined {
