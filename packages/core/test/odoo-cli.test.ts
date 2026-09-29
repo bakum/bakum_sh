@@ -58,8 +58,15 @@ describe('Odoo CLI arguments', () => {
       '--addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/repositories/demz-odoo,/mnt/repositories/demz-odoo/addons',
     );
     expect(dbSubcommandOptions(cfg, vars)).toEqual(
-      expect.arrayContaining(['-D', '/var/lib/odoo', '--db_host=db', '-r', 'odoo', base.find((a) => a.startsWith('--addons-path='))]),
+      expect.arrayContaining(['-D', '/var/lib/odoo', '--db_host=db', '-r', 'odoo', '--db_password=', base.find((a) => a.startsWith('--addons-path='))]),
     );
+    // Past the image entrypoint (its wait-for-psql prefers the stack's odoo.conf); the password only via compose (D54).
+    const plainCmd = projectConfigSchema.parse(genericPreset({ ...inputs, id: 'gen', debugpy: false })).runtime.command;
+    expect(plainCmd[0]).toBe('/usr/bin/odoo');
+    expect(base).toContain('--db_password=');
+    expect(cfg.runtime.env).toEqual({});
+    const dbg = projectConfigSchema.parse(genericPreset({ ...inputs, id: 'gen', debugpy: true })).runtime.command;
+    expect(dbg.slice(0, 7)).toEqual(['python3', '-Xfrozen_modules=off', '-m', 'debugpy', '--listen', '0.0.0.0:5678', '/usr/bin/odoo']);
   });
 
   it('takes the addons path from the build code, over the shared odoo.conf (D48)', () => {

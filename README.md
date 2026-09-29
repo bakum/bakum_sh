@@ -117,11 +117,14 @@ pnpm test        # unit-тесты Core (Vitest под ELECTRON_RUN_AS_NODE=1)
   добавьте в `runtime.command` после `--data-dir=/var/lib/odoo` строку
   `--addons-path=<папки вне репозитория>,{addonsPath}` (для DEMZ —
   `--addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/enterprise,{addonsPath}`) и нажмите «Применить».
-- **Подключение к базе.** Сборки DEMZ подключаются к Postgres по настройкам `postgres` проекта: `--db_host`,
+- **Подключение к базе.** Сборки DEMZ и Generic подключаются к Postgres по настройкам `postgres` проекта: `--db_host`,
   `--db_port`, `--db_user` в `runtime.command`, пароль — переменная `PGPASSWORD` контейнера. `db_*` из общего
-  `odoo.conf` сборкам не нужны, правка подключения у стенда их не ломает. В проектах DEMZ, созданных раньше, добавьте в
+  `odoo.conf` сборкам не нужны, правка подключения у стенда их не ломает. В проектах DEMZ, созданных до 0.13.1, добавьте в
   `runtime.command` после `--addons-path=…` строки `--db_host=db`, `--db_port=5432`, `--db_user=odoo` и
   `--db_password=` (пустое значение отменяет пароль из `odoo.conf`) и нажмите «Применить» на странице каждой ветки.
+  В проектах Generic, созданных до 0.13.2, добавьте `--db_password=` после `--db_user=…`, замените первую строку
+  команды `odoo` на `/usr/bin/odoo` (если команда начинается с `python3 … debugpy`, ничего менять не нужно) и уберите
+  `PGPASSWORD` из `runtime.env`.
 - **Модули вручную.** Вкладка Tools → «Модули вручную»: `-i` / `-u` выбранных модулей в БД сборки. Контейнер
   на это время останавливается.
 

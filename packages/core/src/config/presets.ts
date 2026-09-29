@@ -379,13 +379,18 @@ export function genericPreset(i: PresetInputs): ProjectConfigInput {
       repoMount: i.repoMount,
       mounts: i.mounts,
       filestore: { hostDir: i.filestoreHostDir, containerDir: '/var/lib/odoo/filestore', copy: 'hardlink' },
-      env: i.postgres.password ? { PGPASSWORD: i.postgres.password } : {},
+      // PGPASSWORD comes from compose (postgres.password), not from here: runtime.env is shown unmasked (D54).
+      env: {},
       command: [
         // debugpy only when the detected Odoo container already runs it (the official odoo image has no debugpy).
-        ...(i.debugpy ? ['python3', '-Xfrozen_modules=off', '-m', 'debugpy', '--listen', '0.0.0.0:5678', '/usr/bin/odoo'] : ['odoo']),
+        // Odoo is called by its path either way: the image entrypoint would run wait-for-psql, which prefers the db_*
+        // of the stack's odoo.conf over the options below (D54).
+        ...(i.debugpy ? ['python3', '-Xfrozen_modules=off', '-m', 'debugpy', '--listen', '0.0.0.0:5678'] : []),
+        '/usr/bin/odoo',
         '--data-dir=/var/lib/odoo',
         `--addons-path=${[...i.stackAddons, '{addonsPath}'].join(',')}`,
-        `--db_host=${i.postgres.internalHost}`, '--db_port=5432', `--db_user=${i.postgres.user}`,
+        // The empty --db_password clears the one of the stack's odoo.conf: libpq takes PGPASSWORD (D54).
+        `--db_host=${i.postgres.internalHost}`, '--db_port=5432', `--db_user=${i.postgres.user}`, '--db_password=',
         '-d', '{db}', '--db-filter=^{db}$', '--proxy-mode',
       ],
       debug: { containerPort: 5678, pathMappings: [{ local: '{worktree}', remote: i.repoMount }] },

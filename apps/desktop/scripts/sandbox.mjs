@@ -21,9 +21,10 @@ export async function waitJob(win, jobId, timeoutMs = 1800000) {
 /**
  * Sandbox project from the DEMZ preset; `stages` overrides stage settings (e.g. fresh Development databases).
  * `postgres`: 'external' — the Postgres of E:/demz-odoo-19 (odoo19-db) as before; 'managed' — the app's own
- * bm-<id>-db in the network bm-<id> (what the wizard proposes for new projects).
+ * bm-<id>-db in the network bm-<id> (what the wizard proposes for new projects). `preset`: the wizard proposal to start
+ * from (`demz`, `generic`).
  */
-export async function ensureSandbox(win, { id = 'bmdev', stages = null, mirror = null, postgres = 'external' } = {}) {
+export async function ensureSandbox(win, { id = 'bmdev', stages = null, mirror = null, postgres = 'external', preset = 'demz' } = {}) {
   const state = await bm(win, 'system.state');
   if (state.firstRun) await bm(win, 'system.completeFirstRun', {});
   const list = await bm(win, 'projects.list');
@@ -36,7 +37,7 @@ export async function ensureSandbox(win, { id = 'bmdev', stages = null, mirror =
     dir = r.dir;
   }
   const d = await bm(win, 'projects.detect', { mirror: dir, url: ORIGIN_URL, folder: 'E:/demz-odoo-19/repositories/demz-odoo' });
-  const cfg = structuredClone(d.proposals.demz);
+  const cfg = structuredClone(d.proposals[preset]);
   if (postgres === 'managed') {
     cfg.runtime.network = `bm-${id}`;
     cfg.postgres.protectedContainers = cfg.postgres.protectedContainers.map((c) => (c === `bm-${cfg.id}-db` ? `bm-${id}-db` : c));
