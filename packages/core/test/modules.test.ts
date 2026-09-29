@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   addonsDirsFrom,
+  bumpedModules,
   changedModules,
   manifestVersion,
   matchInstalled,
@@ -15,6 +16,21 @@ import {
   selectTestModules,
   splitInstallUpdate,
 } from '../src/modules';
+
+describe('updateModules: version-bumped (spec 8.7)', () => {
+  const m = (v: string) => `{'name': 'X', 'version': '${v}', 'depends': ['base']}`;
+  it('keeps modules with a new manifest version and new modules', () => {
+    expect(
+      bumpedModules([
+        { name: 'bumped', before: m('19.0.1.0.0'), after: m('19.0.1.0.1') },
+        { name: 'same', before: m('19.0.1.0.0'), after: m('19.0.1.0.0') },
+        { name: 'new', before: undefined, after: m('19.0.1.0.0') },
+        { name: 'noversion', before: "{'name': 'Y'}", after: "{'name': 'Y', 'summary': 'z'}" },
+        { name: 'versionAdded', before: "{'name': 'Y'}", after: m('19.0.1.0.0') },
+      ]),
+    ).toEqual(['bumped', 'new', 'versionAdded']);
+  });
+});
 
 describe('modules to test (spec 8.8)', () => {
   const input = { changed: ['b', 'a', 'x'], wanted: new Set(['a', 'c']) };

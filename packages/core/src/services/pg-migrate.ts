@@ -18,7 +18,7 @@ import { ensureTraefik } from '../docker/traefik';
 import { refreshContainers } from '../docker/watch';
 import { buildContainers } from '../builds/drop';
 import { compose, writeLiveCompose } from '../builds/executors';
-import { createEmpty, dbSize, dropDatabase, listDatabases, pgPing, query } from '../pg';
+import { createEmpty, dbFingerprint, dbSize, dropDatabase, listDatabases, pgPing, query } from '../pg';
 import { runtimeState } from '../state';
 import { audit } from './audit';
 import { onProjectConfigChanged } from './projects';
@@ -28,10 +28,6 @@ import { onProjectConfigChanged } from './projects';
  * to the app's container `bm-<project>-db` (D30) in its own network `bm-<project>`, so stopping or removing the user's
  * stack no longer breaks the branches. The databases of the builds are copied; the source ones are left untouched.
  */
-
-const TABLES_SQL =
-  "SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE c.relkind IN ('r', 'p') AND s.nspname NOT IN ('pg_catalog', 'information_schema') AND s.nspname NOT LIKE 'pg_toast%'";
-const MODULES_SQL = "SELECT CASE WHEN to_regclass('ir_module_module') IS NULL THEN -1 ELSE (SELECT count(*)::int FROM ir_module_module WHERE state = 'installed') END AS n";
 
 const targetNetwork = (cfg: ProjectConfig): string => `bm-${cfg.id}`;
 
@@ -136,14 +132,10 @@ async function copyDatabase(src: ProjectConfig['postgres'], dst: ProjectConfig['
   await createEmpty(dst, db);
   const restore = await sh('pg_restore -U "$POSTGRES_USER" -d "$1" --no-owner --no-acl --exit-on-error -j 4 "$2"; s=$?; rm -f "$2"; exit $s', [db, file]);
   if (restore.exitCode !== 0) throw new BmError('PG_RESTORE', `pg_restore ${db}: ${tail(restore)}`);
-  for (const [what, sql] of [
-    ['таблиц', TABLES_SQL],
-    ['установленных модулей', MODULES_SQL],
-  ] as const) {
-    const [a] = await query<{ n: number }>(src, db, sql);
-    const [b] = await query<{ n: number }>(dst, db, sql);
-    if (a?.n !== b?.n) throw new BmError('PG_VERIFY', `${db}: ${what} ${a?.n} в исходной БД и ${b?.n} в копии`);
-  }
+  const a = await dbFingerprint(src, db);
+  const b = await dbFingerprint(dst, db);
+  if (a.tables !== b.tables) throw new BmError('PG_VERIFY', `${db}: таблиц ${a.tables} в исходной БД и ${b.tables} в копии`);
+  if (a.modules !== b.modules) throw new BmError('PG_VERIFY', `${db}: установленных модулей ${a.modules} в исходной БД и ${b.modules} в копии`);
   jc.log(`${db}: скопирована за ${Math.round((Date.now() - t0) / 1000)} с`);
 }
 

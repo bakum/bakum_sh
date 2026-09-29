@@ -24,7 +24,8 @@ export async function buildContainers(buildId: number): Promise<{ id: string; na
     name: (c.Names[0] ?? '').replace(/^\//, ''),
     labels: c.Labels,
     state: c.State,
-    oneoff: c.Labels['com.docker.compose.oneoff'] === 'True',
+    // Compose one-offs of the steps and `docker run` containers of the Postgres tools (bm.oneoff).
+    oneoff: c.Labels['com.docker.compose.oneoff'] === 'True' || c.Labels['bm.oneoff'] === 'true',
   }));
 }
 

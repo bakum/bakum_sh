@@ -80,6 +80,17 @@ export function testArgs(tests: { tags: string; extraArgs: string[] }, modules: 
   return ['--test-enable', '--test-tags', [...new Set(tags)].join(','), ...tests.extraArgs];
 }
 
+/**
+ * `odoo neutralize -d <db>` after restoring a `.dump` (spec 8.4). Like `odoo db` (D38), called by its path: the
+ * subcommand parses the server options after it, the password reaches libpq as PGPASSWORD.
+ */
+export function neutralizeCommand(cfg: ProjectConfig, db: string): { cmd: string[]; env: Record<string, string> } {
+  return {
+    cmd: ['/usr/bin/odoo', 'neutralize', ...serverBaseArgs(cfg), '-d', db],
+    env: cfg.postgres.password ? { PGPASSWORD: cfg.postgres.password } : {},
+  };
+}
+
 export interface OneOffResult {
   exitCode: number;
   summary: OdooLogSummary;

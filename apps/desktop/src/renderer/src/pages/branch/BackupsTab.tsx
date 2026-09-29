@@ -16,7 +16,7 @@ export function BackupsTab({ branch }: { branch: BranchView }) {
   const doImport = async (path: string) => {
     const r = await window.bm.desktop.confirm({
       message: 'Импортировать бэкап прода?',
-      detail: `${path}\n\nБудет собрано новое зеркало прода: восстановление, нейтрализация, postRestore SQL, обновление модулей. Текущее зеркало продолжит работать до успешного завершения. Ветки Development не затрагиваются.`,
+      detail: `${path}\n\nБудет собрано новое зеркало прода: восстановление, нейтрализация, postRestore SQL, обновление модулей. Текущее зеркало продолжит работать до успешного завершения. Ветки Development не затрагиваются.${/\.dump$/i.test(path) ? '\n\nВ .dump нет filestore: вложения и картинки прода в сборке не откроются.' : ''}`,
       buttons: ['Импортировать', 'Отмена'],
     });
     if (r === 0) imp.mutate({ projectId: branch.projectId, path });
@@ -47,7 +47,7 @@ export function BackupsTab({ branch }: { branch: BranchView }) {
                 variant="default"
                 leftSection={<IconFileZip size={14} />}
                 onClick={async () => {
-                  const p = await window.bm.desktop.selectFile({ title: 'Бэкап прода (.zip)', extensions: ['zip'] });
+                  const p = await window.bm.desktop.selectFile({ title: 'Бэкап прода (.zip или .dump)', extensions: ['zip', 'dump'] });
                   if (p) await doImport(p);
                 }}
               >
@@ -55,7 +55,8 @@ export function BackupsTab({ branch }: { branch: BranchView }) {
               </Button>
             </Group>
             <Text size="xs" c="dimmed">
-              Файл монтируется в одноразовый контейнер только для чтения и не копируется. Можно перетащить .zip в эту область.
+              Файл монтируется в одноразовый контейнер только для чтения и не копируется. Можно перетащить файл в эту область. Бэкап Odoo
+              .zip содержит БД и filestore; дамп .dump (pg_dump -Fc) — только БД, вложения прода в сборке не откроются.
             </Text>
             {!list.data?.length ? (
               <Alert color="gray">В папке бэкапов нет файлов по шаблону. Проверьте Settings → Данные (Production).</Alert>

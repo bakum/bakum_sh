@@ -119,6 +119,17 @@ export async function dropDatabase(cfg: PgCfg, db: string): Promise<void> {
   });
 }
 
+const TABLES_SQL =
+  "SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE c.relkind IN ('r', 'p') AND s.nspname NOT IN ('pg_catalog', 'information_schema') AND s.nspname NOT LIKE 'pg_toast%'";
+const MODULES_SQL = "SELECT CASE WHEN to_regclass('ir_module_module') IS NULL THEN -1 ELSE (SELECT count(*)::int FROM ir_module_module WHERE state = 'installed') END AS n";
+
+/** Tables and installed Odoo modules (-1 — not an Odoo database): compares a database copy with its source. */
+export async function dbFingerprint(cfg: PgCfg, db: string): Promise<{ tables: number; modules: number }> {
+  const [t] = await query<{ n: number }>(cfg, db, TABLES_SQL);
+  const [m] = await query<{ n: number }>(cfg, db, MODULES_SQL);
+  return { tables: t?.n ?? 0, modules: m?.n ?? -1 };
+}
+
 export async function query<T extends pg.QueryResultRow = Record<string, unknown>>(cfg: PgCfg, db: string, sql: string, params: unknown[] = []): Promise<T[]> {
   assertSqlIdent(db);
   return withPg(cfg, db, async (c) => (await c.query<T>(sql, params)).rows);

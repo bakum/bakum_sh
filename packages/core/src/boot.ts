@@ -2,6 +2,7 @@ import type { Ctx } from './context';
 import { JobQueue, setQueue } from './jobs/queue';
 import { fetchExecutor, requestFetch, scheduleFetches, stopFetches } from './services/fetch';
 import { LocalWatcher, setLocalWatcher } from './services/watch-local';
+import { BackupWatcher } from './services/backup-watch';
 import { applyRules } from './services/branches';
 import { deleteBranchExecutor } from './services/branch-delete';
 import { deleteProjectExecutor } from './services/project-delete';
@@ -38,6 +39,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
 
   const watcher = new LocalWatcher(ctx);
   setLocalWatcher(watcher);
+  const backups = new BackupWatcher(ctx);
 
   ctx.rpc.registerTopics({
     'build.log': (p, emit) => subscribeBuildLog(ctx, p.buildId, p.file, emit),
@@ -51,6 +53,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
     failInterruptedBuilds(ctx, stale);
     scheduleFetches(ctx);
     watcher.start();
+    backups.sync();
     publishTray(ctx);
     // First fetch right after start (criterion 3: the sidebar matches odoo.sh after the first fetch).
     requestFetch(ctx);
@@ -65,6 +68,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
     stopFetches();
     stopDockerWatch();
     watcher.stop();
+    backups.stop();
     if (cancel) queue.cancelAll();
     else await queue.drain(3000);
     queue.stop();
@@ -76,6 +80,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
   return {
     onConfigChanged: () => {
       scheduleFetches(ctx);
+      backups.sync();
       for (const e of ctx.store.list()) if (e.config) applyRules(ctx, e.config);
       void ensureTraefik(ctx);
     },

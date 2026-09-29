@@ -143,6 +143,15 @@ export function matchInstalled(installed: Iterable<string>, patterns: string[]):
   return [...installed].filter((n) => res.some((r) => r.test(n))).sort();
 }
 
+/**
+ * `updateModules: version-bumped` (spec 8.7, as on odoo.sh): of the changed modules, those whose manifest `version`
+ * differs between the database's commit and the build commit. `before: undefined` — the module is new: kept, it may
+ * need `-i`. Manifests are compared by their `version` only.
+ */
+export function bumpedModules(mods: { name: string; before: string | null | undefined; after: string | null }[]): string[] {
+  return mods.filter((m) => m.before === undefined || manifestVersion(m.before) !== manifestVersion(m.after)).map((m) => m.name);
+}
+
 /** `version` from a manifest source (for updateModules: version-bumped). */
 export function manifestVersion(src: string | null): string | null {
   if (!src) return null;

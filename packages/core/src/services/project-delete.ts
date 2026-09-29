@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { and, eq, inArray, like, ne } from 'drizzle-orm';
+import { and, eq, inArray, like, ne, or } from 'drizzle-orm';
 import { BmError, isLegacyProject, type ProjectConfig, type ProjectDeletePreview } from '@bm/shared';
 import { buildLogsDir, type Ctx } from '../context';
 import { auditLog, branches, builds, jobs, kv, projects, snapshots, type JobRow } from '../db/schema';
@@ -39,7 +39,7 @@ const kvKeys = (ctx: Ctx, id: string) =>
   ctx.db
     .select({ key: kv.key })
     .from(kv)
-    .where(like(kv.key, `autoadd-skip:${id}:%`))
+    .where(or(like(kv.key, `autoadd-skip:${id}:%`), eq(kv.key, `backup-seen:${id}`)))
     .all();
 
 /** Everything the project owns (spec 8.1 «Удаление проекта», full cleanup D34). The user's repository is never touched. */
@@ -165,7 +165,7 @@ export async function deleteProjectExecutor(ctx: Ctx, job: JobRow, jc: JobContex
   ctx.db.delete(projects).where(eq(projects.id, cfg.id)).run();
   ctx.db.delete(jobs).where(and(eq(jobs.projectId, cfg.id), ne(jobs.id, job.id))).run();
   ctx.db.delete(auditLog).where(eq(auditLog.projectId, cfg.id)).run();
-  ctx.db.delete(kv).where(like(kv.key, `autoadd-skip:${cfg.id}:%`)).run();
+  ctx.db.delete(kv).where(or(like(kv.key, `autoadd-skip:${cfg.id}:%`), eq(kv.key, `backup-seen:${cfg.id}`))).run();
   jc.log(`rm ${toPosix(settingsFile)}`);
   ctx.store.deleteProject(cfg.id);
   invalidateGitCache(cfg.id);

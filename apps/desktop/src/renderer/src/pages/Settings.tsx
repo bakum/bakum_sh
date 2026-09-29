@@ -18,10 +18,24 @@ function stageFields(stage: keyof typeof STAGE_NAMES): FieldDef[] {
   return [
     { path: p('database'), label: 'База данных', type: 'text', inherit: inh, description: stage === 'production' ? 'backup' : 'fresh | copy:production | copy:<ветка>' },
     { path: p('onNewCommit'), label: 'Новый коммит', type: 'select', options: ['none', 'update', 'new'], inherit: inh },
-    { path: p('updateModules'), label: 'Обновлять модули (-u)', type: 'select', options: ['changed', 'all'], inherit: inh },
+    {
+      path: p('updateModules'),
+      label: 'Обновлять модули (-u)',
+      type: 'select',
+      options: ['changed', 'version-bumped', 'all'],
+      inherit: inh,
+      description: 'version-bumped — только модули с новой версией в манифесте (как odoo.sh)',
+    },
     { path: p('install'), label: 'Установка для fresh', type: 'select', options: ['my', 'roots', 'full'], inherit: inh },
     { path: p('withDemo'), label: 'Демо-данные (fresh)', type: 'switch' },
-    { path: p('cloneMethod'), label: 'Копирование БД', type: 'select', options: ['template'], inherit: inh, description: 'dump — этап 2' },
+    {
+      path: p('cloneMethod'),
+      label: 'Копирование БД',
+      type: 'select',
+      options: ['template', 'dump'],
+      inherit: inh,
+      description: 'template — быстро, источник останавливается на время копии; dump — pg_dump без остановки, медленнее',
+    },
     { path: p('buildOnAdd'), label: 'Собирать при добавлении ветки', type: 'switch' },
     { path: p('protected'), label: 'Защита от удаления', type: 'switch' },
     { path: p('onForcePush'), label: 'Force-push', type: 'select', options: ['pause', 'new'], inherit: inh },
@@ -134,9 +148,14 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
       {
         fields: [
           { path: ['production', 'backups', 'dir'], label: 'Папка бэкапов прода', type: 'text', nullable: true },
-          { path: ['production', 'backups', 'pattern'], label: 'Шаблон имени', type: 'text' },
+          { path: ['production', 'backups', 'pattern'], label: 'Шаблон имени', type: 'text', description: 'бэкап Odoo *.zip или дамп pg_dump -Fc *.dump (без filestore)' },
           { path: ['production', 'backups', 'pick'], label: 'Выбор файла', type: 'select', options: ['latest', 'manual'] },
-          { path: ['production', 'backups', 'autoImport'], label: 'Автоимпорт нового бэкапа', type: 'switch', stage: 'этап 2' },
+          {
+            path: ['production', 'backups', 'autoImport'],
+            label: 'Автоимпорт нового бэкапа',
+            type: 'switch',
+            description: 'новый файл в папке сразу собирается в зеркало прода; уведомление о новом бэкапе приходит всегда',
+          },
           { path: ['production', 'postRestore', 'sql'], label: 'SQL после восстановления', type: 'tags' },
           { path: ['production', 'postRestore', 'verifySql'], label: 'Проверка (должна вернуть 0)', type: 'textarea', nullable: true },
           { path: ['connect', 'adminPassword'], label: 'Пароль admin в копиях БД', type: 'text', nullable: true },

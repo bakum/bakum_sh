@@ -100,7 +100,9 @@ export function requestBuild(ctx: Ctx, branchId: number, req: BuildRequest): num
           `Не найден бэкап прода: папка ${cfg.production.backups.dir ?? '(не задана)'}, шаблон ${cfg.production.backups.pattern}. Положите файл .zip в папку или выберите его во вкладке Backups.`,
         );
       }
-      if (!/\.zip$/i.test(file)) throw new BmError('STAGE2', 'Восстановление из .dump появится на этапе 2. Используйте бэкап Odoo в формате .zip.');
+      if (!/\.(zip|dump)$/i.test(file)) {
+        throw new BmError('BAD_BACKUP', `Файл ${path.basename(file)} не подходит: нужен бэкап Odoo (.zip) или дамп pg_dump -Fc с расширением .dump.`);
+      }
       if (!fs.existsSync(file)) throw new BmError('NO_BACKUP', `Файл бэкапа не найден: ${file}`);
       dbSource = `backup:${path.basename(file)}`;
     } else {

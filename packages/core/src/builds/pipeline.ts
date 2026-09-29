@@ -17,8 +17,9 @@ import * as pg from '../pg';
 import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
 import { assertSqlIdent } from '../config/templates';
-import { changedModules, matchInstalled, modulesFromTree, parseModuleList, selectTestModules, splitInstallUpdate, type ModuleInfo } from '../modules';
-import { assertOdooOk, dbSubcommand, demoArgs, runOdooOneOff, serverBaseArgs, testArgs, testsFailed, type OneOffResult } from './odoo-cli';
+import { bumpedModules, changedModules, matchInstalled, modulesFromTree, parseModuleList, selectTestModules, splitInstallUpdate, type ModuleInfo } from '../modules';
+import { assertOdooOk, dbSubcommand, demoArgs, neutralizeCommand, runOdooOneOff, serverBaseArgs, testArgs, testsFailed, type OneOffResult } from './odoo-cli';
+import { copyDatabaseByDump, restoreDumpFile } from '../docker/pg-tools';
 import { buildContainers, dropBuildResources, markDropped } from './drop';
 import { buildUrl, configHash, liveBuild, testsLogPath } from './view';
 import { branchByName, branchRow } from '../services/branch-rows';
@@ -188,6 +189,41 @@ function copySource(r: Run): BuildRow {
   return live;
 }
 
+/** A production backup made by `pg_dump -Fc` (spec 8.4), as opposed to an Odoo backup `.zip`. */
+export const isDumpBackup = (file: string): boolean => /\.dump$/i.test(file);
+
+async function dropOwnDb(r: Run, db: string): Promise<void> {
+  if (!(await pg.dbExists(r.cfg.postgres, db).catch(() => false))) return;
+  assertOwned(r.cfg, { kind: 'db', name: db }, ownedRegistry(r.ctx, r.cfg.id));
+  r.log(`DROP DATABASE ${db}`);
+  await pg.dropDatabase(r.cfg.postgres, db);
+}
+
+/**
+ * `.dump` of production (spec 8.4): empty database + `pg_restore --no-owner`, then the mandatory `odoo neutralize`.
+ * A dump has no filestore (see stepFilestore).
+ */
+async function restoreDump(r: Run, file: string): Promise<void> {
+  const { cfg, build } = r;
+  // A retry starts over: a half-restored database is not trusted.
+  await dropOwnDb(r, build.dbName);
+  await pg.createEmpty(cfg.postgres, build.dbName);
+  r.log(`pg_restore --no-owner ${path.basename(file)} → ${build.dbName}`);
+  const res = await restoreDumpFile({ cfg, buildId: build.id, file, db: build.dbName, log: r.log, signal: r.jc.signal });
+  const fp = await pg.dbFingerprint(cfg.postgres, build.dbName);
+  if (fp.modules <= 0) {
+    throw new BmError(
+      'RESTORE_FAILED',
+      `После pg_restore в ${build.dbName} нет установленных модулей Odoo (код ${res.exitCode}): файл не является дампом БД Odoo в формате pg_dump -Fc. См. build.log.`,
+    );
+  }
+  if (res.exitCode !== 0) r.log(`[warn] pg_restore завершился с кодом ${res.exitCode}: часть объектов не восстановлена (обычно роли и права сервера прода), подробности выше`);
+  r.log(`восстановлено: таблиц ${fp.tables}, установленных модулей ${fp.modules}`);
+  const { cmd, env } = neutralizeCommand(cfg, build.dbName);
+  const n = await runOdooOneOff({ composeFile: r.composeFile, project: build.composeProject, cmd, env, log: r.log, signal: r.jc.signal });
+  assertOdooOk(n, 'Нейтрализация (odoo neutralize)');
+}
+
 async function stepDatabase(r: Run): Promise<string> {
   const { ctx, cfg, build } = r;
   if (build.kind === 'update') skip('БД живой сборки сохраняется');
@@ -197,21 +233,24 @@ async function stepDatabase(r: Run): Promise<string> {
     const file = (r.job.params.backupPath as string | null) ?? path.join(cfg.production.backups.dir ?? '', build.dbSource.slice(7));
     if (!fs.existsSync(file)) throw new BmError('NO_BACKUP', `Файл бэкапа не найден: ${file}`);
     assertOwned(cfg, { kind: 'db', name: build.dbName }, reg);
-    const inContainer = `/bm-backup/${path.basename(file)}`;
     patchBuild(r, { createdResources: { ...build.createdResources, db: true, filestore: true } });
-    // spec 8.4: `odoo db load -f -n` — restore DB + filestore and neutralize in one Odoo call (no -c before `db`).
-    const { cmd, env } = dbSubcommand(cfg, ['load', '-f', '-n', build.dbName, inContainer]);
-    const res = await runOdooOneOff({
-      composeFile: r.composeFile,
-      project: build.composeProject,
-      cmd,
-      env,
-      volumes: [`${toPosix(file)}:${inContainer}:ro`],
-      log: r.log,
-      signal: r.jc.signal,
-    });
-    assertOdooOk(res, 'Восстановление бэкапа (odoo db load)');
-    if (!(await pg.dbExists(cfg.postgres, build.dbName))) throw new BmError('RESTORE_FAILED', `После odoo db load БД ${build.dbName} не появилась. См. build.log.`);
+    if (isDumpBackup(file)) await restoreDump(r, file);
+    else {
+      const inContainer = `/bm-backup/${path.basename(file)}`;
+      // spec 8.4: `odoo db load -f -n` — restore DB + filestore and neutralize in one Odoo call (no -c before `db`).
+      const { cmd, env } = dbSubcommand(cfg, ['load', '-f', '-n', build.dbName, inContainer]);
+      const res = await runOdooOneOff({
+        composeFile: r.composeFile,
+        project: build.composeProject,
+        cmd,
+        env,
+        volumes: [`${toPosix(file)}:${inContainer}:ro`],
+        log: r.log,
+        signal: r.jc.signal,
+      });
+      assertOdooOk(res, 'Восстановление бэкапа (odoo db load)');
+      if (!(await pg.dbExists(cfg.postgres, build.dbName))) throw new BmError('RESTORE_FAILED', `После odoo db load БД ${build.dbName} не появилась. См. build.log.`);
+    }
     // Mandatory neutralization is part of `load -n`; then postRestore SQL and its verification (spec 8.4).
     for (const sqlFile of cfg.production.postRestore.sql) {
       if (!fs.existsSync(sqlFile)) throw new BmError('NO_SQL', `postRestore.sql: файл ${sqlFile} не найден`);
@@ -237,7 +276,25 @@ async function stepDatabase(r: Run): Promise<string> {
       createdResources: { ...r.build.createdResources, db: true },
     });
     if (await pg.dbExists(cfg.postgres, build.dbName)) return `${build.dbName} уже существует (повтор шага)`;
-    if (r.scope.cloneMethod !== 'template') throw new BmError('STAGE2', 'cloneMethod: dump появится на этапе 2');
+    if (r.scope.cloneMethod === 'dump') {
+      // The source keeps serving: pg_dump reads a consistent snapshot of a live database.
+      const t0 = Date.now();
+      r.log(`pg_dump ${src.dbName} → pg_restore ${build.dbName} (cloneMethod: dump, источник не останавливается)`);
+      await pg.createEmpty(cfg.postgres, build.dbName);
+      try {
+        await copyDatabaseByDump({ cfg, buildId: build.id, src: src.dbName, dst: build.dbName, log: r.log, signal: r.jc.signal });
+        const a = await pg.dbFingerprint(cfg.postgres, src.dbName);
+        const b = await pg.dbFingerprint(cfg.postgres, build.dbName);
+        if (a.tables !== b.tables || a.modules !== b.modules) {
+          throw new BmError('PG_VERIFY', `Копия ${build.dbName} не совпадает с ${src.dbName}: таблиц ${b.tables} из ${a.tables}, модулей ${b.modules} из ${a.modules}`);
+        }
+      } catch (err) {
+        // A half-restored database must not pass for a finished copy when the step is retried.
+        await dropOwnDb(r, build.dbName);
+        throw err;
+      }
+      return `копия ${src.dbName} (сборка #${src.number}) через pg_dump за ${Math.round((Date.now() - t0) / 1000)} с`;
+    }
     // The source Odoo is stopped for the copy (connections block CREATE DATABASE … TEMPLATE).
     const srcContainer = (await buildContainers(src.id)).find((c) => !c.oneoff && c.state === 'running');
     if (srcContainer) {
@@ -296,8 +353,13 @@ async function copyTree(src: string, dst: string, mode: 'hardlink' | 'copy', log
 async function stepFilestore(r: Run): Promise<string> {
   const { cfg, build } = r;
   if (build.kind === 'update') skip('filestore живой сборки сохраняется');
-  if (build.dbSource.startsWith('backup:')) skip('восстановлен вместе с БД (odoo db load)');
   const dst = path.join(cfg.runtime.filestore.hostDir, build.dbName);
+  if (build.dbSource.startsWith('backup:')) {
+    if (!isDumpBackup(build.dbSource)) skip('восстановлен вместе с БД (odoo db load)');
+    await fs.promises.mkdir(dst, { recursive: true });
+    r.log('[warn] в .dump нет filestore: вложения и картинки прода в этой сборке не откроются (нужен бэкап .zip)');
+    return 'в .dump нет filestore — пустой каталог';
+  }
   patchBuild(r, { createdResources: { ...r.build.createdResources, filestore: true } });
   if (build.dbSource === 'fresh') {
     await fs.promises.mkdir(dst, { recursive: true });
@@ -407,6 +469,8 @@ function dbBaseCommit(r: Run): string | null {
 
 interface ModuleDiff {
   modules: string[];
+  /** Directories of the changed modules (repo-relative). */
+  dirs: Map<string, string>;
   removed: string[];
   files: number;
   /** `base` is not in the repository: `modules` are all modules of the build commit. */
@@ -419,12 +483,28 @@ async function modulesChangedSince(r: Run, base: string): Promise<ModuleDiff> {
   const from = src(r);
   const toMods = await treeModules(r, sha);
   // The source commit may be missing (e.g. unpushed commits of the user's folder, then back to GitHub).
-  if (!(await git.revParse(from.repo, base))) return { modules: toMods.map((m) => m.name), removed: [], files: 0, unknownBase: true };
+  if (!(await git.revParse(from.repo, base))) return { modules: toMods.map((m) => m.name), dirs: new Map(), removed: [], files: 0, unknownBase: true };
   const extra = from.kind === 'folder' ? await git.uncommittedFiles(from.dir) : [];
   const files = [...new Set([...(base === sha ? [] : await git.diffNames(from.repo, base, sha)), ...extra])];
-  if (!files.length) return { modules: [], removed: [], files: 0 };
+  if (!files.length) return { modules: [], dirs: new Map(), removed: [], files: 0 };
   const ch = changedModules(files, toMods, await treeModules(r, base), r.cfg.repo.moduleRoots);
-  return { modules: ch.changed.map((m) => m.name), removed: ch.removed.map((m) => m.name), files: files.length };
+  return { modules: ch.changed.map((m) => m.name), dirs: new Map(ch.changed.map((m) => [m.name, m.dir])), removed: ch.removed.map((m) => m.name), files: files.length };
+}
+
+/** `version-bumped`: changed modules whose manifest version differs from the database's commit (spec 8.7). */
+async function versionBumped(r: Run, base: string, d: ModuleDiff): Promise<string[]> {
+  const from = src(r);
+  const sha = r.build.commitSha!;
+  const mods = await Promise.all(
+    d.modules.map(async (name) => {
+      const file = `${d.dirs.get(name)}/__manifest__.py`;
+      const before = (await git.showFile(from.repo, base, file)) ?? undefined;
+      // The user's folder may hold an uncommitted manifest edit: it is part of the build (D33).
+      const after = from.kind === 'folder' ? await fs.promises.readFile(path.join(from.dir, file), 'utf8').catch(() => null) : await git.showFile(from.repo, sha, file);
+      return { name, before, after };
+    }),
+  );
+  return bumpedModules(mods);
 }
 
 /** Where a branch forked off Production: the base of `tests.mode: changed` for a fresh database. */
@@ -541,7 +621,7 @@ async function stepModules(r: Run): Promise<string> {
     update = s.update;
     install = s.install;
   } else {
-    // changed / version-bumped (stage 2: treated as changed): diff from the commit the database comes from (spec 8.7).
+    // changed / version-bumped: diff from the commit the database comes from (spec 8.7).
     const base = dbBaseCommit(r);
     const d = base ? await modulesChangedSince(r, base) : null;
     if (!base || !d) {
@@ -553,7 +633,13 @@ async function stepModules(r: Run): Promise<string> {
       r.log(`коммит-источник ${base.slice(0, 7)} не найден — обновляются все установленные модули репозитория (${update.length})`);
     } else if (d.files) {
       for (const m of d.removed) r.log(`[warn] модуль ${m} удалён из репозитория — в БД не удаляется`);
-      const s = splitInstallUpdate(d.modules, installed, wanted);
+      let names = d.modules;
+      if (mode === 'version-bumped') {
+        names = await versionBumped(r, base, d);
+        const same = d.modules.filter((m) => !names.includes(m));
+        if (same.length) r.log(`version-bumped: версия в манифесте не изменилась — без -u: ${same.join(', ')}`);
+      }
+      const s = splitInstallUpdate(names, installed, wanted);
       update = s.update;
       install = s.install;
       if (s.none.length) r.log(`не установлены и не в списке «моих»: ${s.none.join(', ')}`);
