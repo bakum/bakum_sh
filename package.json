@@ -1,7 +1,7 @@
 {
   "name": "odoo-branch-manager",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Odoo Branch Manager: local odoo.sh — per-branch Odoo builds on Docker Desktop",
   "packageManager": "pnpm@10.34.5",
   "engines": {
