@@ -226,7 +226,7 @@ export interface DetectResult {
 /** demz — the DEMZ project; generic — an existing Odoo in Docker; odoo — the app runs Odoo and Postgres itself. */
 export type PresetId = 'demz' | 'generic' | 'odoo';
 
-export const ODOO_VERSIONS = ['19.0', '18.0', '17.0'] as const;
+export const ODOO_VERSIONS = ['19.0', '18.0', '17.0', '16.0'] as const;
 
 /** Access check of a remote repository (`git ls-remote`), docs/decisions.md D31. */
 export interface RepoProbe {

@@ -103,7 +103,8 @@ function fillPassword(doc: YAML.Document): void {
   if (pw && pw !== PASSWORD_MASK) return;
   const key = String(doc.getIn(['repo', 'mirrorDir']) ?? '');
   if (doc.getIn(['postgres', 'mode']) === 'managed') {
-    doc.setIn(['postgres', 'password'], detectedPassword(key) || crypto.randomBytes(18).toString('base64url'));
+    // Hex: the official Odoo entrypoint passes the password unquoted to wait-for-psql.py, a leading '-' breaks it.
+    doc.setIn(['postgres', 'password'], detectedPassword(key) || crypto.randomBytes(18).toString('hex'));
     return;
   }
   doc.setIn(['postgres', 'password'], detectedPassword(key) || lastDetectedPassword() || '');

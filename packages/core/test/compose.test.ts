@@ -72,5 +72,7 @@ describe('generateCompose', () => {
       'compose', '-p', 'bm-demz-crm', '-f', 'C:/x/compose.yml', 'run', '--rm', '--no-deps', '-T',
       '-l', 'traefik.enable=false', '-l', 'bm.oneoff=true', '-v', 'E:/b.zip:/bm-backup/b.zip:ro', 'odoo', 'odoo', '--version',
     ]);
+    // Variables go by name only: compose reads the values from its own environment.
+    expect(oneOffArgs('C:/x/compose.yml', 'p', [], ['odoo'], ['PGPASSWORD']).slice(-4)).toEqual(['-e', 'PGPASSWORD', 'odoo', 'odoo']);
   });
 });

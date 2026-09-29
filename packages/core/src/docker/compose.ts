@@ -112,8 +112,11 @@ export function generateCompose(i: ComposeInput): string {
   );
 }
 
-/** Arguments for the one-off Odoo CLI runs of the build steps (`docker compose run --rm`). */
-export function oneOffArgs(composeFile: string, project: string, extraVolumes: string[], cmd: string[]): string[] {
+/**
+ * Arguments for the one-off Odoo CLI runs of the build steps (`docker compose run --rm`). `envNames` are passed as
+ * `-e NAME` without a value: compose takes it from the docker CLI environment, so secrets stay off the command line.
+ */
+export function oneOffArgs(composeFile: string, project: string, extraVolumes: string[], cmd: string[], envNames: string[] = []): string[] {
   return [
     'compose',
     '-p',
@@ -130,6 +133,7 @@ export function oneOffArgs(composeFile: string, project: string, extraVolumes: s
     '-l',
     'bm.oneoff=true',
     ...extraVolumes.flatMap((v) => ['-v', v]),
+    ...envNames.flatMap((n) => ['-e', n]),
     ODOO_SERVICE,
     ...cmd,
   ];

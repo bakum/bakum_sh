@@ -55,6 +55,12 @@ describe('«Odoo в Docker» preset (D32)', () => {
     expect(cfg.runtime.mounts).toEqual([{ host: 'D:/odoo/enterprise', container: '/mnt/enterprise', readOnly: true }]);
     expect(cfg.runtime.command.find((a) => a.startsWith('--addons-path='))).toMatch(/^--addons-path=\/mnt\/enterprise,/);
   });
+
+  it('runs the official image of the chosen series, 16.0 included', () => {
+    const cfg = projectConfigSchema.parse(odooPreset({ ...inputs, odooVersion: '16.0' }));
+    expect(cfg.runtime.image).toBe('odoo:16.0');
+    expect(cfg.runtime.odooVersion).toBe('16.0');
+  });
 });
 
 describe('productionFromBackup', () => {
@@ -106,5 +112,6 @@ describe('detectSeries', () => {
     expect(detectSeries([...manifests, null], null)).toBe('17.0');
     expect(detectSeries([], '18.0')).toBe('18.0');
     expect(detectSeries([], 'main')).toBeNull();
+    expect(detectSeries(["{'version': '16.0.1.0.0'}", "{'version': '16.0.2.1.0'}"], 'main')).toBe('16.0');
   });
 });

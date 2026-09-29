@@ -29,7 +29,7 @@ export interface RunResult {
  */
 export async function dockerCli(
   args: string[],
-  opts: { cwd?: string; onLine?: (line: string) => void; timeoutMs?: number; signal?: AbortSignal; input?: string } = {},
+  opts: { cwd?: string; onLine?: (line: string) => void; timeoutMs?: number; signal?: AbortSignal; input?: string; env?: Record<string, string> } = {},
 ): Promise<RunResult> {
   const sub = execa('docker', args, {
     cwd: opts.cwd,
@@ -39,7 +39,7 @@ export async function dockerCli(
     cancelSignal: opts.signal,
     windowsHide: true,
     input: opts.input,
-    env: { COMPOSE_ANSI: 'never', DOCKER_CLI_HINTS: 'false', MSYS_NO_PATHCONV: '1' },
+    env: { ...opts.env, COMPOSE_ANSI: 'never', DOCKER_CLI_HINTS: 'false', MSYS_NO_PATHCONV: '1' },
   });
   if (opts.onLine) {
     let buf = '';

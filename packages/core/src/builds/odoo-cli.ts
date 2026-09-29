@@ -26,6 +26,22 @@ export function serverBaseArgs(cfg: ProjectConfig): string[] {
   return out;
 }
 
+/** Major Odoo version of the project (`runtime.odooVersion`), null when it is not a number (D38). */
+export function odooMajor(cfg: ProjectConfig): number | null {
+  const m = /^(\d+)/.exec(cfg.runtime.odooVersion.trim());
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Demo data options for the first `-i` into a fresh database (D38): Odoo 19 loads demo only with `--with-demo`,
+ * Odoo 16–18 load it by default and have no `--with-demo`. An unknown version is treated as 19.
+ */
+export function demoArgs(cfg: ProjectConfig, withDemo: boolean): string[] {
+  const major = odooMajor(cfg);
+  if (major === null || major >= 19) return withDemo ? ['--with-demo'] : [];
+  return withDemo ? [] : ['--without-demo=all'];
+}
+
 /**
  * Options for `odoo db …` / `odoo neutralize`: Odoo 19 must not get `-c` before the subcommand, the config comes
  * from ODOO_RC (/etc/odoo/odoo.conf). Connection and addons options of the server command are passed after it.
@@ -37,6 +53,18 @@ export function dbSubcommandOptions(cfg: ProjectConfig): string[] {
     else if (a.startsWith('--db_user=')) out.push('-r', a.slice('--db_user='.length));
   }
   return out;
+}
+
+/**
+ * One-off `odoo db <sub…>` (D38). The executable is called by its path: the official entrypoint appends `--db_host …
+ * --db_password …` to a command starting with `odoo` (Odoo 16–18 always, 19 without PG* variables), i.e. after the
+ * subcommand's own arguments, where `odoo db` rejects them. The password reaches libpq as PGPASSWORD.
+ */
+export function dbSubcommand(cfg: ProjectConfig, sub: string[]): { cmd: string[]; env: Record<string, string> } {
+  return {
+    cmd: ['/usr/bin/odoo', 'db', ...dbSubcommandOptions(cfg), ...sub],
+    env: cfg.postgres.password ? { PGPASSWORD: cfg.postgres.password } : {},
+  };
 }
 
 export interface OneOffResult {
@@ -51,13 +79,16 @@ export async function runOdooOneOff(opts: {
   project: string;
   cmd: string[];
   volumes?: string[];
+  /** Variables for the container, passed by name from the docker CLI environment (values are not logged). */
+  env?: Record<string, string>;
   log: (l: string) => void;
   signal?: AbortSignal;
   timeoutMs?: number;
 }): Promise<OneOffResult> {
   const lines: string[] = [];
   opts.log(`$ docker ${['compose', 'run', ...opts.cmd].join(' ')}`);
-  const r = await dockerCli(oneOffArgs(opts.composeFile, opts.project, opts.volumes ?? [], opts.cmd), {
+  const r = await dockerCli(oneOffArgs(opts.composeFile, opts.project, opts.volumes ?? [], opts.cmd, Object.keys(opts.env ?? {})), {
+    env: opts.env,
     onLine: (l) => {
       lines.push(l);
       if (lines.length > 20000) lines.splice(0, 5000);

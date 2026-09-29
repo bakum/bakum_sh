@@ -166,6 +166,11 @@ export async function detectProject(
 
   secrets.set(mirror.toLowerCase(), { password: pgPassword });
 
+  // Odoo series: manifest versions, else the production branch name, else ODOO_VERSION of the detected container.
+  const containerVersion = odooContainer?.Config.Env?.find((e) => e.startsWith('ODOO_VERSION='))?.split('=')[1] || null;
+  const manifests = treeRef ? await Promise.all(modules.slice(0, 40).map((m) => git.showFile(mirror, treeRef, `${m.dir}/__manifest__.py`))) : [];
+  const seriesFound = detectSeries(manifests, productionCandidate) ?? (containerVersion?.match(/^\d+\.0/)?.[0] ?? null);
+
   const repoName = repoNameFromUrl(remoteUrl);
   const isDemz = isDemzUrl(remoteUrl, github);
   const baseId = isDemz ? 'demz' : repoName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 20) || 'project';
@@ -200,14 +205,16 @@ export async function detectProject(
     addonsDirs,
     debugpy: !!command?.some((a) => a === 'debugpy'),
     productionBranch: productionCandidate ?? currentBranch ?? 'main',
-    odooVersion: odooContainer?.Config.Env?.find((e) => e.startsWith('ODOO_VERSION='))?.split('=')[1] ?? '19.0',
+    // Build commands depend on the version (demo flags, D38): the stack's image, else the modules' series.
+    odooVersion: containerVersion ?? seriesFound ?? '19.0',
   };
 
-  const manifests = treeRef ? await Promise.all(modules.slice(0, 40).map((m) => git.showFile(mirror, treeRef, `${m.dir}/__manifest__.py`))) : [];
-  const seriesFound = detectSeries(manifests, productionCandidate) ?? (inputs.odooVersion.match(/^\d+\.0/)?.[0] ?? null);
-  const odooVersion = opts.odoo?.version ?? (seriesFound && (ODOO_VERSIONS as readonly string[]).includes(seriesFound) ? seriesFound : ODOO_VERSIONS[0]);
-  if (seriesFound && !(ODOO_VERSIONS as readonly string[]).includes(seriesFound)) {
+  const supported = !!seriesFound && (ODOO_VERSIONS as readonly string[]).includes(seriesFound);
+  const odooVersion = opts.odoo?.version ?? (supported ? seriesFound! : ODOO_VERSIONS[0]);
+  if (seriesFound && !supported) {
     warnings.push(`Модули репозитория рассчитаны на Odoo ${seriesFound}; пресет «Odoo в Docker» поддерживает ${ODOO_VERSIONS.join(', ')}.`);
+  } else if (seriesFound && seriesFound !== odooVersion) {
+    warnings.push(`Модули репозитория рассчитаны на Odoo ${seriesFound}, а выбрана Odoo ${odooVersion}.`);
   }
   let enterpriseDir: string | null = null;
   if (opts.odoo?.enterprisePath) {

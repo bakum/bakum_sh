@@ -18,7 +18,7 @@ import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
 import { assertSqlIdent } from '../config/templates';
 import { changedModules, matchInstalled, modulesFromTree, parseModuleList, splitInstallUpdate, type ModuleInfo } from '../modules';
-import { assertOdooOk, dbSubcommandOptions, runOdooOneOff, serverBaseArgs } from './odoo-cli';
+import { assertOdooOk, dbSubcommand, demoArgs, runOdooOneOff, serverBaseArgs } from './odoo-cli';
 import { buildContainers, dropBuildResources, markDropped } from './drop';
 import { buildUrl, configHash, liveBuild } from './view';
 import { branchByName, branchRow } from '../services/branch-rows';
@@ -199,11 +199,13 @@ async function stepDatabase(r: Run): Promise<string> {
     assertOwned(cfg, { kind: 'db', name: build.dbName }, reg);
     const inContainer = `/bm-backup/${path.basename(file)}`;
     patchBuild(r, { createdResources: { ...build.createdResources, db: true, filestore: true } });
-    // spec 8.4: `odoo db load -f -n` — restore DB + filestore and neutralize in one Odoo call (Odoo 19: no -c before `db`).
+    // spec 8.4: `odoo db load -f -n` — restore DB + filestore and neutralize in one Odoo call (no -c before `db`).
+    const { cmd, env } = dbSubcommand(cfg, ['load', '-f', '-n', build.dbName, inContainer]);
     const res = await runOdooOneOff({
       composeFile: r.composeFile,
       project: build.composeProject,
-      cmd: ['odoo', 'db', ...dbSubcommandOptions(cfg), 'load', '-f', '-n', build.dbName, inContainer],
+      cmd,
+      env,
       volumes: [`${toPosix(file)}:${inContainer}:ro`],
       log: r.log,
       signal: r.jc.signal,
@@ -422,7 +424,7 @@ async function stepModules(r: Run): Promise<string> {
     // Enterprise addons in the addons path: the database becomes Enterprise only with web_enterprise installed.
     if (cfg.runtime.enterprise && !install.includes('web_enterprise')) install.push('web_enterprise');
     if (!install.length) install = ['base'];
-    await runModules(r, install, [], scope.withDemo ? ['--with-demo'] : []);
+    await runModules(r, install, [], demoArgs(cfg, scope.withDemo));
     const tweaks = await applyTweaks(r);
     return `-i ${install.length} модулей${scope.withDemo ? ' с демо' : ''}; ${tweaks.join(', ')}`;
   }

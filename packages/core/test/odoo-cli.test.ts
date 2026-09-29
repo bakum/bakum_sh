@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { projectConfigSchema } from '@bm/shared';
 import { demzPreset, genericPreset, type PresetInputs } from '../src/config/presets';
-import { dbSubcommandOptions, serverBaseArgs } from '../src/builds/odoo-cli';
+import { dbSubcommand, dbSubcommandOptions, demoArgs, serverBaseArgs } from '../src/builds/odoo-cli';
 
 const inputs: PresetInputs = {
   id: 'demz',
@@ -42,5 +42,26 @@ describe('Odoo CLI arguments', () => {
       '--addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/repositories/demz-odoo,/mnt/repositories/demz-odoo/addons',
     );
     expect(dbSubcommandOptions(cfg)).toEqual(expect.arrayContaining(['-D', '/var/lib/odoo', '--db_host=db', '-r', 'odoo']));
+  });
+
+  it('runs `odoo db` past the official entrypoint, the password only in the environment (D38)', () => {
+    const cfg = projectConfigSchema.parse(genericPreset({ ...inputs, id: 'gen', postgres: { ...inputs.postgres, password: 's3cret' } }));
+    const { cmd, env } = dbSubcommand(cfg, ['load', '-f', '-n', 'db1', '/bm-backup/b.zip']);
+    expect(cmd.slice(0, 2)).toEqual(['/usr/bin/odoo', 'db']);
+    expect(cmd.slice(-5)).toEqual(['load', '-f', '-n', 'db1', '/bm-backup/b.zip']);
+    expect(cmd.join(' ')).not.toContain('s3cret');
+    expect(env).toEqual({ PGPASSWORD: 's3cret' });
+  });
+
+  it('picks demo data options by the Odoo version (D38)', () => {
+    const cfg = (odooVersion: string) => projectConfigSchema.parse(genericPreset({ ...inputs, id: 'gen', odooVersion }));
+    for (const v of ['16.0', '17.0', '18.0']) {
+      expect(demoArgs(cfg(v), true)).toEqual([]);
+      expect(demoArgs(cfg(v), false)).toEqual(['--without-demo=all']);
+    }
+    for (const v of ['19.0', '', 'master']) {
+      expect(demoArgs(cfg(v), true)).toEqual(['--with-demo']);
+      expect(demoArgs(cfg(v), false)).toEqual([]);
+    }
   });
 });
