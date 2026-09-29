@@ -32,7 +32,7 @@ export async function deletePreview(ctx: Ctx, branchId: number) {
 export async function requestDelete(ctx: Ctx, p: { branchId: number; confirmSlug: string; deleteRemote: boolean; forceDirty: boolean }) {
   const b = mustBranch(ctx, p.branchId);
   if (p.confirmSlug !== b.slug) throw new BmError('CONFIRM', `Для удаления введите slug ветки: ${b.slug}`);
-  if (p.deleteRemote) throw new BmError('STAGE2', 'Удаление ветки в origin появится на этапе 2');
+  if (p.deleteRemote) throw new BmError('POSTPONED', 'Удаление ветки в origin отложено (docs/decisions.md D44): удалите её на GitHub.');
   const pv = await deletePreview(ctx, p.branchId);
   if (pv.protected) throw new BmError('PROTECTED', 'Ветка защищена: снимите защиту (protected) в Settings ветки. Production удалить нельзя.');
   if (pv.dirty && !p.forceDirty) throw new BmError('WORKTREE_DIRTY', `В worktree есть незакоммиченные изменения:\n${pv.dirty}\nПодтвердите их потерю отдельно.`);

@@ -1,10 +1,10 @@
 import { Alert, Badge, Group, Text } from '@mantine/core';
 
-/** Placeholder for functions planned for a later stage (they stay visible, disabled). */
-export function Stage2({ what, stage = 'этап 2' }: { what: string; stage?: string }) {
+/** A function that is not there yet (postponed or planned for stage 3): visible, with the reason. */
+export function Placeholder({ what, stage }: { what: string; stage: string }) {
   return (
     <Alert color="gray" variant="light">
-      <Group gap="xs">
+      <Group gap="xs" wrap="nowrap">
         <Badge color="gray" variant="filled" size="sm">
           {stage}
         </Badge>

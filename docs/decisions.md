@@ -207,7 +207,8 @@
 - **Контекст.** Нужна понятная нумерация выпусков и способ по установленной программе узнать, из какого кода она
   собрана.
 - **Решение.** SemVer, единая версия в корневом `package.json`, копии во всех пакетах, проверка
-  `scripts/version.mjs check` (первый шаг `pnpm typecheck`). До 1.0.0 MINOR соответствует этапу ТЗ.
+  `scripts/version.mjs check` (первый шаг `pnpm typecheck`). До 1.0.0 MINOR соответствует этапу ТЗ. (С этапа 2
+  MINOR растёт на каждой вехе: этап 2 — 0.4.0–0.9.x, см. README.)
   `pnpm release <patch|minor|major|X.Y.Z>` меняет версию, переносит `[Unreleased]` в CHANGELOG, делает коммит и
   аннотированный тег `vX.Y.Z` и ничего не пушит. electron-vite встраивает `__BM_VERSION__`, `__BM_COMMIT__`
   (`-dirty` при незакоммиченных правках) и `__BM_BUILD_DATE__`. Core получает `appVersion` вида `0.1.1+abc1234`, а

@@ -1,6 +1,6 @@
 /**
  * Settings schemas (spec section 9). Every level of the settings hierarchy is described here,
- * including fields that only stage 2/3 act upon, so YAML written today stays valid later.
+ * including fields that only stage 3 or postponed features act upon (D43, D44), so YAML written today stays valid later.
  */
 import { z } from 'zod';
 

@@ -28,7 +28,7 @@ import { MonitorTab } from './branch/MonitorTab';
 import { BackupsTab } from './branch/BackupsTab';
 import { ToolsTab } from './branch/ToolsTab';
 import { SettingsTab } from './branch/SettingsTab';
-import { Stage2 } from '../components/Stage2';
+import { Placeholder } from '../components/Placeholder';
 
 const STAGE_COLOR = { production: 'plum', development: 'teal' } as const;
 
@@ -193,7 +193,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
             <LogsTab branch={b} />
           </Tabs.Panel>
           <Tabs.Panel value="mails">
-            <Stage2
+            <Placeholder
               stage="отложено"
               what="Mailpit в сборках отложен. Письма из сборок наружу не уходят: в копиях прода почтовые серверы выключены нейтрализацией, в чистых БД их нет. Не включайте почтовый сервер вручную в сборке с копией прода — письма уйдут настоящим адресатам."
             />

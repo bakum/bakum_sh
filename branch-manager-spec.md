@@ -591,6 +591,10 @@ shell.open {buildId, target: browser|browser-debug|explorer|editor|terminal|bash
 | **2** | тесты и бейджи, Mails (Mailpit), Monitor, Backups (снапшоты, экспорт), Merge (PR через `gh`), Fork с push, Builds и Audit Logs, `version-bumped`, `idleStopHours` / `dropAfterDays`, `.dump`, `autoImport` бэкапов, `cloneMethod: dump`, хуки, `postgres.mode: managed`, `runtime.build` |
 | **3** | пресеты (сохранить / импорт), экспорт / импорт проектов, свой `composeTemplate`, графики ресурсов за период, инсталлятор и автозапуск, горячие клавиши |
 
+Этап 2 выполнен в версиях 0.4.0–0.9.0, проверка — `docs/acceptance.md`. По решению пользователя отложены Mails (D43),
+Merge через `gh` с удалением ветки в origin и хуки (D44); `dropAfterDays` только напоминает, сборку отбрасывает
+пользователь (D45).
+
 ## 13. Критерии приёмки (этап 1)
 
 1. `pnpm install && pnpm build && pnpm start` → окно, мастер первого запуска; «Добавить проект» с папкой

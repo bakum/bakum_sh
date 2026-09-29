@@ -124,7 +124,7 @@ export function subscribeContainerLog(_ctx: Ctx, buildId: number, emit: (d: unkn
   };
 }
 
-/** Subscription `stats`: CPU / RAM of the build container (the Monitor tab itself is stage 2). */
+/** Subscription `stats`: live CPU / RAM of the build container (the Monitor tab reads `monitor.get`, D45). */
 export function subscribeStats(_ctx: Ctx, buildId: number, emit: (d: unknown) => void): () => void {
   let closed = false;
   let stream: NodeJS.ReadableStream | null = null;
