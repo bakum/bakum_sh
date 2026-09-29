@@ -209,7 +209,7 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
       ctx.toMain({ kind: 'openExternal', url: `https://github.com/${cfg.repo.github}/tree/${br?.name ?? ''}` });
       return { ok: true };
     case 'mails':
-      throw new BmError('STAGE2', 'Mails (Mailpit) — этап 2');
+      throw new BmError('POSTPONED', 'Mailpit в сборках отложен (docs/decisions.md D43): письма из сборок наружу не уходят.');
     case 'logs-dir':
       ctx.toMain({ kind: 'openPath', path: ctx.logsDir });
       return { ok: true };

@@ -192,7 +192,10 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
             <LogsTab branch={b} />
           </Tabs.Panel>
           <Tabs.Panel value="mails">
-            <Stage2 what="Mails: Mailpit сборки. Сейчас почтовые серверы в копиях прода выключены нейтрализацией, письма наружу не уходят." />
+            <Stage2
+              stage="отложено"
+              what="Mailpit в сборках отложен. Письма из сборок наружу не уходят: в копиях прода почтовые серверы выключены нейтрализацией, в чистых БД их нет. Не включайте почтовый сервер вручную в сборке с копией прода — письма уйдут настоящим адресатам."
+            />
           </Tabs.Panel>
           <Tabs.Panel value="backups">
             <BackupsTab branch={b} />

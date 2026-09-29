@@ -26,7 +26,8 @@ export interface FieldDef {
   options?: string[];
   description?: string;
   /** Not available yet: shown disabled with the stage badge. */
-  stage?: 'этап 2' | 'этап 3';
+  /** Not acted upon yet: the field is shown disabled with this badge. */
+  stage?: 'этап 2' | 'этап 3' | 'отложено';
   /** Optional field: an empty value removes the key (value comes from the upper level). */
   inherit?: string;
   nullable?: boolean;

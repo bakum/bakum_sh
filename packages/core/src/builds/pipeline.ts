@@ -352,7 +352,7 @@ async function stepFilestore(r: Run): Promise<string> {
   return `${res.files} файлов, ${res.linked ? 'хардлинки' : 'копирование'}, ${Math.round((Date.now() - t0) / 1000)} с`;
 }
 
-/** local-tweaks (spec 8.3 step 5): base URL, admin password, extraSql. Mail server → Mailpit is stage 2. */
+/** local-tweaks (spec 8.3 step 5): base URL, admin password, extraSql. Mail server → Mailpit is postponed (D43). */
 async function applyTweaks(r: Run): Promise<string[]> {
   const { cfg, build, scope } = r;
   const done: string[] = [];

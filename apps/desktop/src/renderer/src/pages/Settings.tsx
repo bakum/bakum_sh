@@ -182,12 +182,13 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
   },
   mails: {
     label: 'Почта',
-    stage: 'этап 2',
+    stage: 'отложено',
     groups: [
       {
-        description: 'Mailpit в сборках — этап 2. Сейчас почтовые серверы копий прода остаются выключенными нейтрализацией.',
+        description:
+          'Mailpit в сборках отложен (docs/decisions.md D43). Письма из сборок наружу не уходят: почтовые серверы копий прода выключены нейтрализацией, в чистых БД их нет, а без сервера Odoo пытается отправить на localhost:25 внутри контейнера и получает ошибку. Не включайте почтовый сервер вручную в сборке с копией прода: письма уйдут настоящим адресатам.',
         fields: [
-          { path: ['stages', 'development', 'mails', 'enabled'], label: 'Mailpit в Development', type: 'switch', stage: 'этап 2' },
+          { path: ['stages', 'development', 'mails', 'enabled'], label: 'Mailpit в Development', type: 'switch', stage: 'отложено' },
         ],
       },
     ],

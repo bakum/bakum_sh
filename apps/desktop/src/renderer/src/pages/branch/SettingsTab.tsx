@@ -12,7 +12,8 @@ interface Editable {
   label: string;
   kind: 'select' | 'text' | 'number' | 'switch' | 'env';
   options?: string[];
-  stage2?: boolean;
+  /** Not acted upon yet: shown read-only with this badge («этап 2», «отложено»). */
+  stage?: string;
 }
 
 const FIELDS: Editable[] = [
@@ -28,11 +29,11 @@ const FIELDS: Editable[] = [
   { path: 'env', label: 'Переменные окружения', kind: 'env' },
   { path: 'protected', label: 'Защита от удаления', kind: 'switch' },
   { path: 'buildOnAdd', label: 'Собирать при добавлении', kind: 'switch' },
-  { path: 'idleStopHours', label: 'Остановка без активности, ч', kind: 'number', stage2: true },
-  { path: 'dropAfterDays', label: 'Отбросить через, дней', kind: 'number', stage2: true },
+  { path: 'idleStopHours', label: 'Остановка без активности, ч', kind: 'number', stage: 'этап 2' },
+  { path: 'dropAfterDays', label: 'Отбросить через, дней', kind: 'number', stage: 'этап 2' },
   { path: 'tests.mode', label: 'Тесты', kind: 'select', options: ['none', 'changed', 'my'] },
   { path: 'tests.failBuild', label: 'Падение тестов роняет сборку', kind: 'switch' },
-  { path: 'mails.enabled', label: 'Mailpit', kind: 'switch', stage2: true },
+  { path: 'mails.enabled', label: 'Mailpit', kind: 'switch', stage: 'отложено' },
 ];
 
 function show(v: unknown): string {
@@ -135,9 +136,9 @@ export function SettingsTab({ branch }: { branch: BranchView }) {
                   <Table.Td pl="md">
                     <Group gap={6}>
                       <Text size="sm">{def.label}</Text>
-                      {def.stage2 && (
+                      {def.stage && (
                         <Badge size="xs" color="gray" variant="light">
-                          этап 2
+                          {def.stage}
                         </Badge>
                       )}
                     </Group>
@@ -163,7 +164,7 @@ export function SettingsTab({ branch }: { branch: BranchView }) {
                   </Table.Td>
                   <Table.Td>
                     <Group gap={2} wrap="nowrap">
-                      {!def.stage2 && (
+                      {!def.stage && (
                         <Tooltip label="Переопределить в ветке">
                           <ActionIcon
                             onClick={() => {
