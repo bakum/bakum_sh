@@ -92,7 +92,7 @@ describe('assistant skill (D52)', () => {
     expect(text).toContain('Production `19.0` и защищённые ветки (`19.0-demz-crm`, `hotfix`)');
     expect(text).toContain('docker exec -it bm-demz-db psql -U odoo -d $DB');
     expect(text).toContain('http://prod.localhost:8080');
-    expect(text).toContain("`ARGS='-c /etc/odoo/odoo.conf --data-dir=/var/lib/odoo'`");
+    expect(text).toContain("`ARGS='-c /etc/odoo/odoo.conf --data-dir=/var/lib/odoo --db_host=db --db_port=5432 --db_user=odoo --db_password='`");
     // docker exec bypasses the image entrypoint: the password comes from the container's PASSWORD, not the text.
     expect(text).toContain("sh -c 'PGPASSWORD=$PASSWORD; export PGPASSWORD; exec odoo");
     expect(text).toContain('`E:/demz-odoo-19/repositories/demz-odoo` — код правим здесь');

@@ -165,12 +165,15 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
       repoMount: i.repoMount,
       mounts: i.mounts,
       filestore: { hostDir: i.filestoreHostDir, containerDir: '/var/lib/odoo/filestore', copy: 'hardlink' },
-      env: { HOST: i.postgres.internalHost },
+      env: {},
       command: [
         'python3', '-Xfrozen_modules=off', '-m', 'debugpy', '--listen', '0.0.0.0:5678',
         '/usr/bin/odoo', '-c', '/etc/odoo/odoo.conf', '--data-dir=/var/lib/odoo',
         // Overrides addons_path of the shared odoo.conf: module folders come from the build's own code (D48).
         `--addons-path=${[...i.stackAddons, '{addonsPath}'].join(',')}`,
+        // debugpy bypasses the image entrypoint, so the connection comes from the postgres settings, not the shared
+        // odoo.conf; the empty --db_password clears the conf's one and libpq takes PGPASSWORD of the container (D54).
+        `--db_host=${i.postgres.internalHost}`, '--db_port=5432', `--db_user=${i.postgres.user}`, '--db_password=',
         '-d', '{db}', '--db-filter=^{db}$', '--proxy-mode',
       ],
       debug: {

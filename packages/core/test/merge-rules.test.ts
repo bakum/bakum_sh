@@ -104,7 +104,7 @@ describe('resolveBranchScope', () => {
     expect(f.database).toMatchObject({ value: 'copy:production', level: 'stage' });
     expect(f.image).toMatchObject({ value: 'demz-odoo-19-odoo', level: 'project' });
     expect(f['localTweaks.baseUrl']).toMatchObject({ value: true, level: 'app' });
-    expect(f.env).toMatchObject({ value: { HOST: 'db' }, level: 'project' });
+    expect(f.env).toMatchObject({ value: {}, level: 'app' });
     expect(r.ruleIndex).toBe(1);
   });
 

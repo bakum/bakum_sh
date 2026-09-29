@@ -42,9 +42,10 @@ const inputs: PresetInputs = {
 describe('Odoo CLI arguments', () => {
   it('derives one-off server options from the DEMZ command (no -d / --db-filter / --proxy-mode)', () => {
     const cfg = projectConfigSchema.parse(demzPreset(inputs));
-    expect(serverBaseArgs(cfg)).toEqual(['-c', '/etc/odoo/odoo.conf', '--data-dir=/var/lib/odoo']);
-    // Odoo 19: no -c before the `db` subcommand; the data dir must still point at the build filestore.
-    expect(dbSubcommandOptions(cfg)).toEqual(['-D', '/var/lib/odoo']);
+    expect(serverBaseArgs(cfg)).toEqual(['-c', '/etc/odoo/odoo.conf', '--data-dir=/var/lib/odoo', '--db_host=db', '--db_port=5432', '--db_user=odoo', '--db_password=']);
+    // Odoo 19: no -c before the `db` subcommand; the data dir must still point at the build filestore. The connection
+    // comes from the postgres settings, the empty password clears the one of the shared odoo.conf (D54).
+    expect(dbSubcommandOptions(cfg)).toEqual(['-D', '/var/lib/odoo', '--db_host=db', '--db_port=5432', '-r', 'odoo', '--db_password=']);
   });
 
   it('passes addons path and connection options for the Generic preset', () => {
@@ -73,9 +74,10 @@ describe('Odoo CLI arguments', () => {
     expect(serverBaseArgs(cfg, codeVars(cfg, dir))).toEqual([
       '-c', '/etc/odoo/odoo.conf', '--data-dir=/var/lib/odoo',
       `--addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/enterprise,${mount}/demzua/ai,${mount}/demzua/new_domain,${mount}/exchange`,
+      '--db_host=db', '--db_port=5432', '--db_user=odoo', '--db_password=',
     ]);
     // Without the build code the option is left out: the stack's odoo.conf applies.
-    expect(serverBaseArgs(cfg)).toEqual(['-c', '/etc/odoo/odoo.conf', '--data-dir=/var/lib/odoo']);
+    expect(serverBaseArgs(cfg)).toEqual(['-c', '/etc/odoo/odoo.conf', '--data-dir=/var/lib/odoo', '--db_host=db', '--db_port=5432', '--db_user=odoo', '--db_password=']);
     fs.rmSync(path.join(dir, 'demzua'), { recursive: true, force: true });
     fs.rmSync(path.join(dir, 'exchange'), { recursive: true, force: true });
     expect(() => addonsPathVar(cfg, dir)).toThrow(/нет модулей Odoo/);

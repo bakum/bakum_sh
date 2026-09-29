@@ -18,14 +18,18 @@ services:
       - /etc/odoo/odoo.conf
       - --data-dir=/var/lib/odoo
       - --addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/repositories/demz-odoo/demzua/perevertum/crm,/mnt/repositories/demz-odoo/exchange
+      - --db_host=db
+      - --db_port=5432
+      - --db_user=odoo
+      - --db_password=
       - -d
       - o19_br_crm_3
       - --db-filter=^o19_br_crm_3$$
       - --proxy-mode
     environment:
-      HOST: db
       USER: odoo
       PASSWORD: pa$$s
+      PGPASSWORD: pa$$s
     volumes:
       - type: bind
         source: E:/demz-odoo-19/repositories

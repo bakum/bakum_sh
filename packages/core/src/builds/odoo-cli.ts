@@ -83,7 +83,7 @@ export function demoArgs(cfg: ProjectConfig, withDemo: boolean): string[] {
 export function dbSubcommandOptions(cfg: ProjectConfig, vars: TemplateVars = {}): string[] {
   const out = [`-D`, dataDirOf(cfg)];
   for (const a of serverBaseArgs(cfg, vars)) {
-    if (a.startsWith('--addons-path=') || a.startsWith('--db_host=') || a.startsWith('--db_port=')) out.push(a);
+    if (a.startsWith('--addons-path=') || a.startsWith('--db_host=') || a.startsWith('--db_port=') || a.startsWith('--db_password=')) out.push(a);
     else if (a.startsWith('--db_user=')) out.push('-r', a.slice('--db_user='.length));
   }
   return out;

@@ -89,9 +89,11 @@ export function generateCompose(i: ComposeInput): string {
   const r = cfg.runtime;
   const router = i.build.composeProject.replace(/[^a-z0-9-]/g, '-');
   const env: Record<string, string> = { ...renderDeep(scope.env, vars) };
-  // spec 9.3: USER / PASSWORD come from the postgres settings (used by the official Odoo entrypoint).
+  // spec 9.3: USER / PASSWORD come from the postgres settings (used by the official Odoo entrypoint). PGPASSWORD is
+  // for libpq when the command bypasses the entrypoint (debugpy, `docker exec`) and the conf has no password (D54).
   if (!('USER' in env)) env.USER = cfg.postgres.user;
   if (!('PASSWORD' in env) && cfg.postgres.password) env.PASSWORD = cfg.postgres.password;
+  if (!('PGPASSWORD' in env) && cfg.postgres.password) env.PGPASSWORD = cfg.postgres.password;
   const volumes = [
     ...r.mounts.map((m) => ({ type: 'bind', source: toPosix(m.host), target: m.container, read_only: m.readOnly || undefined })),
     { type: 'bind', source: toPosix(i.worktree), target: r.repoMount },
