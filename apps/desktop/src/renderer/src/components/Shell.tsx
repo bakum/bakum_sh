@@ -37,6 +37,8 @@ const JOB_LABELS: Record<string, string> = {
   import_backup: 'Импорт бэкапа',
   fetch: 'Fetch',
   apply_config: 'Применить конфигурацию',
+  modules: 'Модули',
+  tests: 'Тесты',
 };
 
 export function Shell() {

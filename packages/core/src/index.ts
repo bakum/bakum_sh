@@ -13,6 +13,7 @@ import { configChangeHooks, onProjectConfigChanged, syncProjectRows } from './se
 import { startRuntime, stopRuntime, handleHook } from './runtime';
 import { bootServices } from './boot';
 import { audit } from './services/audit';
+import { startCliServer } from './cli/server';
 
 export type { CoreHost, PortLike } from './util/port';
 
@@ -61,6 +62,7 @@ export function startCore(host: CoreHost): void {
           toMain: (m) => host.postToMain(m),
           startedAt,
           proxyPort: null,
+          cli: msg.cli,
         };
         setCtx(ctx);
         recordVersion(ctx);
@@ -83,6 +85,7 @@ export function startCore(host: CoreHost): void {
         host.postToMain({ kind: 'ready', pid: process.pid });
         log().info({ pid: process.pid, version: msg.appVersion, dataDir, configDir: msg.configDir }, 'core started');
         void startRuntime(ctx);
+        if (ctx.cli) startCliServer(ctx, ctx.cli.pipe);
         break;
       }
       case 'renderer-port': {

@@ -20,6 +20,7 @@ export type JobType =
   | 'fetch'
   | 'apply_config'
   | 'modules'
+  | 'tests'
   | 'delete_project'
   | 'clone'
   | 'setup_project'

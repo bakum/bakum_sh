@@ -554,6 +554,7 @@ branches.preview {projectId, branch}       какое правило и стад
 builds.list {projectId?, branchId?} | builds.get | builds.rebuild {branchId} | builds.retry {buildId, fromStep} | builds.drop
 builds.action {buildId, action: start|stop|restart|apply-config}
 builds.changedModules {branchId} | builds.writeLaunchJson {buildId}
+builds.testsAction {buildId, modules}      тесты на копии <БД>_test (D53); командная строка bm — docs/decisions.md D53
 agents.skillStatus {projectId, dir?} | agents.installSkill {projectId, dir, overwrite}   skill для ассистентов (D52)
 backups.list {projectId} | backups.import {projectId, path}
 snapshots.list | create | restore | delete | export

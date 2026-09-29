@@ -257,7 +257,7 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
 
 export function registerBuildHandlers(ctx: Ctx): void {
   const q = () => getQueue();
-  const enqueueFor = (type: 'drop' | 'start' | 'stop' | 'restart' | 'apply_config' | 'modules', buildId: number, params: Record<string, unknown> = {}) => {
+  const enqueueFor = (type: 'drop' | 'start' | 'stop' | 'restart' | 'apply_config' | 'modules' | 'tests', buildId: number, params: Record<string, unknown> = {}) => {
     const b = mustBuild(ctx, buildId);
     return { jobId: q().enqueue(type, { projectId: b.projectId, branchId: b.branchId, buildId: b.id }, { number: b.number, ...params }) };
   };
@@ -307,6 +307,10 @@ export function registerBuildHandlers(ctx: Ctx): void {
       return { ok: true as const };
     },
     'builds.modulesAction': (p) => enqueueFor('modules', p.buildId, { install: p.install, update: p.update }),
+    'builds.testsAction': (p) => {
+      if (!mustBuild(ctx, p.buildId).live) throw new BmError('BAD_STATE', 'Тесты запускаются только на живой сборке');
+      return enqueueFor('tests', p.buildId, { modules: p.modules });
+    },
     'backups.list': (p) => listBackups(ctx.store.require(p.projectId)),
     'backups.import': async (p) => {
       const cfg = ctx.store.require(p.projectId);

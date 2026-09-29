@@ -16,6 +16,8 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
   const mods = useBmMutation('builds.modulesAction', { success: 'Задача поставлена в очередь' });
   const [install, setInstall] = useState<string[]>([]);
   const [update, setUpdate] = useState<string[]>([]);
+  const tests = useBmMutation('builds.testsAction', { success: 'Тесты поставлены в очередь' });
+  const [testMods, setTestMods] = useState<string[]>([]);
   if (!live) return <Alert color="gray">У ветки нет живой сборки.</Alert>;
 
   return (
@@ -141,6 +143,23 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
               onClick={() => mods.mutate({ buildId: live.id, install, update }, { onSuccess: () => { setInstall([]); setUpdate([]); } })}
             >
               Выполнить (контейнер будет перезапущен)
+            </Button>
+          </Group>
+          <TagsInput
+            label="Тесты модулей"
+            description="на временной копии базы сборки (как тесты при сборке); итог — в бейдже Test и tests.log"
+            value={testMods}
+            onChange={setTestMods}
+            placeholder="имя_модуля"
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              disabled={!testMods.length}
+              loading={tests.isPending}
+              onClick={() => tests.mutate({ buildId: live.id, modules: testMods })}
+            >
+              Запустить тесты
             </Button>
           </Group>
         </Stack>

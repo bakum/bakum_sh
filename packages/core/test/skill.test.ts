@@ -55,13 +55,21 @@ const input = (cfg: ProjectConfig, extra: Partial<SkillInput> = {}): SkillInput 
   configDir: 'C:/Users/u/AppData/Roaming/Odoo Branch Manager',
   protectedBranches: cfg.repo.protectedBranches,
   appRepository: 'bakum/bakum_sh',
+  cli: { cmd: 'C:/Users/u/AppData/Local/Odoo Branch Manager/bin/bm.cmd', sh: 'C:/Users/u/AppData/Local/Odoo Branch Manager/bin/bm' },
   ...extra,
 });
 
 describe('assistant skill (D52)', () => {
   it('matches the snapshot for DEMZ and the «Odoo in Docker» preset', () => {
     expect(skillFile(input(demz))).toMatchSnapshot();
-    expect(skillFile(input(shop, { proxyPort: 80 }))).toMatchSnapshot();
+    expect(skillFile(input(shop, { proxyPort: 80, cli: null }))).toMatchSnapshot();
+  });
+
+  it('puts the app command line first and keeps docker as the fallback (D53)', () => {
+    const text = renderSkill(input(demz));
+    expect(text).toContain('BM="C:/Users/u/AppData/Local/Odoo Branch Manager/bin/bm"');
+    expect(text.indexOf('## Команды приложения: bm')).toBeLessThan(text.indexOf('## Без приложения: docker'));
+    expect(renderSkill(input(demz, { cli: null }))).not.toContain('bm status');
   });
 
   it('has a frontmatter name and description Claude Code and Cursor accept', () => {

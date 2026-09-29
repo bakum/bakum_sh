@@ -22,6 +22,7 @@ import { drawIcon, trayImage, type TrayState } from './icons';
 import { isAllowedExternal } from './security';
 import { resolveDirs } from './migrate-dirs';
 import { Updater } from './updater';
+import { cliPipeName, installCliLaunchers } from './cli-install';
 
 const PRODUCT = 'Odoo Branch Manager';
 /** BM_PROFILE=dev keeps development runs away from the real configuration and registry. */
@@ -506,8 +507,19 @@ async function boot(): Promise<void> {
       rebuildTrayMenu();
     },
   });
+  // Command line bm (D53): launchers in <localDir>/bin point at this exe; Core serves the pipe.
+  const cliPipe = cliPipeName(profile);
+  const cliBin = path.join(localDir, 'bin');
+  let cli: { pipe: string; binDir: string } | null = null;
+  try {
+    installCliLaunchers({ binDir: cliBin, pipe: cliPipe, exe: process.execPath, cliJs: path.join(__dirname, 'cli.js') });
+    cli = { pipe: cliPipe, binDir: cliBin };
+  } catch (err) {
+    log.error({ err }, 'cli launchers not written');
+  }
   core = new CoreHost({
     configDir,
+    cli,
     // A dev profile never touches the dataDir configured in app.yaml.
     dataDirOverride: process.env.BM_DATA_DIR ?? (profile ? localDir : null),
     // SemVer build metadata: 0.1.1+abc1234 (docs/decisions.md D27).

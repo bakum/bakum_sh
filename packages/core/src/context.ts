@@ -19,6 +19,8 @@ export interface Ctx {
   startedAt: string;
   /** Traefik port actually in use (80 or fallback). */
   proxyPort: number | null;
+  /** The app's command line (D53): named pipe of the CLI server and the folder with bm.cmd / bm; null in tests. */
+  cli: { pipe: string; binDir: string } | null;
 }
 
 let ctx: Ctx | null = null;

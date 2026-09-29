@@ -9,6 +9,8 @@ export interface CoreHostOptions {
   dataDirOverride: string | null;
   appVersion: string;
   resourcesPath: string;
+  /** Command line bm (D53): pipe and launcher folder, null when the launchers could not be written. */
+  cli: { pipe: string; binDir: string } | null;
   log: Logger;
 }
 
@@ -51,6 +53,7 @@ export class CoreHost extends EventEmitter {
         dataDirOverride: this.opts.dataDirOverride,
         appVersion: this.opts.appVersion,
         resourcesPath: this.opts.resourcesPath,
+        cli: this.opts.cli,
       });
       this.connectMainClient();
     });

@@ -21,6 +21,8 @@ export interface SkillInput {
   protectedBranches: string[];
   /** GitHub repository of the app (`updates.repository`), for issues. */
   appRepository: string;
+  /** Launchers of the app's command line `bm` (D53); null — the skill only describes docker commands. */
+  cli: { cmd: string; sh: string } | null;
 }
 
 export const skillName = (projectId: string): string => `branch-manager-${projectId}`;
@@ -138,6 +140,34 @@ export function renderSkill(i: SkillInput): string {
     '- Быстрый путь (включает пользователь): вкладка ветки Editor → «Из моей папки». Сборка монтирует папку как есть:',
     `  Restart показывает правки Python без коммита, для XML и данных нужен ${code('-u')}.`,
     '',
+    ...(i.cli
+      ? [
+          '## Команды приложения: bm (основной способ)',
+          '',
+          'Работают, пока приложение запущено. Каждая команда — задача в очереди приложения: её видно в приложении',
+          '(History, Audit Logs), итог тестов попадает в бейдж Test сборки. Production и защищённые ветки bm не меняет.',
+          '',
+          '```bash',
+          `BM="${i.cli.sh}"   # Git Bash`,
+          '"$BM" status                        # ветки, сборки, URL, базы, итог тестов; --json — для разбора',
+          '"$BM" modules <ветка> -u <модуль>   # -i <модуль> — установить; контейнер на время останавливается',
+          '"$BM" test <ветка> <модуль>         # тесты на временной копии базы сборки',
+          '"$BM" restart <ветка>',
+          '```',
+          '',
+          `PowerShell / cmd: ${code(`& "${i.cli.cmd}" status`)} и так далее.`,
+          '',
+          `- Ветка — имя или slug. Проект — по текущей папке, иначе ${code(`-p ${id}`)}.`,
+          '- Код выхода: 0 — готово; 1 — ошибка или упавшие тесты (текст в stderr); 2 — приложение не запущено: попроси',
+          '  пользователя запустить его или используй docker-команды ниже.',
+          `- Справка — ${code('"$BM" help')}.`,
+          '',
+          '## Без приложения: docker (запасной путь)',
+          '',
+          `Если ${code('bm')} вернул код 2 (приложение не запущено). Прогоны отсюда не попадают в History и бейдж Test.`,
+          '',
+        ]
+      : []),
     '## Найти сборку',
     '',
     '```bash',
@@ -152,8 +182,8 @@ export function renderSkill(i: SkillInput): string {
     '',
     '## Обновить модуль (только Development)',
     '',
-    'Пользователю советуй приложение: вкладка ветки «Инструменты» → «Модули вручную» — задача в очереди приложения,',
-    'база и опции подставляются сами.',
+    'Пользователю советуй приложение: вкладка ветки Tools → «Модули вручную» — задача в очереди приложения,',
+    `база и опции подставляются сами.${i.cli ? ` Ассистенту — ${code('bm modules')}, а команды ниже — только без приложения.` : ''}`,
     '',
     `Ассистент — командой. Опции Odoo сборки (конфиг, ${code('--data-dir')}${usesAddonsPath ? `, ${code('--addons-path')} из кода ветки` : ''}) лежат`,
     `в label ${code('bm.odoo.args')}; ${code('-d')} — только из ${code('bm.db')}, не из ${code('odoo.conf')}.`,
@@ -190,6 +220,9 @@ export function renderSkill(i: SkillInput): string {
     '',
     '## Тесты',
     '',
+    ...(i.cli
+      ? [`Основной способ — ${code('bm test <ветка> <модуль>')}: итог попадает в History и бейдж Test. Без приложения:`, '']
+      : []),
     `${code('$C')}, ${code('$DB')}, ${code('bmodoo')} — как выше; тесты тоже только в Development-сборке.`,
     '',
     '```bash',
@@ -198,7 +231,7 @@ export function renderSkill(i: SkillInput): string {
     '',
     `- ${code('--http-port=8070')}: порт 8069 занят сервером сборки, без этого ${code('HttpCase')} не поднимет свой сервер.`,
     '- Тесты пишут в базу этой сборки; для чистого прогона — Rebuild в приложении.',
-    '- Такой прогон не попадает в History и бейдж Test приложения. Автотесты самого приложения (изменённые модули при',
+    '- Прогон через docker не попадает в History и бейдж Test приложения. Автотесты самого приложения (изменённые модули при',
     `  каждой сборке): вкладка Logs → ${code('tests.log')}, файлы ${code(`${i.logsDir}/builds/${id}/<slug>-<n>.tests.log`)}.`,
     '',
     '## Логи, база, odoo shell',
@@ -217,7 +250,7 @@ export function renderSkill(i: SkillInput): string {
           '## Отладка (debugpy)',
           '',
           `Порт — ${code(`docker port $C ${dbgPort}`)}. Конфигурацию для VS Code / Cursor пишет приложение: вкладка ветки`,
-          `«Инструменты» → Debug → «Добавить в .vscode/launch.json папки кода». Точки останова ставь в файлах ${code(worktrees)}`,
+          `Tools → Debug → «Добавить в .vscode/launch.json папки кода». Точки останова ставь в файлах ${code(worktrees)}`,
           `(при «Из моей папки» — в папке пользователя).`,
           '',
         ]

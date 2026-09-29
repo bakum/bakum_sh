@@ -8,6 +8,7 @@ import { branches } from '../db/schema';
 import { resolveBranchScope } from '../config/effective';
 import { branchProtected } from '../docker/compose';
 import { parseSkill, skillFile, skillName } from '../agents/skill';
+import { cliCommandPaths } from '../cli/commands';
 import * as git from '../git';
 import { isInside, samePath, toPosix } from '../util/paths';
 import { audit } from './audit';
@@ -29,6 +30,7 @@ function content(ctx: Ctx, cfg: ProjectConfig): string {
     configDir: toPosix(ctx.configDir),
     protectedBranches: protectedBranches(ctx, cfg),
     appRepository: ctx.store.app.updates.repository,
+    cli: ctx.cli ? cliCommandPaths(ctx.cli.binDir) : null,
   });
 }
 

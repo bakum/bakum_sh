@@ -248,6 +248,8 @@ export const methods = {
       .object({ buildId: id, install: z.array(z.string().regex(/^[a-z0-9_]+$/)), update: z.array(z.string().regex(/^[a-z0-9_]+$/)) })
       .strict(),
   ),
+  /** Tests of installed modules on a temporary copy <db>_test (D53); the result goes to the build (Test badge). */
+  'builds.testsAction': m<JobRef>()(z.object({ buildId: id, modules: z.array(z.string().regex(/^[a-z0-9_]+$/)).min(1) }).strict()),
 
   'backups.list': m<BackupFile[]>()(z.object({ projectId }).strict()),
   'backups.import': m<JobRef>()(z.object({ projectId, path: z.string().min(1) }).strict()),
@@ -377,7 +379,15 @@ export interface TrayProject {
 
 /** Main → Core. */
 export type MainToCore =
-  | { kind: 'init'; configDir: string; dataDirOverride: string | null; appVersion: string; resourcesPath: string }
+  | {
+      kind: 'init';
+      configDir: string;
+      dataDirOverride: string | null;
+      appVersion: string;
+      resourcesPath: string;
+      /** Command line of the app (D53): the named pipe Core listens on and the folder with bm.cmd / bm written by main. */
+      cli: { pipe: string; binDir: string } | null;
+    }
   | { kind: 'renderer-port' }
   | { kind: 'hook'; argv: string[] }
   | { kind: 'shutdown'; cancelJobs: boolean };

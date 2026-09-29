@@ -98,6 +98,10 @@ external to managed. New projects are created managed (D36).
 `.claude/skills/` (Settings → «Ассистенты», `services/agents.ts`); it tells assistants how to use builds via the
 `bm.*` container labels. When builds, labels or the Tools tab change behaviour, update this text and its snapshot.
 
+**Command line bm (D53).** Core serves a named pipe (`core/src/cli`: `commands.ts` parses and runs, `server.ts`
+listens); main writes `<localDir>/bin/{bm.cmd,bm,cli.js}` on every start (`src/main/cli-install.ts`, client
+`src/main/cli.ts` — Node built-ins only). Commands enqueue jobs and stream their log; protected branches are refused.
+
 **Runtime / reconcile.** `core/src/runtime.ts` fires `onStart` / `onDockerUp` hooks (Traefik, managed Postgres,
 reconcile). `reconcile.ts` compares registry vs Docker labels, worktrees and databases and only reports discrepancies
 and orphans (Status page); nothing is deleted without the user.

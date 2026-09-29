@@ -117,8 +117,27 @@ pnpm test        # unit-тесты Core (Vitest под ELECTRON_RUN_AS_NODE=1)
   добавьте в `runtime.command` после `--data-dir=/var/lib/odoo` строку
   `--addons-path=<папки вне репозитория>,{addonsPath}` (для DEMZ —
   `--addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/enterprise,{addonsPath}`) и нажмите «Применить».
-- **Модули вручную.** Вкладка «Инструменты» → «Модули вручную»: `-i` / `-u` выбранных модулей в БД сборки. Контейнер
+- **Модули вручную.** Вкладка Tools → «Модули вручную»: `-i` / `-u` выбранных модулей в БД сборки. Контейнер
   на это время останавливается.
+
+### Командная строка bm
+
+Пока приложение запущено, им можно управлять из терминала — так работают ассистенты из skill ниже:
+
+```powershell
+& "$env:LOCALAPPDATAOdoo Branch Managerinm.cmd" status          # ветки, сборки, URL, базы, итог тестов (--json)
+& "$env:LOCALAPPDATAOdoo Branch Managerinm.cmd" modules crm -u demz_crm_lead
+& "$env:LOCALAPPDATAOdoo Branch Managerinm.cmd" test crm demz_crm_lead
+& "$env:LOCALAPPDATAOdoo Branch Managerinm.cmd" restart crm
+```
+
+- В Git Bash — `"$LOCALAPPDATA/Odoo Branch Manager/bin/bm"`. Node не нужен: `bm` запускает exe приложения. Файлы в
+  `bin` приложение переписывает при каждом запуске; добавьте папку в PATH, чтобы писать просто `bm`.
+- Ветка — имя или slug. Проект определяется по текущей папке (клон, worktree, корень стека), иначе `-p <id>`.
+- Каждая команда — задача в очереди: видна в приложении, `bm` ждёт её и печатает лог. Код выхода 0 — готово,
+  1 — ошибка или упавшие тесты, 2 — приложение не запущено.
+- `bm test` (и Tools → «Запустить тесты») гоняет тесты на временной копии базы сборки, итог — в бейдже Test.
+- Production и защищённые ветки `bm` не меняет. Справка — `bm help`.
 
 ### Ассистенты (Claude Code, Cursor)
 
