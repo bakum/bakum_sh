@@ -31,6 +31,7 @@ import { assertFolderUsable } from './git/worktrees';
 import { listAudit } from './services/audit';
 import { getQueue } from './jobs/queue';
 import { registerBuildHandlers } from './services/build-actions';
+import { snapshotHandlers } from './services/snapshots';
 import { deletePreview, requestDelete } from './services/branch-delete';
 import { mergeUrl } from './services/merge';
 import { projectDeletePreview, requestProjectDelete } from './services/project-delete';
@@ -129,4 +130,5 @@ export function registerHandlers(ctx: Ctx): void {
     'system.cleanupOrphans': (p) => cleanupOrphans(ctx, p.items),
   });
   registerBuildHandlers(ctx);
+  ctx.rpc.register(snapshotHandlers(ctx));
 }

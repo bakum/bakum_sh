@@ -116,4 +116,5 @@ export const kv = sqliteTable('kv', {
 export type ProjectRow = typeof projects.$inferSelect;
 export type BranchRow = typeof branches.$inferSelect;
 export type BuildRow = typeof builds.$inferSelect;
+export type SnapshotRow = typeof snapshots.$inferSelect;
 export type JobRow = typeof jobs.$inferSelect;

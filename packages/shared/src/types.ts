@@ -13,6 +13,8 @@ export type JobType =
   | 'delete_branch'
   | 'snapshot'
   | 'restore_snapshot'
+  | 'delete_snapshot'
+  | 'export_db'
   | 'import_backup'
   | 'fetch'
   | 'apply_config'
@@ -173,6 +175,16 @@ export interface BuildView {
   isLive: boolean;
   /** Date after which the build is auto-dropped (dropAfterDays), if any. */
   dropAt: string | null;
+}
+
+/** Snapshot of a live build's database + filestore (spec 8.9 Backups): `<db>_snap_<n>`. */
+export interface SnapshotView {
+  id: number;
+  /** Label given by the user or the app («перед откатом к …»). */
+  name: string;
+  dbName: string;
+  sizeBytes: number | null;
+  createdAt: string;
 }
 
 /** A record of Audit Logs (spec 8.11); `diff` — line diff of a settings change (`+ ` / `- ` lines). */

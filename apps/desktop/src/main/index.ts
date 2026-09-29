@@ -431,6 +431,15 @@ function registerIpc(): void {
     });
     return r.canceled ? null : (r.filePaths[0] ?? null);
   });
+  // Only the path: Core writes the file (e.g. a database export).
+  ipcMain.handle('bm:selectSavePath', async (_e, opts: { title?: string; defaultPath: string; extensions?: string[] }) => {
+    const r = await dialog.showSaveDialog(win ?? undefined!, {
+      title: opts.title,
+      defaultPath: opts.defaultPath,
+      filters: opts.extensions ? [{ name: 'Файлы', extensions: opts.extensions }] : [],
+    });
+    return r.canceled || !r.filePath ? null : r.filePath;
+  });
   ipcMain.handle('bm:saveFile', async (_e, opts: { defaultPath: string; content: string }) => {
     const r = await dialog.showSaveDialog(win ?? undefined!, { defaultPath: opts.defaultPath });
     if (r.canceled || !r.filePath) return null;

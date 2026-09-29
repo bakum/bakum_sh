@@ -109,6 +109,28 @@ export async function createEmpty(cfg: PgCfg, db: string): Promise<void> {
   });
 }
 
+/** ALTER DATABASE … RENAME TO … (connections terminated first). Callers must pass ownership checks for both names. */
+export async function renameDatabase(cfg: PgCfg, from: string, to: string): Promise<void> {
+  assertSqlIdent(from);
+  assertSqlIdent(to);
+  if (cfg.protectedDbs.includes(from) || cfg.protectedDbs.includes(to)) throw new BmError('PROTECTED', `БД «${from}» защищена (postgres.protectedDbs)`);
+  await withPg(cfg, 'postgres', async (c) => {
+    for (let attempt = 0; ; attempt++) {
+      await terminateConnections(c, from);
+      try {
+        await c.query(`ALTER DATABASE "${from}" RENAME TO "${to}"`);
+        return;
+      } catch (err) {
+        if (attempt < 5 && /being accessed by other users/.test((err as Error).message)) {
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
+        throw new BmError('PG_RENAME', `Не удалось переименовать БД ${from} → ${to}: ${(err as Error).message}`);
+      }
+    }
+  });
+}
+
 /** DROP DATABASE IF EXISTS. Callers must pass ownership checks (assertOwned) first. */
 export async function dropDatabase(cfg: PgCfg, db: string): Promise<void> {
   assertSqlIdent(db);

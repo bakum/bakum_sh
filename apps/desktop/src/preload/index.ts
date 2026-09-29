@@ -83,6 +83,7 @@ const api: BmApi = {
     selectDirectory: (title) => ipcRenderer.invoke('bm:selectDirectory', title),
     selectFile: (opts) => ipcRenderer.invoke('bm:selectFile', opts),
     saveFile: (opts) => ipcRenderer.invoke('bm:saveFile', opts),
+    selectSavePath: (opts) => ipcRenderer.invoke('bm:selectSavePath', opts),
     copy: (text) => ipcRenderer.invoke('bm:copy', text),
     openExternal: (url) => ipcRenderer.invoke('bm:openExternal', url),
     confirm: (opts) => ipcRenderer.invoke('bm:confirm', opts),

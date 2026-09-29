@@ -6,6 +6,8 @@ export interface BmDesktop {
   selectDirectory(title?: string): Promise<string | null>;
   selectFile(opts?: { title?: string; extensions?: string[] }): Promise<string | null>;
   saveFile(opts: { defaultPath: string; content: string }): Promise<string | null>;
+  /** «Сохранить как» without writing: the chosen path, or null. */
+  selectSavePath(opts: { title?: string; defaultPath: string; extensions?: string[] }): Promise<string | null>;
   copy(text: string): Promise<boolean>;
   openExternal(url: string): Promise<boolean>;
   confirm(opts: { message: string; detail?: string; buttons?: string[] }): Promise<number>;

@@ -89,7 +89,7 @@ async function dropLeftovers(ctx: Ctx, cfg: ProjectConfig, log: Log): Promise<vo
       log(`БД ${db}: ${(err as Error).message}`);
     }
   }
-  for (const db of all.flatMap((b) => [b.dbName, `${b.dbName}_test`])) {
+  for (const db of [...all.flatMap((b) => [b.dbName, `${b.dbName}_test`]), ...snaps.map((s) => s.dbName)]) {
     const dir = path.join(cfg.runtime.filestore.hostDir, db);
     if (!fs.existsSync(dir)) continue;
     try {

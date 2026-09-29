@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import type { ProjectConfig } from '@bm/shared';
 import { branchDir, type Ctx } from '../context';
 import { branchRow } from '../services/branch-rows';
-import { builds, type BuildRow } from '../db/schema';
+import { builds, snapshots, type BuildRow } from '../db/schema';
 import { docker, dockerCli } from '../docker/client';
 import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
@@ -73,14 +73,25 @@ export async function dropBuildResources(ctx: Ctx, cfg: ProjectConfig, b: BuildR
         await dropDatabase(cfg.postgres, db);
       }
     }
-    // 3. Filestore of the database and of its test copy (left by an interrupted tests step).
-    for (const db of [b.dbName, `${b.dbName}_test`]) {
+    // 3. Snapshots of the database (D42): they belong to the database and go with it.
+    const ids = ctx.db.select({ id: builds.id }).from(builds).where(and(eq(builds.projectId, b.projectId), eq(builds.dbName, b.dbName))).all().map((x) => x.id);
+    const snaps = ctx.db.select().from(snapshots).where(inArray(snapshots.buildId, ids)).all().filter((s) => s.dbName.startsWith(`${b.dbName}_snap_`));
+    for (const s of snaps) {
+      if (await dbExists(cfg.postgres, s.dbName).catch(() => false)) {
+        assertOwned(cfg, { kind: 'db', name: s.dbName }, reg);
+        log(`DROP DATABASE ${s.dbName} (снапшот «${s.name}»)`);
+        await dropDatabase(cfg.postgres, s.dbName);
+      }
+    }
+    // 4. Filestore of the database, of its test copy (left by an interrupted tests step) and of its snapshots.
+    for (const db of [b.dbName, `${b.dbName}_test`, ...snaps.map((s) => s.dbName)]) {
       const fsDir = path.join(cfg.runtime.filestore.hostDir, db);
       if (!fs.existsSync(fsDir)) continue;
       assertOwned(cfg, { kind: 'filestore', path: fsDir, db }, reg);
       log(`rm filestore ${fsDir}`);
       await fs.promises.rm(fsDir, { recursive: true, force: true, maxRetries: 3 });
     }
+    if (snaps.length) ctx.db.delete(snapshots).where(inArray(snapshots.id, snaps.map((s) => s.id))).run();
   }
 }
 

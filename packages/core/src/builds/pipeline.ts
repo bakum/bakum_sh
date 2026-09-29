@@ -30,6 +30,7 @@ import { audit } from '../services/audit';
 import { bus } from '../events';
 import { listeningPorts } from '../util/ports';
 import { toPosix } from '../util/paths';
+import { copyTree } from '../util/fs-tree';
 import { log as coreLog } from '../util/logger';
 import { nowIso, sleep } from '../util/time';
 
@@ -317,37 +318,6 @@ async function stepDatabase(r: Run): Promise<string> {
   patchBuild(r, { createdResources: { ...build.createdResources, db: true } });
   await pg.createEmpty(cfg.postgres, build.dbName);
   return 'пустая БД';
-}
-
-/** Hardlinks (or copies) a directory tree on the host: Odoo attachments are immutable (spec 8.3 step 4). */
-async function copyTree(src: string, dst: string, mode: 'hardlink' | 'copy', log: (l: string) => void): Promise<{ files: number; linked: boolean }> {
-  let files = 0;
-  let linked = mode === 'hardlink';
-  const walk = async (s: string, d: string): Promise<void> => {
-    await fs.promises.mkdir(d, { recursive: true });
-    for (const e of await fs.promises.readdir(s, { withFileTypes: true })) {
-      const sp = path.join(s, e.name);
-      const dp = path.join(d, e.name);
-      if (e.isDirectory()) await walk(sp, dp);
-      else if (e.isFile()) {
-        if (linked) {
-          try {
-            await fs.promises.link(sp, dp);
-          } catch (err) {
-            if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
-            log(`хардлинки не поддерживаются (${(err as Error).message}) — копирование`);
-            linked = false;
-            await fs.promises.copyFile(sp, dp);
-          }
-        } else await fs.promises.copyFile(sp, dp).catch((err) => {
-          if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-        });
-        files++;
-      }
-    }
-  };
-  await walk(src, dst);
-  return { files, linked };
 }
 
 async function stepFilestore(r: Run): Promise<string> {

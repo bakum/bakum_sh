@@ -29,7 +29,7 @@ function mustBuild(ctx: Ctx, id: number | null): BuildRow {
   return b;
 }
 
-function liveCompose(ctx: Ctx, b: BuildRow): string {
+export function liveCompose(ctx: Ctx, b: BuildRow): string {
   const br = branchRow(ctx, b.branchId);
   if (!br) throw new BmError('NO_BRANCH', 'Ветка сборки удалена');
   const file = path.join(branchDir(ctx, b.projectId, br.slug), 'compose.yml');

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
 import { BmError, type Discrepancy, type Orphan, type ProjectConfig, type BuildStep } from '@bm/shared';
 import type { Ctx } from './context';
-import { branches, builds, type JobRow } from './db/schema';
+import { branches, builds, snapshots, type JobRow } from './db/schema';
 import { docker, dockerCli } from './docker/client';
 import { refreshContainers } from './docker/watch';
 import { containerStates } from './docker/state';
@@ -79,6 +79,13 @@ export async function reconcile(ctx: Ctx): Promise<void> {
     const reg = ownedRegistry(ctx, cfg.id);
     const rows = ctx.db.select().from(builds).where(eq(builds.projectId, cfg.id)).all();
     const alive = rows.filter((b) => b.status !== 'dropped');
+    // Snapshots of databases still in use (D42): the database and its filestore folder are the app's.
+    const aliveDbs = new Set(alive.map((b) => b.dbName));
+    const snapDbs = new Set(
+      (rows.length ? ctx.db.select().from(snapshots).where(inArray(snapshots.buildId, rows.map((b) => b.id))).all() : [])
+        .map((s) => s.dbName)
+        .filter((n) => aliveDbs.has(n.replace(/_snap_\d+$/, ''))),
+    );
 
     // Containers
     if (runtimeState.docker.ok) {
@@ -111,7 +118,7 @@ export async function reconcile(ctx: Ctx): Promise<void> {
         const base = db.replace(/(_test|_snap_\d+)$/, '');
         if (!re.test(db) && !re.test(base)) continue;
         if (cfg.postgres.protectedDbs.includes(db)) continue;
-        const inUse = alive.some((b) => b.dbName === db || `${b.dbName}_test` === db);
+        const inUse = alive.some((b) => b.dbName === db || `${b.dbName}_test` === db) || snapDbs.has(db);
         if (!inUse) orphans.push({ projectId: cfg.id, kind: 'database', name: db });
       }
       for (const b of alive.filter((x) => x.live && x.status !== 'failed')) {
@@ -130,7 +137,7 @@ export async function reconcile(ctx: Ctx): Promise<void> {
       if (fs.existsSync(cfg.runtime.filestore.hostDir)) {
         for (const d of fs.readdirSync(cfg.runtime.filestore.hostDir)) {
           if (!re.test(d)) continue;
-          if (!alive.some((b) => b.dbName === d)) orphans.push({ projectId: cfg.id, kind: 'filestore', name: toPosix(path.join(cfg.runtime.filestore.hostDir, d)) });
+          if (!aliveDbs.has(d) && !snapDbs.has(d)) orphans.push({ projectId: cfg.id, kind: 'filestore', name: toPosix(path.join(cfg.runtime.filestore.hostDir, d)) });
         }
       }
     } catch {

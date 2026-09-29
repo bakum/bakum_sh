@@ -16,6 +16,7 @@ import { subscribeBuildLog, subscribeContainerLog, subscribeStats } from './serv
 import { publishTray } from './services/tray';
 import { bus } from './events';
 import { registerBuildExecutors } from './builds/executors';
+import { registerSnapshotExecutors } from './services/snapshots';
 import { runtime } from './runtime';
 import { log } from './util/logger';
 
@@ -30,6 +31,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
   queue.register('setup_project', setupProjectExecutor);
   queue.register('migrate_postgres', pgMigrateExecutor);
   registerBuildExecutors(queue);
+  registerSnapshotExecutors(queue);
 
   // Tray «building» follows the queue: re-published after a job starts or finishes (a build publishing the tray
   // itself still sees its own job as running).

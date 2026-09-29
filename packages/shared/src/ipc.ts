@@ -18,6 +18,7 @@ import type {
   JobView,
   ProjectSummary,
   RepoProbe,
+  SnapshotView,
   SystemStatus,
   UnassignedBranch,
 } from './types';
@@ -221,6 +222,14 @@ export const methods = {
 
   'backups.list': m<BackupFile[]>()(z.object({ projectId }).strict()),
   'backups.import': m<JobRef>()(z.object({ projectId, path: z.string().min(1) }).strict()),
+
+  /** Snapshots of the live build's database (spec 8.9 Backups). */
+  'snapshots.list': m<SnapshotView[]>()(z.object({ branchId: id }).strict()),
+  'snapshots.create': m<JobRef>()(z.object({ branchId: id, name: z.string().trim().max(80).optional() }).strict()),
+  'snapshots.restore': m<JobRef>()(z.object({ snapshotId: id }).strict()),
+  'snapshots.delete': m<JobRef>()(z.object({ snapshotId: id }).strict()),
+  /** Odoo backup `.zip` (`odoo db dump`) of the live database or of a snapshot, written to `path` (chosen in a dialog). */
+  'snapshots.export': m<JobRef>()(z.object({ branchId: id, snapshotId: id.optional(), path: z.string().min(1).regex(/\.zip$/i, 'нужен файл .zip') }).strict()),
 
   'git.fetch': m<{ jobs: number[] }>()(z.object({ projectId: projectId.optional() }).strict()),
 
