@@ -255,7 +255,7 @@ export function SettingsPage() {
               ))}
             {!isApp && <Tabs.Tab value="rules">Правила веток</Tabs.Tab>}
             {!isApp && (
-              <Tabs.Tab value="hooks" rightSection={<Badge size="xs" variant="light" color="gray">этап 2</Badge>}>
+              <Tabs.Tab value="hooks" rightSection={<Badge size="xs" variant="light" color="gray">отложено</Badge>}>
                 Хуки
               </Tabs.Tab>
             )}
@@ -318,7 +318,10 @@ export function SettingsPage() {
 
           {!isApp && project.data && (
             <Tabs.Panel value="hooks" pt="md">
-              <Alert color="gray">Хуки шагов сборки (before/after, SQL, odoo-shell, container, host) выполняются начиная с этапа 2. Схема уже поддерживается в YAML (hooks).</Alert>
+              <Alert color="gray">
+                Хуки шагов сборки (before/after, SQL, odoo-shell, container, host) отложены (docs/decisions.md D44): раздел hooks в YAML
+                принимается, но не выполняется.
+              </Alert>
             </Tabs.Panel>
           )}
 

@@ -56,7 +56,7 @@ async function ghStatus(exe: string): Promise<{ ok: boolean; text: string }> {
   const r = await execa(exe === 'auto' ? 'gh' : exe, ['--version'], { reject: false, windowsHide: true });
   ghCache =
     r.exitCode === 0
-      ? { ok: true, text: `${String(r.stdout).split('\n')[0]} (проверка авторизации и PR — этап 2)` }
+      ? { ok: true, text: String(r.stdout).split('\n')[0]! }
       : { ok: false, text: 'gh не найден: Merge будет открывать страницу compare на GitHub' };
   return ghCache;
 }

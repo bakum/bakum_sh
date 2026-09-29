@@ -5,7 +5,7 @@ import { audit } from './audit';
 
 /**
  * Merge (spec 8.10), stage 1 part: the GitHub compare page for head=<source> → base=<target>.
- * PR creation through gh is stage 2. The app never merges or pushes locally.
+ * PR creation through gh is postponed (D44). The app never merges or pushes locally.
  */
 export function mergeUrl(ctx: Ctx, sourceId: number, targetId: number): { url: string } {
   const s = mustBranch(ctx, sourceId);

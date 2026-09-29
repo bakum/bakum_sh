@@ -35,7 +35,6 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
                 <Checkbox mt="xs" label="Я понимаю, что эти изменения будут потеряны" checked={forceDirty} onChange={(e) => setForceDirty(e.currentTarget.checked)} />
               </Alert>
             )}
-            <Checkbox label="Удалить ветку в origin (этап 2)" disabled />
             <TextInput label={`Для подтверждения введите slug: ${branch.slug}`} value={slug} onChange={(e) => setSlug(e.currentTarget.value)} />
           </>
         )}

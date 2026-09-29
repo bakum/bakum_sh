@@ -4,8 +4,8 @@ import type { BranchView } from '@bm/shared';
 import { useBmMutation } from '../../lib/query';
 
 /**
- * Merge (spec 8.10): PR head=<source> → base=<target>. Creating the PR through `gh` is stage 2;
- * for now the GitHub compare page opens in the browser. No local merge, no push.
+ * Merge (spec 8.10): PR head=<source> → base=<target>. Creating the PR through `gh` is postponed (D44):
+ * the GitHub compare page opens in the browser. No local merge, no push.
  */
 export function MergeDialog({ value, branches, onClose }: { value: { source: BranchView; target: BranchView | null } | null; branches: BranchView[]; onClose: () => void }) {
   const [target, setTarget] = useState<string | null>(null);
@@ -18,8 +18,7 @@ export function MergeDialog({ value, branches, onClose }: { value: { source: Bra
       <Stack>
         <Select label="Влить в ветку" data={options} value={target} onChange={setTarget} searchable />
         <Alert color="gray" variant="light">
-          Создание PR через gh — этап 2. Сейчас откроется страница сравнения на GitHub, где можно создать PR. Локальный merge и push приложение не
-          выполняет.
+          Откроется страница сравнения на GitHub, где можно создать PR. Локальный merge и push приложение не выполняет.
         </Alert>
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
