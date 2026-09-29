@@ -348,6 +348,8 @@ export interface SystemStatus {
   fetches: { projectId: string; at: string | null; error: string | null }[];
   discrepancies: Discrepancy[];
   orphans: Orphan[];
+  /** Assistant skills written by an older version of the app or before a settings change (D52). */
+  outdatedSkills: { projectId: string; path: string }[];
   paths: { configDir: string; dataDir: string; logsDir: string };
 }
 

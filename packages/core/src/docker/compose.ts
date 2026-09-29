@@ -12,6 +12,10 @@ export interface ComposeInput {
   worktree: string;
   /** `{addonsPath}` computed from the build's code (`addonsPathVar`), when the command uses it. */
   addonsPath?: string;
+  /** Traefik port in use, for the `bm.url` label. */
+  proxyPort?: number | null;
+  /** Server options for one-off runs (`serverBaseArgs` with the build's code), for the `bm.odoo.args` label (D52). */
+  odooArgs?: string[];
 }
 
 export const ODOO_SERVICE = 'odoo';
@@ -45,7 +49,19 @@ export function templateVarsFor(i: ComposeInput): TemplateVars {
   };
 }
 
-/** Docker labels that mark ownership (spec 3): bm.project / bm.branch / bm.build (+ context). */
+export function buildUrl(host: string, proxyPort: number | null): string {
+  return `http://${host}${!proxyPort || proxyPort === 80 ? '' : `:${proxyPort}`}`;
+}
+
+/** Production, a protected branch setting or `repo.protectedBranches`: assistants only read such builds (D52). */
+export function branchProtected(cfg: ProjectConfig, branch: string, stage: string, scope: { protected: boolean }): boolean {
+  return stage === 'production' || scope.protected || cfg.repo.protectedBranches.includes(branch);
+}
+
+/**
+ * Docker labels that mark ownership (spec 3): bm.project / bm.branch / bm.build (+ context). The context labels
+ * (slug, url, protected, odoo.args) are what the assistant skill reads instead of guessing (D52).
+ */
 export function bmLabels(i: ComposeInput): Record<string, string> {
   return {
     'bm.project': i.cfg.id,
@@ -55,6 +71,10 @@ export function bmLabels(i: ComposeInput): Record<string, string> {
     'bm.build.number': String(i.build.number),
     'bm.stage': i.branch.stage,
     'bm.db': i.build.dbName,
+    'bm.slug': i.branch.slug,
+    'bm.url': buildUrl(i.build.host, i.proxyPort ?? null),
+    'bm.protected': String(branchProtected(i.cfg, i.branch.name, i.branch.stage, i.scope)),
+    ...(i.odooArgs ? { 'bm.odoo.args': i.odooArgs.join(' ') } : {}),
   };
 }
 

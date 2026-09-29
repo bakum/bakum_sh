@@ -1,5 +1,6 @@
 import { Alert, Badge, Button, Card, Checkbox, Code, Container, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { IconCircleCheck, IconCircleX } from '@tabler/icons-react';
 import { useBm, useBmMutation } from '../lib/query';
 import { fmtAgo } from '../lib/format';
@@ -34,6 +35,7 @@ export function StatusPage() {
   const cleanup = useBmMutation('system.cleanupOrphans', { success: 'Очистка выполнена' });
   const appState = useBm('system.state', {});
   const [selected, setSelected] = useState<string[]>([]);
+  const nav = useNavigate();
   const s = st.data;
   if (!s) return null;
   const orphanKey = (o: { kind: string; name: string }) => `${o.kind}:${o.name}`;
@@ -78,6 +80,19 @@ export function StatusPage() {
             </Stack>
           </Card>
         </SimpleGrid>
+
+        {s.outdatedSkills.map((k) => (
+          <Alert key={k.projectId} color="orange" variant="light" data-testid="outdated-skill">
+            <Group justify="space-between">
+              <Text size="sm">
+                Skill для ассистентов проекта {k.projectId} устарел (<Code>{k.path}</Code>): приложение или настройки изменились.
+              </Text>
+              <Button size="compact-sm" variant="light" onClick={() => nav(`/projects/${k.projectId}/settings/agents`)}>
+                Обновить
+              </Button>
+            </Group>
+          </Alert>
+        ))}
 
         <Card withBorder>
           <Text fw={600} mb="xs">

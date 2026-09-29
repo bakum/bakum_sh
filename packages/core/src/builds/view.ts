@@ -7,6 +7,7 @@ import { containerPoll, containerStates } from '../docker/state';
 import { resolveBranchScope } from '../config/effective';
 import { lifecycleState } from './lifecycle-state';
 import { dockerfileHash } from '../config/dockerfile';
+import { buildUrl } from '../docker/compose';
 
 /**
  * Hash of everything that shapes the build container but not its database (spec 9.1 «конфигурация изменилась»):
@@ -38,9 +39,7 @@ export function configHash(cfg: ProjectConfig, scope: ResolvedBranchScope, proxy
 /** tests.log of a build: next to its build.log (`<slug>-<n>.log` → `<slug>-<n>.tests.log`). */
 export const testsLogPath = (logPath: string): string => `${logPath.replace(/\.log$/, '')}.tests.log`;
 
-export function buildUrl(host: string, proxyPort: number | null): string {
-  return `http://${host}${!proxyPort || proxyPort === 80 ? '' : `:${proxyPort}`}`;
-}
+export { buildUrl };
 
 export function toBuildView(
   ctx: Ctx,

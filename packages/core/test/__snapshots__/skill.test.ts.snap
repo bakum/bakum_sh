@@ -1,0 +1,297 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`assistant skill (D52) > matches the snapshot for DEMZ and the «Odoo in Docker» preset 1`] = `
+"---
+name: branch-manager-demz
+description: >-
+  Локальные сборки веток проекта «DEMZ Odoo 19» в Odoo Branch Manager (локальный odoo.sh): найти сборку ветки,
+  её URL, базу и порт debugpy; обновить модули (-u / -i) и запустить тесты в Development-сборке; логи, psql,
+  odoo shell; что можно делать только через приложение. Используй, когда нужно проверить изменения модулей Odoo
+  в сборке ветки или разобраться с её ошибкой.
+---
+
+# DEMZ Odoo 19 — сборки веток в Odoo Branch Manager
+
+> Файл создан приложением Odoo Branch Manager 0.12.0 по настройкам проекта \`demz\`. Руками не правь:
+> приложение обновляет его кнопкой в Settings проекта → «Ассистенты».
+
+Каждая ветка \`github.com/DEMZ-UA/demz-odoo\` собирается отдельно: свой контейнер Odoo, своя база, свой код.
+Сборками управляет пользователь в приложении; ассистенту доступны команды ниже.
+
+## Как устроено
+
+| Что | Значение |
+|-----|----------|
+| Контейнер сборки | compose-проект \`bm-{project}-{slug}\`, контейнер \`<проект>-odoo-1\`; искать по labels (ниже) |
+| Slug ветки | шаблон \`{branch}\`, без \`^19\\.0-demz-\`, символы кроме \`a-z0-9\` → \`-\`; Production — \`prod\`; точно — label \`bm.slug\` |
+| URL | \`http://{slug}.localhost:8080\` (Production: \`http://prod.localhost:8080\`); label \`bm.url\` |
+| База | \`o19_br_{slug_}_{build}\` (например \`o19_br_prod_1\`); точное имя — label \`bm.db\` |
+| Postgres | контейнер \`bm-demz-db\` (приложения), \`localhost:55432\` на хосте, пользователь \`odoo\` |
+| Код в контейнере | \`/mnt/repositories/demz-odoo\` |
+| Код сборки на хосте | \`E:/demz-odoo-19/worktrees/demz/<slug>\` — служебные копии приложения: не править, не искать в них код |
+| Папка пользователя | \`E:/demz-odoo-19/repositories/demz-odoo\` — код правим здесь |
+| Папки модулей | \`demzua\`, \`todoltd\`, \`exchange\`, \`oca\`, \`printer\` |
+| debugpy | у каждой сборки свой порт на \`127.0.0.1\`: \`docker port $C 5678\` |
+| Логи приложения | \`C:/Users/u/AppData/Local/Odoo Branch Manager/logs\`: \`core.log\`, \`jobs/<id>-<тип>.log\`, \`builds/demz/<slug>-<n>.log\` и \`.tests.log\` |
+
+## Какие сборки можно менять
+
+- Production \`19.0\` и защищённые ветки (\`19.0-demz-prerelease\`, \`19.0-demz-crm\`) — **только чтение**: логи,
+  \`SELECT\`. У их контейнеров label \`bm.stage=production\` или \`bm.protected=true\`; защиту ветки пользователь
+  может включить и позже — перед любой записью проверь label.
+- Остальные ветки — Development: можно \`-u\` / \`-i\`, тесты, \`docker restart\`.
+
+## Как код попадает в сборку
+
+- Обычный путь: правка в \`E:/demz-odoo-19/repositories/demz-odoo\` → commit → push ветки. Приложение делает fetch раз в 5 мин (или кнопкой «Обновить»),
+  обновляет изменённые модули и запускает их тесты (по настройкам стадии). Commit и push — только по просьбе пользователя.
+- Быстрый путь (включает пользователь): вкладка ветки Editor → «Из моей папки». Сборка монтирует папку как есть:
+  Restart показывает правки Python без коммита, для XML и данных нужен \`-u\`.
+
+## Найти сборку
+
+\`\`\`bash
+docker ps -a --filter label=bm.project=demz --filter label=com.docker.compose.oneoff=False \\
+  --format '{{.Names}}\\t{{.Label "bm.branch.name"}}\\t{{.Label "bm.stage"}}\\t{{.Label "bm.protected"}}\\t{{.Label "bm.db"}}\\t{{.Label "bm.url"}}\\t{{.Status}}'
+
+C=$(docker ps -q --filter label=bm.project=demz --filter label=com.docker.compose.oneoff=False --filter label=bm.branch.name=<ветка>)
+DB=$(docker inspect -f '{{index .Config.Labels "bm.db"}}' $C)
+\`\`\`
+
+Сборки нет или она остановлена — попроси пользователя запустить (Start) или собрать (Rebuild) её в приложении.
+
+## Обновить модуль (только Development)
+
+Пользователю советуй приложение: вкладка ветки «Инструменты» → «Модули вручную» — задача в очереди приложения,
+база и опции подставляются сами.
+
+Ассистент — командой. Опции Odoo сборки (конфиг, \`--data-dir\`, \`--addons-path\` из кода ветки) лежат
+в label \`bm.odoo.args\`; \`-d\` — только из \`bm.db\`, не из \`odoo.conf\`.
+
+\`\`\`bash
+docker inspect -f '{{index .Config.Labels "bm.stage"}} protected={{index .Config.Labels "bm.protected"}}' $C  # production или protected=true — стоп
+ARGS=$(docker inspect -f '{{index .Config.Labels "bm.odoo.args"}}' $C)
+bmodoo() { MSYS_NO_PATHCONV=1 docker exec -i "$C" sh -c 'PGPASSWORD=$PASSWORD; export PGPASSWORD; exec odoo "$@"' odoo "$@" $ARGS -d "$DB"; }
+bmodoo -u <модуль> --stop-after-init --no-http
+docker restart $C
+\`\`\`
+
+PowerShell:
+
+\`\`\`powershell
+$C = docker ps -q --filter label=bm.project=demz --filter label=com.docker.compose.oneoff=False --filter label=bm.branch.name=<ветка>
+$L = (docker inspect $C | ConvertFrom-Json)[0].Config.Labels
+"$($L.'bm.stage') protected=$($L.'bm.protected')"  # production или protected=true — стоп
+$DB = $L.'bm.db'
+$OdooArgs = $L.'bm.odoo.args' -split ' '
+function bmodoo { docker exec -i $C sh -c 'PGPASSWORD=$PASSWORD; export PGPASSWORD; exec odoo $@' odoo @args @OdooArgs -d $DB }
+bmodoo -u <модуль> --stop-after-init --no-http
+docker restart $C
+\`\`\`
+
+- \`bmodoo\` запускает Odoo внутри контейнера сборки с её опциями. Пароль БД берётся из переменной контейнера
+  \`PASSWORD\` (\`docker exec\` обходит entrypoint образа, который обычно его передаёт) и не проходит через твою команду.
+- Новый модуль — \`-i\` вместо \`-u\`.
+- \`MSYS_NO_PATHCONV=1\` нужен в Git Bash: иначе пути \`/etc/…\` в опциях превратятся в пути Windows.
+- В PowerShell labels читай через \`ConvertFrom-Json\`, как выше: Windows PowerShell 5.1 выкидывает двойные кавычки
+  из аргументов \`docker inspect -f '{{index .Config.Labels "…"}}'\`.
+- Label \`bm.odoo.args\` пуст — сборка создана старой версией приложения. Попроси пользователя нажать
+  «Применить» (Settings проекта) или Rebuild; до этого задай \`ARGS='-c /etc/odoo/odoo.conf --data-dir=/var/lib/odoo'\` и добавь к нему \`--addons-path=…\` из \`docker inspect -f '{{json .Config.Cmd}}' $C\`.
+
+## Тесты
+
+\`$C\`, \`$DB\`, \`bmodoo\` — как выше; тесты тоже только в Development-сборке.
+
+\`\`\`bash
+bmodoo -u <модуль> --stop-after-init --http-port=8070 --test-enable --test-tags /<модуль>
+\`\`\`
+
+- \`--http-port=8070\`: порт 8069 занят сервером сборки, без этого \`HttpCase\` не поднимет свой сервер.
+- Тесты пишут в базу этой сборки; для чистого прогона — Rebuild в приложении.
+- Такой прогон не попадает в History и бейдж Test приложения. Автотесты самого приложения (изменённые модули при
+  каждой сборке): вкладка Logs → \`tests.log\`, файлы \`C:/Users/u/AppData/Local/Odoo Branch Manager/logs/builds/demz/<slug>-<n>.tests.log\`.
+
+## Логи, база, odoo shell
+
+\`\`\`bash
+docker logs -f --tail 200 $C
+echo "print(env['res.users'].search_count([]))" | bmodoo shell --no-http
+\`\`\`
+
+\`\`\`bash
+docker exec -it bm-demz-db psql -U odoo -d $DB
+\`\`\`
+
+В защищённых сборках — только чтение: \`SELECT\`, в \`odoo shell\` без \`env.cr.commit()\`.
+
+## Отладка (debugpy)
+
+Порт — \`docker port $C 5678\`. Конфигурацию для VS Code / Cursor пишет приложение: вкладка ветки
+«Инструменты» → Debug → «Добавить в .vscode/launch.json папки кода». Точки останова ставь в файлах \`E:/demz-odoo-19/worktrees/demz/<slug>\`
+(при «Из моей папки» — в папке пользователя).
+
+## Только через приложение
+
+Ассистент этого **не делает** — только пользователь кнопками приложения (Rebuild, Drop, Start/Stop, Backups, Settings):
+
+- \`docker compose down/rm\`, \`docker rm\`, \`docker stop\` контейнеров \`bm-*\`; ничего не делать с \`bm-traefik\` и \`bm-demz-db\` (кроме psql);
+- \`dropdb\`, \`DROP DATABASE\`, создание и копирование баз сборок;
+- удаление и правка \`E:/demz-odoo-19/worktrees/demz\`, filestore сборок в \`E:/demz-odoo-19/data/filestore\`, копии репозитория \`C:/bm/repos/demz-odoo.git\`;
+- любые записи в Production и защищённые сборки (\`-u\`, \`-i\`, restart, \`UPDATE\` / \`INSERT\` / \`DELETE\`);
+- настройки \`C:/Users/u/AppData/Roaming/Odoo Branch Manager/projects/demz.yaml\` и \`app.yaml\` — только по просьбе пользователя; пароль Postgres
+  из них не читать и не выводить;
+- контейнер \`odoo19\`, контейнер \`odoo19-db\`, база \`postgres\`, база \`o19_test\` — только по явной просьбе;
+- удаление ветки на GitHub — только пользователь: если у ветки включено «Удалять вместе с веткой на GitHub», после
+  fetch приложение удалит её сборку, базу, filestore и worktree. Данные нужны — сначала снапшот во вкладке Backups.
+
+## Если приложение ошиблось
+
+Ошибка приложения, непонятное сообщение, пришлось руками сделать то, что должно делать приложение, — скажи
+пользователю. Issue в \`bakum/bakum_sh\` (\`https://github.com/bakum/bakum_sh/issues\`) — только по его решению.
+<!-- generated by Odoo Branch Manager 0.12.0; sha256:ed15a1bf8a84bb90 -->
+"
+`;
+
+exports[`assistant skill (D52) > matches the snapshot for DEMZ and the «Odoo in Docker» preset 2`] = `
+"---
+name: branch-manager-shop
+description: >-
+  Локальные сборки веток проекта «shop» в Odoo Branch Manager (локальный odoo.sh): найти сборку ветки,
+  её URL, базу и порт debugpy; обновить модули (-u / -i) и запустить тесты в Development-сборке; логи, psql,
+  odoo shell; что можно делать только через приложение. Используй, когда нужно проверить изменения модулей Odoo
+  в сборке ветки или разобраться с её ошибкой.
+---
+
+# shop — сборки веток в Odoo Branch Manager
+
+> Файл создан приложением Odoo Branch Manager 0.12.0 по настройкам проекта \`shop\`. Руками не правь:
+> приложение обновляет его кнопкой в Settings проекта → «Ассистенты».
+
+Каждая ветка \`github.com/acme/shop\` собирается отдельно: свой контейнер Odoo, своя база, свой код.
+Сборками управляет пользователь в приложении; ассистенту доступны команды ниже.
+
+## Как устроено
+
+| Что | Значение |
+|-----|----------|
+| Контейнер сборки | compose-проект \`bm-{project}-{slug}\`, контейнер \`<проект>-odoo-1\`; искать по labels (ниже) |
+| Slug ветки | шаблон \`{branch}\`, символы кроме \`a-z0-9\` → \`-\`; Production — \`prod\`; точно — label \`bm.slug\` |
+| URL | \`http://{slug}.shop.localhost\` (Production: \`http://prod.shop.localhost\`); label \`bm.url\` |
+| База | \`bm_shop_{slug_}_{build}\` (например \`bm_shop_prod_1\`); точное имя — label \`bm.db\` |
+| Postgres | контейнер \`bm-shop-db\` (приложения), \`localhost:55433\` на хосте, пользователь \`odoo\` |
+| Код в контейнере | \`/mnt/repo/shop\` |
+| Код сборки на хосте | \`C:/bm/worktrees/shop/<slug>\` — служебные копии приложения: не править, не искать в них код |
+| Папки модулей | \`addons\` |
+| Логи приложения | \`C:/Users/u/AppData/Local/Odoo Branch Manager/logs\`: \`core.log\`, \`jobs/<id>-<тип>.log\`, \`builds/shop/<slug>-<n>.log\` и \`.tests.log\` |
+
+## Какие сборки можно менять
+
+- Production \`main\` — **только чтение**: логи,
+  \`SELECT\`. У их контейнеров label \`bm.stage=production\` или \`bm.protected=true\`; защиту ветки пользователь
+  может включить и позже — перед любой записью проверь label.
+- Остальные ветки — Development: можно \`-u\` / \`-i\`, тесты, \`docker restart\`.
+
+## Как код попадает в сборку
+
+- Обычный путь: правка → commit → push ветки. Приложение делает fetch раз в 5 мин (или кнопкой «Обновить»),
+  обновляет изменённые модули и запускает их тесты (по настройкам стадии). Commit и push — только по просьбе пользователя.
+- Быстрый путь (включает пользователь): вкладка ветки Editor → «Из моей папки». Сборка монтирует папку как есть:
+  Restart показывает правки Python без коммита, для XML и данных нужен \`-u\`.
+
+## Найти сборку
+
+\`\`\`bash
+docker ps -a --filter label=bm.project=shop --filter label=com.docker.compose.oneoff=False \\
+  --format '{{.Names}}\\t{{.Label "bm.branch.name"}}\\t{{.Label "bm.stage"}}\\t{{.Label "bm.protected"}}\\t{{.Label "bm.db"}}\\t{{.Label "bm.url"}}\\t{{.Status}}'
+
+C=$(docker ps -q --filter label=bm.project=shop --filter label=com.docker.compose.oneoff=False --filter label=bm.branch.name=<ветка>)
+DB=$(docker inspect -f '{{index .Config.Labels "bm.db"}}' $C)
+\`\`\`
+
+Сборки нет или она остановлена — попроси пользователя запустить (Start) или собрать (Rebuild) её в приложении.
+
+## Обновить модуль (только Development)
+
+Пользователю советуй приложение: вкладка ветки «Инструменты» → «Модули вручную» — задача в очереди приложения,
+база и опции подставляются сами.
+
+Ассистент — командой. Опции Odoo сборки (конфиг, \`--data-dir\`, \`--addons-path\` из кода ветки) лежат
+в label \`bm.odoo.args\`; \`-d\` — только из \`bm.db\`, не из \`odoo.conf\`.
+
+\`\`\`bash
+docker inspect -f '{{index .Config.Labels "bm.stage"}} protected={{index .Config.Labels "bm.protected"}}' $C  # production или protected=true — стоп
+ARGS=$(docker inspect -f '{{index .Config.Labels "bm.odoo.args"}}' $C)
+bmodoo() { MSYS_NO_PATHCONV=1 docker exec -i "$C" sh -c 'PGPASSWORD=$PASSWORD; export PGPASSWORD; exec odoo "$@"' odoo "$@" $ARGS -d "$DB"; }
+bmodoo -u <модуль> --stop-after-init --no-http
+docker restart $C
+\`\`\`
+
+PowerShell:
+
+\`\`\`powershell
+$C = docker ps -q --filter label=bm.project=shop --filter label=com.docker.compose.oneoff=False --filter label=bm.branch.name=<ветка>
+$L = (docker inspect $C | ConvertFrom-Json)[0].Config.Labels
+"$($L.'bm.stage') protected=$($L.'bm.protected')"  # production или protected=true — стоп
+$DB = $L.'bm.db'
+$OdooArgs = $L.'bm.odoo.args' -split ' '
+function bmodoo { docker exec -i $C sh -c 'PGPASSWORD=$PASSWORD; export PGPASSWORD; exec odoo $@' odoo @args @OdooArgs -d $DB }
+bmodoo -u <модуль> --stop-after-init --no-http
+docker restart $C
+\`\`\`
+
+- \`bmodoo\` запускает Odoo внутри контейнера сборки с её опциями. Пароль БД берётся из переменной контейнера
+  \`PASSWORD\` (\`docker exec\` обходит entrypoint образа, который обычно его передаёт) и не проходит через твою команду.
+- Новый модуль — \`-i\` вместо \`-u\`.
+- \`MSYS_NO_PATHCONV=1\` нужен в Git Bash: иначе пути \`/etc/…\` в опциях превратятся в пути Windows.
+- В PowerShell labels читай через \`ConvertFrom-Json\`, как выше: Windows PowerShell 5.1 выкидывает двойные кавычки
+  из аргументов \`docker inspect -f '{{index .Config.Labels "…"}}'\`.
+- Label \`bm.odoo.args\` пуст — сборка создана старой версией приложения. Попроси пользователя нажать
+  «Применить» (Settings проекта) или Rebuild; до этого задай \`ARGS='--data-dir=/var/lib/odoo --db_host=db --db_port=5432 --db_user=odoo'\` и добавь к нему \`--addons-path=…\` из \`docker inspect -f '{{json .Config.Cmd}}' $C\`.
+
+## Тесты
+
+\`$C\`, \`$DB\`, \`bmodoo\` — как выше; тесты тоже только в Development-сборке.
+
+\`\`\`bash
+bmodoo -u <модуль> --stop-after-init --http-port=8070 --test-enable --test-tags /<модуль>
+\`\`\`
+
+- \`--http-port=8070\`: порт 8069 занят сервером сборки, без этого \`HttpCase\` не поднимет свой сервер.
+- Тесты пишут в базу этой сборки; для чистого прогона — Rebuild в приложении.
+- Такой прогон не попадает в History и бейдж Test приложения. Автотесты самого приложения (изменённые модули при
+  каждой сборке): вкладка Logs → \`tests.log\`, файлы \`C:/Users/u/AppData/Local/Odoo Branch Manager/logs/builds/shop/<slug>-<n>.tests.log\`.
+
+## Логи, база, odoo shell
+
+\`\`\`bash
+docker logs -f --tail 200 $C
+echo "print(env['res.users'].search_count([]))" | bmodoo shell --no-http
+\`\`\`
+
+\`\`\`bash
+docker exec -it bm-shop-db psql -U odoo -d $DB
+\`\`\`
+
+В защищённых сборках — только чтение: \`SELECT\`, в \`odoo shell\` без \`env.cr.commit()\`.
+
+## Только через приложение
+
+Ассистент этого **не делает** — только пользователь кнопками приложения (Rebuild, Drop, Start/Stop, Backups, Settings):
+
+- \`docker compose down/rm\`, \`docker rm\`, \`docker stop\` контейнеров \`bm-*\`; ничего не делать с \`bm-traefik\` и \`bm-shop-db\` (кроме psql);
+- \`dropdb\`, \`DROP DATABASE\`, создание и копирование баз сборок;
+- удаление и правка \`C:/bm/worktrees/shop\`, filestore сборок в \`C:/bm/filestore/shop\`, копии репозитория \`C:/bm/repos/shop.git\`;
+- любые записи в Production и защищённые сборки (\`-u\`, \`-i\`, restart, \`UPDATE\` / \`INSERT\` / \`DELETE\`);
+- настройки \`C:/Users/u/AppData/Roaming/Odoo Branch Manager/projects/shop.yaml\` и \`app.yaml\` — только по просьбе пользователя; пароль Postgres
+  из них не читать и не выводить;
+- база \`postgres\` — только по явной просьбе;
+- удаление ветки на GitHub — только пользователь: если у ветки включено «Удалять вместе с веткой на GitHub», после
+  fetch приложение удалит её сборку, базу, filestore и worktree. Данные нужны — сначала снапшот во вкладке Backups.
+
+## Если приложение ошиблось
+
+Ошибка приложения, непонятное сообщение, пришлось руками сделать то, что должно делать приложение, — скажи
+пользователю. Issue в \`bakum/bakum_sh\` (\`https://github.com/bakum/bakum_sh/issues\`) — только по его решению.
+<!-- generated by Odoo Branch Manager 0.12.0; sha256:4883b6ae4bcfd7e0 -->
+"
+`;

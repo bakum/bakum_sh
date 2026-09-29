@@ -6,6 +6,7 @@ import { runtimeState } from '../state';
 import { listeningPorts } from '../util/ports';
 import { pgPing } from '../pg';
 import { summaries } from './projects';
+import { outdatedSkills } from './agents';
 import { bus } from '../events';
 import { audit } from './audit';
 import { reconcile } from '../reconcile';
@@ -109,6 +110,7 @@ export async function systemStatus(ctx: Ctx, refresh: boolean): Promise<SystemSt
     fetches: summaries(ctx).map((s) => ({ projectId: s.id, at: s.lastFetchAt, error: s.lastFetchError })),
     discrepancies: runtimeState.discrepancies,
     orphans: runtimeState.orphans,
+    outdatedSkills: outdatedSkills(ctx),
     paths: { configDir: ctx.configDir, dataDir: ctx.dataDir, logsDir: ctx.logsDir },
   };
 }

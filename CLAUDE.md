@@ -94,6 +94,10 @@ app's own `bm-<project>-db` in network `bm-<project>` (`docker/postgres.ts`). `e
 restart / apply / modules / builds (starts a stopped external container). `services/pg-migrate.ts` moves a project from
 external to managed. New projects are created managed (D36).
 
+**Assistant skill (D52).** `core/src/agents/skill.ts` renders the SKILL.md the app installs into the user's
+`.claude/skills/` (Settings → «Ассистенты», `services/agents.ts`); it tells assistants how to use builds via the
+`bm.*` container labels. When builds, labels or the Tools tab change behaviour, update this text and its snapshot.
+
 **Runtime / reconcile.** `core/src/runtime.ts` fires `onStart` / `onDockerUp` hooks (Traefik, managed Postgres,
 reconcile). `reconcile.ts` compares registry vs Docker labels, worktrees and databases and only reports discrepancies
 and orphans (Status page); nothing is deleted without the user.

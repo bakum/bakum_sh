@@ -20,7 +20,7 @@ import { bus } from '../events';
 import { buildContainers, dropBuild } from './drop';
 import { configHash } from './view';
 import { runBuild } from './pipeline';
-import { runOdooOneOff, assertOdooOk, serverBaseArgs, addonsPathVar, codeVars } from './odoo-cli';
+import { runOdooOneOff, assertOdooOk, serverBaseArgs, codeVars } from './odoo-cli';
 import { docker } from '../docker/client';
 import { sleep } from '../util/time';
 
@@ -75,13 +75,16 @@ export function writeLiveCompose(ctx: Ctx, b: BuildRow): string {
   const code = codeSource(cfg, br, scope).dir;
   if (!code) throw new BmError('NO_WORKTREE', 'Worktree ветки не найден — нужен Rebuild');
   const file = path.join(branchDir(ctx, cfg.id, br.slug), 'compose.yml');
+  const vars = codeVars(cfg, code);
   const text = generateCompose({
     cfg,
     scope,
     branch: { id: br.id, name: br.name, slug: br.slug, stage: br.stage },
     build: { id: b.id, number: b.number, dbName: b.dbName, host: b.host, composeProject: b.composeProject, debugPort: b.debugPort },
     worktree: code,
-    addonsPath: addonsPathVar(cfg, code),
+    addonsPath: vars.addonsPath as string | undefined,
+    proxyPort: ctx.proxyPort ?? ctx.store.app.proxyPort,
+    odooArgs: serverBaseArgs(cfg, vars),
   });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text, 'utf8');

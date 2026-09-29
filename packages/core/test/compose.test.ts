@@ -39,6 +39,8 @@ const input = {
   build: { id: 42, number: 3, dbName: 'o19_br_crm_3', host: 'crm.localhost', composeProject: 'bm-demz-crm', debugPort: 5701 },
   worktree: 'E:\\demz-odoo-19\\worktrees\\demz\\crm',
   addonsPath: '/mnt/repositories/demz-odoo/demzua/perevertum/crm,/mnt/repositories/demz-odoo/exchange',
+  proxyPort: 8080,
+  odooArgs: ['-c', '/etc/odoo/odoo.conf', '--data-dir=/var/lib/odoo', '--addons-path=/mnt/repositories/demz-odoo/exchange'],
 };
 
 describe('generateCompose', () => {
@@ -58,6 +60,15 @@ describe('generateCompose', () => {
     expect(svc.labels['bm.build']).toBe('42');
     expect(svc.labels['traefik.http.routers.bm-demz-crm.rule']).toBe('Host(`crm.localhost`)');
     expect(svc.ports).toEqual(['127.0.0.1:5701:5678']);
+    // Context labels for the assistant skill (D52).
+    expect(svc.labels['bm.slug']).toBe('crm');
+    expect(svc.labels['bm.url']).toBe('http://crm.localhost:8080');
+    expect(svc.labels['bm.protected']).toBe('true'); // 19.0-demz-crm is in repo.protectedBranches of the preset
+    expect(svc.labels['bm.odoo.args']).toBe('-c /etc/odoo/odoo.conf --data-dir=/var/lib/odoo --addons-path=/mnt/repositories/demz-odoo/exchange');
+    const dev = YAML.parse(generateCompose({ ...input, branch: { ...input.branch, name: '19.0-demz-perevertum', slug: 'perevertum' }, proxyPort: 80, odooArgs: undefined }));
+    expect(dev.services.odoo.labels['bm.protected']).toBe('false');
+    expect(dev.services.odoo.labels['bm.url']).toBe('http://crm.localhost');
+    expect(dev.services.odoo.labels['bm.odoo.args']).toBeUndefined();
     expect(doc.networks['demz-odoo-19_default']).toEqual({ external: true, name: 'demz-odoo-19_default' });
   });
 

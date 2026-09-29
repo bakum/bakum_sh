@@ -270,6 +270,7 @@ export function SettingsPage() {
                 </Tabs.Tab>
               ))}
             {!isApp && <Tabs.Tab value="rules">Правила веток</Tabs.Tab>}
+            {!isApp && <Tabs.Tab value="agents">Ассистенты</Tabs.Tab>}
             {!isApp && (
               <Tabs.Tab value="hooks" rightSection={<Badge size="xs" variant="light" color="gray">отложено</Badge>}>
                 Хуки
@@ -332,6 +333,12 @@ export function SettingsPage() {
                   </Text>
                 </Stack>
               </Card>
+            </Tabs.Panel>
+          )}
+
+          {!isApp && project.data && (
+            <Tabs.Panel value="agents" pt="md">
+              <AgentSkillCard projectId={pid!} />
             </Tabs.Panel>
           )}
 
@@ -479,6 +486,109 @@ function RuntimeBuildCard({
             )}
             {showLog && <Code block>{(jobLog.data?.lines ?? []).join('\n') || '…'}</Code>}
           </Stack>
+        )}
+      </Stack>
+    </Card>
+  );
+}
+
+const SKILL_STATE: Record<string, { text: string; color: string }> = {
+  none: { text: 'не установлен', color: 'gray' },
+  current: { text: 'актуален', color: 'teal' },
+  outdated: { text: 'есть новее', color: 'orange' },
+  modified: { text: 'изменён вручную', color: 'red' },
+  foreign: { text: 'чужой файл', color: 'red' },
+};
+
+/**
+ * Skill for Claude Code / Cursor (D52): the app writes it from the project settings into `<folder>/.claude/skills`,
+ * so assistants know the builds, labels and what only the app may do.
+ */
+function AgentSkillCard({ projectId }: { projectId: string }) {
+  const [dir, setDir] = useState<string | null>(null);
+  const [inGit, setInGit] = useState(false);
+  const [showText, setShowText] = useState(false);
+  const status = useBm('agents.skillStatus', { projectId, ...(dir ? { dir } : {}) });
+  const install = useBmMutation('agents.installSkill', { success: 'Skill для ассистентов записан' });
+  const s = status.data;
+  const target = dir ?? s?.dir ?? null;
+  const st = SKILL_STATE[s?.state ?? 'none']!;
+  const risky = s?.state === 'modified' || s?.state === 'foreign';
+  const choices = [...new Set([...(s?.suggestedDirs ?? []), ...(target ? [target] : [])])];
+  return (
+    <Card withBorder data-testid="agent-skill">
+      <Stack gap="sm">
+        <Group justify="space-between">
+          <Text fw={600}>Skill для Claude Code и Cursor</Text>
+          <Badge color={st.color} variant="light" data-testid="skill-state">
+            {st.text}
+            {s?.installedVersion ? ` · ${s.installedVersion}` : ''}
+          </Badge>
+        </Group>
+        <Text size="sm" c="dimmed">
+          Инструкция для ассистента по сборкам этого проекта: как найти сборку ветки, обновить модуль, запустить тесты, где логи и что можно делать
+          только через приложение. Приложение пишет её из настроек проекта в <Code>.claude/skills/{s?.name ?? '…'}/SKILL.md</Code> выбранной
+          папки — этот путь читают и Claude Code, и Cursor. Выберите папку, которую открываете в редакторе. После обновления приложения или
+          изменения настроек нажмите «Обновить».
+        </Text>
+        <Group align="flex-end" gap="xs">
+          <TextInput label="Папка проекта в редакторе" w={420} value={target ?? ''} onChange={(e) => setDir(e.currentTarget.value || null)} />
+          <Button
+            variant="default"
+            onClick={async () => {
+              const d = await window.bm.desktop.selectDirectory('Папка, которую вы открываете в Claude Code или Cursor');
+              if (d) setDir(d);
+            }}
+          >
+            Выбрать…
+          </Button>
+          {choices
+            .filter((c) => c !== target)
+            .map((c) => (
+              <Button key={c} variant="subtle" onClick={() => setDir(c)}>
+                {c}
+              </Button>
+            ))}
+        </Group>
+        {s?.path && (
+          <Text size="xs" c="dimmed">
+            Файл: <Code>{s.path}</Code>
+          </Text>
+        )}
+        {risky && (
+          <Alert color="red">
+            {s?.state === 'modified'
+              ? 'Файл изменён вручную: перезапись уберёт эти правки. Свои правила лучше держать в отдельном skill.'
+              : 'Файл по этому пути создан не приложением: перезапись заменит его.'}
+          </Alert>
+        )}
+        {inGit && (
+          <Alert color="blue">
+            Папка в git, и skill не в .gitignore: он появится в изменениях репозитория. Закоммитьте его, если skill нужен всей команде, или добавьте в
+            .gitignore.
+          </Alert>
+        )}
+        <Group gap="xs">
+          <Button
+            color={risky ? 'red' : undefined}
+            disabled={!target || s?.state === 'current'}
+            loading={install.isPending}
+            onClick={async () => {
+              const r = await install.mutateAsync({ projectId, dir: target!, overwrite: risky });
+              setInGit(r.inGit);
+              setDir(null);
+            }}
+          >
+            {s?.state === 'none' ? 'Установить' : risky ? 'Перезаписать' : 'Обновить'}
+          </Button>
+          <Button variant="subtle" onClick={() => setShowText((v) => !v)}>
+            {showText ? 'Скрыть текст' : 'Показать текст'}
+          </Button>
+        </Group>
+        {showText && s && (
+          <Code block style={{ maxHeight: 480, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+            {s.content}
+          </Code>
         )}
       </Stack>
     </Card>

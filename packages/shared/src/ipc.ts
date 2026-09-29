@@ -78,6 +78,23 @@ export interface PgMigratePreview {
   builds: string[];
 }
 
+/**
+ * Skill for Claude Code / Cursor in `<dir>/.claude/skills/<name>/SKILL.md` (D52). `state`: none — no file; current —
+ * same text as the app would write now; outdated — written by the app, but the app or the settings changed since;
+ * modified — edited by hand; foreign — a file without the app's marker.
+ */
+export interface AgentSkillStatus {
+  name: string;
+  dir: string | null;
+  suggestedDirs: string[];
+  path: string | null;
+  state: 'none' | 'current' | 'outdated' | 'modified' | 'foreign';
+  installedVersion: string | null;
+  currentVersion: string;
+  /** Text the app writes now. */
+  content: string;
+}
+
 export interface JobRef {
   jobId: number;
 }
@@ -138,6 +155,13 @@ export const methods = {
   'projects.pgMigrate': m<JobRef>()(z.object({ projectId }).strict()),
   /** `docker build` of runtime.build now (D46): checks the Dockerfile before a build needs the image. */
   'projects.buildImage': m<JobRef>()(z.object({ projectId }).strict()),
+
+  /** Skill for assistants (D52); `dir` — another folder than `agents.skillsDir` of the project. */
+  'agents.skillStatus': m<AgentSkillStatus>()(z.object({ projectId, dir: z.string().min(1).optional() }).strict()),
+  /** Writes the skill into `<dir>/.claude/skills/…` and remembers `dir`; a hand-edited file only with `overwrite`. */
+  'agents.installSkill': m<{ path: string; inGit: boolean }>()(
+    z.object({ projectId, dir: z.string().min(1), overwrite: z.boolean().default(false) }).strict(),
+  ),
 
   'config.get': m<{ yaml: string; value: unknown }>()(
     z.object({ projectId: projectId.optional(), level: levelSchema, branchId: id.optional() }).strict(),

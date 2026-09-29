@@ -31,6 +31,7 @@ import { assertFolderUsable } from './git/worktrees';
 import { listAudit } from './services/audit';
 import { getQueue } from './jobs/queue';
 import { registerBuildHandlers } from './services/build-actions';
+import { registerAgentHandlers } from './services/agents';
 import { snapshotHandlers } from './services/snapshots';
 import { monitorView } from './services/monitor';
 import { requestImageBuild } from './services/project-setup';
@@ -132,6 +133,7 @@ export function registerHandlers(ctx: Ctx): void {
     'system.cleanupOrphans': (p) => cleanupOrphans(ctx, p.items),
   });
   registerBuildHandlers(ctx);
+  registerAgentHandlers(ctx);
   ctx.rpc.register(snapshotHandlers(ctx));
   ctx.rpc.register({
     'monitor.get': (p) => monitorView(ctx, p.buildId),

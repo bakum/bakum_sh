@@ -57,6 +57,10 @@ services:
       bm.build.number: "3"
       bm.stage: development
       bm.db: o19_br_crm_3
+      bm.slug: crm
+      bm.url: http://crm.localhost:8080
+      bm.protected: "true"
+      bm.odoo.args: -c /etc/odoo/odoo.conf --data-dir=/var/lib/odoo --addons-path=/mnt/repositories/demz-odoo/exchange
       traefik.enable: "true"
       traefik.docker.network: demz-odoo-19_default
       traefik.http.routers.bm-demz-crm.rule: Host(\`crm.localhost\`)

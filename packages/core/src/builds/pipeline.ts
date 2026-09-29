@@ -20,7 +20,6 @@ import { ownedRegistry } from '../registry';
 import { assertSqlIdent } from '../config/templates';
 import { bumpedModules, changedModules, matchInstalled, modulesFromTree, parseModuleList, selectTestModules, splitInstallUpdate, type ModuleInfo } from '../modules';
 import {
-  addonsPathVar,
   assertOdooOk,
   codeVars,
   dbSubcommand,
@@ -94,13 +93,16 @@ function setStep(r: Run, name: BuildStepName, patch: Partial<BuildStep>): void {
 function writeBuildCompose(r: Run): void {
   const code = src(r).dir;
   if (!code) throw new BmError('NO_WORKTREE', 'Worktree ветки не создан');
+  const v = codeVars(r.cfg, code);
   const text = generateCompose({
     cfg: r.cfg,
     scope: r.scope,
     branch: { id: r.branch.id, name: r.branch.name, slug: r.branch.slug, stage: r.branch.stage },
     build: { id: r.build.id, number: r.build.number, dbName: r.build.dbName, host: r.build.host, composeProject: r.build.composeProject, debugPort: r.build.debugPort },
     worktree: code,
-    addonsPath: addonsPathVar(r.cfg, code),
+    addonsPath: v.addonsPath as string | undefined,
+    proxyPort: r.ctx.proxyPort ?? r.ctx.store.app.proxyPort,
+    odooArgs: serverBaseArgs(r.cfg, v),
   });
   fs.mkdirSync(r.buildDir, { recursive: true });
   fs.writeFileSync(r.composeFile, text, 'utf8');

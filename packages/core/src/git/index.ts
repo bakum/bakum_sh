@@ -49,6 +49,11 @@ export async function topLevel(dir: string): Promise<string | null> {
   return out ? toPosix(out.trim()) : null;
 }
 
+/** Is `file` (inside the work tree of `dir`) ignored by .gitignore? Read-only. */
+export async function isIgnored(dir: string, file: string): Promise<boolean> {
+  return !!(await git(dir, ['check-ignore', file], { allowFail: true })).trim();
+}
+
 export async function remotes(repo: string): Promise<string[]> {
   return (await git(repo, ['remote'])).split('\n').filter(Boolean);
 }

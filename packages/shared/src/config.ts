@@ -305,6 +305,11 @@ export const projectConfigSchema = z
     connect: z.object({ adminPassword: z.string().nullable().default(null) }).strict().prefault({}),
     extraSql: z.array(z.string()).default([]),
     hooks: z.array(hookSchema).default([]),
+    /** Skill for Claude Code / Cursor written by the app (D52): the folder whose `.claude/skills` gets it. */
+    agents: z
+      .object({ skillsDir: z.string().min(1).nullable().default(null) })
+      .strict()
+      .prefault({}),
   })
   .strict()
   .superRefine((cfg, ctx) => {
