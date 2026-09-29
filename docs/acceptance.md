@@ -348,6 +348,7 @@ ports of Docker: bm-demz-test999 127.0.0.1:5701 | bm-second-feature-x 127.0.0.1:
 | Backups: снапшоты, экспорт | 0.7.0 | `check-snapshots.mjs` | **пройден** (20 из 20) |
 | Monitor, `idleStopHours`, `dropAfterDays` | 0.8.0 | `check-monitor.mjs` | **пройден** (12 из 12); `dropAfterDays` — только напоминание (D45) |
 | `runtime.build` | 0.9.0 | `check-image.mjs` | **пройден** (15 из 15) |
+| Ветка отстаёт от кода копируемой БД (D47, доработка) | 0.9.1 | `check-code-lag.mjs` | **пройден** (12 из 12) |
 | `postgres.mode: managed` | 0.2.0 | `check-new-managed.mjs`, `check-pg-migrate.mjs` | пройден раньше (D30, D35, D36) |
 | Fork с push | 0.2.0 | `check-d33.mjs` | пройден раньше (D33) |
 | Mails (Mailpit) | — | — | **отложено** по решению пользователя (D43) |

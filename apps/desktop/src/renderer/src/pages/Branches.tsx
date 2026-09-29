@@ -6,6 +6,7 @@ import type { BranchView, Stage } from '@bm/shared';
 import { useBm, useBmMutation } from '../lib/query';
 import { call, errorText } from '../lib/bm';
 import { Sidebar } from '../components/Sidebar';
+import { useRebuild } from '../components/useRebuild';
 import { BranchPage } from './BranchPage';
 import { MergeDialog } from '../components/dialogs/MergeDialog';
 
@@ -63,13 +64,12 @@ export function BranchesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, bid, list.data]);
 
+  const rebuild = useRebuild();
   const onContext = async (b: BranchView, action: string) => {
     try {
       if (action === 'connect' && b.url) await window.bm.desktop.openExternal(b.url);
-      else if (action === 'rebuild') {
-        await call('builds.rebuild', { branchId: b.id });
-        notifications.show({ message: `Rebuild ${b.name} поставлен в очередь` });
-      } else if ((action === 'start' || action === 'stop') && b.liveBuild) {
+      else if (action === 'rebuild') await rebuild(b);
+      else if ((action === 'start' || action === 'stop') && b.liveBuild) {
         await call('builds.action', { buildId: b.liveBuild.id, action });
       } else if (action === 'editor') await call('shell.open', { branchId: b.id, target: 'editor' });
       else if (action === 'logs') nav(`/projects/${projectId}/branches/${b.id}/logs`);

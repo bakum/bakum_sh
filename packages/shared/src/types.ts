@@ -110,6 +110,8 @@ export interface BranchView {
   activeBuild: BuildView | null;
   /** Badges: unbuilt commits, stage settings changed, config changed, dirty worktree, prod mirror newer, paused… */
   badges: BranchBadge[];
+  /** Behind the code of the copied database's source (null — not a copy, not behind, or not computed yet). */
+  codeLag: CodeLag | null;
   url: string | null;
   lastActiveAt: string | null;
   /** Hidden from the sidebar by the user (context menu «Скрыть»); builds keep working. */
@@ -123,8 +125,27 @@ export type BranchBadgeKind =
   | 'dirty-worktree'
   | 'force-push'
   | 'mirror-newer'
+  /** The branch lacks commits of the source build its database is copied from (D47). */
+  | 'behind-source'
+  /** …and has no commits of its own: it is fully merged into the source. */
+  | 'merged-behind'
   | 'no-build'
   | 'discrepancy';
+
+/** Code lag of a branch behind the build its database is copied from (D47). */
+export interface CodeLag {
+  /** Source branch (the production branch for copy:production). */
+  source: string;
+  production: boolean;
+  /** Commit of the source build (what the source database was upgraded with). */
+  sourceSha: string;
+  /** Commits of the source missing in the branch. */
+  behind: number;
+  /** Commits of the branch missing in the source. */
+  ahead: number;
+  /** Modules changed by the missing commits: older in the branch than in the source database. */
+  modules: string[];
+}
 
 export interface BranchBadge {
   kind: BranchBadgeKind;

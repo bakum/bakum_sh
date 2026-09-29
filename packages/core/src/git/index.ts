@@ -417,6 +417,11 @@ export async function isAncestor(repo: string, a: string, b: string): Promise<bo
   return r.exitCode === 0;
 }
 
+/** Number of commits in `to` that are not in `from` (`git rev-list --count from..to`). */
+export async function countBetween(repo: string, from: string, to: string): Promise<number> {
+  return Number((await git(repo, ['rev-list', '--count', `${from}..${to}`])).trim()) || 0;
+}
+
 /** Best common ancestor of two commits, null when there is none. */
 export async function mergeBase(repo: string, a: string, b: string): Promise<string | null> {
   const out = (await git(repo, ['merge-base', a, b], { allowFail: true })).trim();

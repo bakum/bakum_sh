@@ -26,6 +26,7 @@ import { repoDir } from '../git/worktrees';
 import { assertNotLegacy } from '../config/legacy';
 import { onProjectConfigChanged } from './projects';
 import { nowIso } from '../util/time';
+import { codeLagOf, lagBadge } from './code-lag';
 
 /** Branch names known to git per project, refreshed by fetch. */
 const gitCache = new Map<string, GitBranchInfo[]>();
@@ -69,8 +70,13 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
   if (live && live.configHash && live.configHash !== hash) badges.push({ kind: 'config-changed', text: 'Конфигурация изменилась' });
   if (b.pausedReason === 'dirty-worktree') badges.push({ kind: 'dirty-worktree', text: 'Авто-сборки приостановлены: в worktree есть изменения' });
   if (b.pausedReason === 'force-push') badges.push({ kind: 'force-push', text: 'Force-push в ветку: авто-сборки приостановлены' });
-  if (live && live.sourceMirrorBuildId && prodLive && prodLive.id !== live.sourceMirrorBuildId && b.stage !== 'production') {
-    badges.push({ kind: 'mirror-newer', text: 'Зеркало прода новее вашей БД' });
+  // D47: a branch behind the code of its copy source gets the lag badge instead of «mirror newer» — a Rebuild from the
+  // fresh copy would run older module code on that database.
+  const lag = codeLagOf(ctx, cfg, b, r.scope);
+  const behind = lag && lag.behind > 0 ? lag : null;
+  if (behind) badges.push(lagBadge(behind));
+  else if (live && live.sourceMirrorBuildId && prodLive && prodLive.id !== live.sourceMirrorBuildId && b.stage !== 'production') {
+    badges.push({ kind: 'mirror-newer', text: 'Зеркало прода обновилось после сборки вашей БД: Rebuild возьмёт свежую копию' });
   }
   const liveView = live ? toBuildView(ctx, live, { branchName: b.name, currentHash: hash, dropAfterDays: r.scope.dropAfterDays, lastActiveAt: b.lastActiveAt }) : null;
   if (liveView && liveView.containerState === 'missing') badges.push({ kind: 'discrepancy', text: 'Контейнер сборки не найден в Docker' });
@@ -90,6 +96,7 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
     liveBuild: liveView,
     activeBuild: active ? toBuildView(ctx, active, { branchName: b.name }) : null,
     badges,
+    codeLag: behind,
     url: live ? buildUrl(live.host, port) : null,
     lastActiveAt: b.lastActiveAt,
     hidden: b.hidden,

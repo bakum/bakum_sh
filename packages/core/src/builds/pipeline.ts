@@ -32,6 +32,7 @@ import { bus } from '../events';
 import { listeningPorts } from '../util/ports';
 import { toPosix } from '../util/paths';
 import { copyTree } from '../util/fs-tree';
+import { commits, computeCodeLag } from '../services/code-lag';
 import { log as coreLog } from '../util/logger';
 import { nowIso, sleep } from '../util/time';
 
@@ -594,6 +595,17 @@ async function stepModules(r: Run): Promise<string> {
   } else {
     // changed / version-bumped: diff from the commit the database comes from (spec 8.7).
     const base = dbBaseCommit(r);
+    // D47: a copy made by newer code than the branch has: its modules are about to be updated with older code.
+    if (base && build.kind === 'new' && build.dbSource.startsWith('copy:')) {
+      const lag = await computeCodeLag(src(r).repo, base, sha, roots).catch(() => null);
+      if (lag && lag.behind > 0) {
+        r.log(
+          `[warn] ветка отстаёт на ${commits(lag.behind)} от кода, которым обновлена БД-источник (${base.slice(0, 7)}): ` +
+            `модули ${lag.modules.join(', ') || '—'} будут обновлены более старым кодом. Если шаг упадёт — подтяните ` +
+            `${build.dbSource === 'copy:production' ? cfg.production.branch : build.dbSource.slice(5)} в ветку.`,
+        );
+      }
+    }
     const d = base ? await modulesChangedSince(r, base) : null;
     if (!base || !d) {
       r.log('нет коммита-источника для сравнения — модули не обновляются');
