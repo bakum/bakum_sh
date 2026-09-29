@@ -222,8 +222,8 @@ function BranchRowItem({ b, selected, onSelect, onContext }: { b: BranchView; se
             </Text>
             {b.codeLag ? (
               // D47: behind the code of the copied database — Rebuild is not the fix, pulling the source branch in is.
-              <Tooltip multiline w={360} label={b.badges.find((x) => x.kind === 'behind-source' || x.kind === 'merged-behind')?.text}>
-                <Badge size="xs" color="yellow" variant="light" data-testid={`lag-${b.name}`}>
+              <Tooltip multiline w={400} style={{ whiteSpace: 'pre-line' }} label={b.badges.find((x) => x.kind === 'behind-source' || x.kind === 'merged-behind')?.text}>
+                <Badge size="xs" color={b.codeLag.modules.length ? 'yellow' : 'gray'} variant="light" data-testid={`lag-${b.name}`}>
                   ↓{b.codeLag.behind}
                 </Badge>
               </Tooltip>

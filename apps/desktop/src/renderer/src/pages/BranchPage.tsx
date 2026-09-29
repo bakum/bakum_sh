@@ -132,13 +132,16 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
               .map((x) => (
                 <Alert
                   key={x.kind}
-                  color={x.kind === 'discrepancy' ? 'red' : x.kind === 'behind-source' || x.kind === 'merged-behind' ? 'yellow' : 'orange'}
+                  // D47: a lag is only a warning when the missing commits change modules; otherwise Rebuild is safe.
+                  color={x.kind === 'discrepancy' ? 'red' : x.kind === 'behind-source' || x.kind === 'merged-behind' ? (b.codeLag?.modules.length ? 'yellow' : 'gray') : 'orange'}
                   variant="light"
                   py={4}
                   data-testid={`badge-${x.kind}`}
                 >
                   <Group justify="space-between" wrap="nowrap">
-                    <Text size="sm">{x.text}</Text>
+                    <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
+                      {x.text}
+                    </Text>
                     {(x.kind === 'stage-changed' || x.kind === 'unbuilt-commits' || x.kind === 'mirror-newer' || x.kind === 'force-push' || x.kind === 'dirty-worktree') && (
                       <Button size="compact-xs" onClick={() => rebuild(b, x.kind === 'stage-changed' ? 'stage_change' : 'rebuild')}>
                         Rebuild

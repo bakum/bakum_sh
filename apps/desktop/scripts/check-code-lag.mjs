@@ -105,13 +105,15 @@ async function run(win) {
   check('feature: отстаёт на 1 коммит, модуль bm_probe', f2.codeLag.behind === 1 && f2.codeLag.ahead === 1 && f2.codeLag.modules.join() === 'bm_probe', JSON.stringify(f2.codeLag));
   check('бейдж behind-source вместо mirror-newer', kinds(f2).includes('behind-source') && !kinds(f2).includes('mirror-newer'), kinds(f2).join());
   const text = f2.badges.find((x) => x.kind === 'behind-source').text;
-  check('текст называет отставание, модуль и что делать', /отстаёт от main на 1 коммит/.test(text) && /bm_probe/.test(text) && /подтяните main/.test(text), text);
+  check('текст: отставание, риск Rebuild с модулем, merge', /нет 1 коммита из main/.test(text) && /Rebuild рискован: недостающий коммит меняет модули bm_probe/.test(text) && /git merge origin\/main/.test(text), text);
   const o2 = await waitFor('бейдж влитой ветки', async () => {
     const v = await bm(win, 'branches.get', { branchId: old.id });
     return v.codeLag ? v : null;
   });
   // old = the base commit: main has one commit more (the deploy), old has none of its own.
   check('old: целиком влита и отстала', kinds(o2).includes('merged-behind') && o2.codeLag.ahead === 0 && o2.codeLag.behind === 1, JSON.stringify(o2.codeLag));
+  const oText = o2.badges.find((x) => x.kind === 'merged-behind').text;
+  check('текст влитой: удалить или fast-forward', /целиком влита в main/.test(oText) && /git merge --ff-only origin\/main/.test(oText), oText);
   await win.evaluate(([pid, id]) => (location.hash = `#/projects/${pid}/branches/${id}/history`), [ID, feat.id]);
   await win.waitForTimeout(2500);
   check('сайдбар: ↓1 у feature', (await win.textContent('[data-testid="lag-feature"]'))?.includes('↓1'));

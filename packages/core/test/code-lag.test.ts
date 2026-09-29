@@ -55,7 +55,24 @@ describe('code lag of a branch behind the copied database (D47)', () => {
   it('reports a fully merged branch left behind (nothing of its own)', async () => {
     expect(await computeCodeLag(dir, prod, base, [])).toEqual({ behind: 2, ahead: 0, modules: ['a'] });
     const text = codeLagText({ source: 'main', production: true, sourceSha: prod, behind: 2, ahead: 0, modules: ['a'] });
-    expect(text).toMatch(/целиком есть в main/);
+    expect(text).toMatch(/целиком влита в main и отстала от неё на 2 коммита/);
+  });
+
+  it('says whether Rebuild is safe and what to do, line by line', () => {
+    const lag = { source: '19.0', production: true, sourceSha: prod, behind: 4, ahead: 3, modules: ['demz_edo_journal', 'eusign_cp'] };
+    const [what, risk, todo] = codeLagText(lag).split('\n');
+    expect(what).toBe('В ветке нет 4 коммитов из 19.0, которыми уже обновлена БД зеркала прода, откуда ветка берёт копию базы.');
+    expect(risk).toMatch(/^Rebuild рискован: недостающие коммиты меняют модули demz_edo_journal, eusign_cp\./);
+    expect(risk).toMatch(/Код ветки Rebuild не меняет/);
+    expect(todo).toMatch(/git merge origin\/19\.0, git push, затем Rebuild\. Rebase не нужен/);
+    // Missing commits that change no module: Rebuild is safe.
+    expect(codeLagText({ ...lag, behind: 1, modules: [] })).toMatch(/^В ветке нет 1 коммита из 19\.0, которым .*\nRebuild безопасен: недостающий коммит не меняет модули/);
+    // Fully merged: delete it or fast-forward.
+    const merged = codeLagText({ ...lag, behind: 1, ahead: 0, modules: [] }).split('\n');
+    expect(merged[0]).toBe('Ветка целиком влита в 19.0 и отстала от неё на 1 коммит; своих коммитов в ней нет.');
+    expect(merged[1]).toMatch(/^Rebuild безопасен/);
+    expect(merged[2]).toMatch(/удалите её \(Delete\).*git merge --ff-only origin\/19\.0/);
+    expect(codeLagText({ ...lag, source: 'crm', production: false, behind: 21 })).toMatch(/нет 21 коммита из crm, которыми уже обновлена БД сборки ветки crm/);
   });
 
   it('gives up on a commit the repository does not have', async () => {
