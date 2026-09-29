@@ -29,6 +29,7 @@ const FIELDS: Editable[] = [
   { path: 'env', label: 'Переменные окружения', kind: 'env' },
   { path: 'protected', label: 'Защита от удаления', kind: 'switch' },
   { path: 'buildOnAdd', label: 'Собирать при добавлении', kind: 'switch' },
+  { path: 'deleteWithRemote', label: 'Удалять вместе с веткой на GitHub', kind: 'switch' },
   { path: 'idleStopHours', label: 'Остановка без активности, ч', kind: 'number' },
   { path: 'dropAfterDays', label: 'Срок хранения (напоминание), дней', kind: 'number' },
   { path: 'tests.mode', label: 'Тесты', kind: 'select', options: ['none', 'changed', 'my'] },

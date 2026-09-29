@@ -321,6 +321,10 @@ Backups · Tools · Settings**; кнопки **Rebuild** и **GitHub**.
   незакоммиченные изменения — показать `git status --porcelain` и требовать отдельного подтверждения); чекбоксы
   «удалить локальную ветку» (`git branch -d`, без `-D`) и «удалить ветку в origin» (выкл. по умолчанию, недоступно для
   `protectedBranches`, Production и Staging). История сборок остаётся в Audit Logs.
+- **Ветка удалена в origin** (D50): после успешного fetch ветка приложения, которой больше нет в `origin`, удаляется
+  как Delete (`deleteWithRemote`, по умолчанию у Development). Production, `protected` / `protectedBranches`, ветки со
+  своей папкой и worktree с изменениями не удаляются — уведомление. Без веток в `origin` или без ветки Production
+  ничего не удаляется.
 
 ### 8.11 Страницы верхнего меню
 

@@ -38,6 +38,13 @@ function stageFields(stage: keyof typeof STAGE_NAMES): FieldDef[] {
     },
     { path: p('buildOnAdd'), label: 'Собирать при добавлении ветки', type: 'switch' },
     { path: p('protected'), label: 'Защита от удаления', type: 'switch' },
+    {
+      path: p('deleteWithRemote'),
+      label: 'Удалять вместе с веткой на GitHub',
+      type: 'switch',
+      description:
+        'ветку удалили на GitHub — после fetch она удаляется и в приложении вместе со сборками и их БД. Production, защищённые ветки, ветки со своей папкой и worktree с изменениями не удаляются',
+    },
     { path: p('onForcePush'), label: 'Force-push', type: 'select', options: ['pause', 'new'], inherit: inh },
     {
       path: p('idleStopHours'),
@@ -522,6 +529,7 @@ function AppSettings({ text, onSave, saving }: { text: string; onSave: (t: strin
         { path: ['desktop', 'notifications', 'newBackup'], label: 'Найден новый бэкап прода', type: 'switch' },
         { path: ['desktop', 'notifications', 'lowDisk'], label: 'Мало места', type: 'switch' },
         { path: ['desktop', 'notifications', 'buildExpired'], label: 'Истёк срок хранения сборки (dropAfterDays)', type: 'switch' },
+        { path: ['desktop', 'notifications', 'branchRemoved'], label: 'Ветку удалили на GitHub', type: 'switch' },
       ],
     },
   ];

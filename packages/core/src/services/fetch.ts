@@ -12,12 +12,16 @@ import { branchByName, branchRows, ensureBranchRow, isAutoAddSkipped } from './b
 import { onNewCommit } from '../builds/triggers';
 import { requestBuildChecked } from '../builds/request';
 import { audit } from './audit';
+import { pruneGoneBranches } from './remote-gone';
 import { repoDir } from '../git/worktrees';
 import { assertNotLegacy } from '../config/legacy';
 import { log } from '../util/logger';
 import { nowIso } from '../util/time';
 
-/** Job `fetch`: git fetch → auto-add by rules → rules re-applied → new commits trigger builds (spec 8.2, 8.3). */
+/**
+ * Job `fetch`: git fetch → auto-add by rules → rules re-applied → new commits trigger builds (spec 8.2, 8.3) →
+ * branches deleted on the remote are deleted in the app (D50).
+ */
 export async function fetchExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const cfg = ctx.store.require(job.projectId!);
   assertNotLegacy(cfg);
@@ -31,6 +35,8 @@ export async function fetchExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Prom
   }
   ctx.db.update(projects).set({ lastFetchAt: nowIso(), lastFetchError: fetchError }).where(eq(projects.id, cfg.id)).run();
   await processRefs(ctx, cfg, jc);
+  // Only a successful fetch says a branch is gone: after an error the mirror still has the old refs.
+  if (!fetchError) await pruneGoneBranches(ctx, cfg, jc);
   bus.emit({ type: 'project.changed', projectId: cfg.id });
   if (fetchError) throw new Error(`git fetch: ${fetchError}`);
 }

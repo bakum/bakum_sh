@@ -77,6 +77,11 @@ export const branchScopeSchema = z
     protected: z.boolean(),
     /** Build automatically when the branch is added to the project (auto-add by fetch included). */
     buildOnAdd: z.boolean(),
+    /**
+     * The branch was deleted on the remote (a fetch no longer finds it, D50): delete it in the app with its builds.
+     * Production, protected branches, branches with their own folder and dirty worktrees are kept regardless.
+     */
+    deleteWithRemote: z.boolean(),
     image: z.string().min(1),
     env: z.record(z.string(), z.string()),
     localTweaks: z
@@ -111,6 +116,7 @@ export interface ResolvedBranchScope {
   dropAfterDays: number;
   protected: boolean;
   buildOnAdd: boolean;
+  deleteWithRemote: boolean;
   image: string;
   env: Record<string, string>;
   localTweaks: { baseUrl: boolean; mailServer: boolean; adminPassword: boolean; extraSql: boolean };
@@ -319,7 +325,7 @@ export type ProjectConfig = z.infer<typeof projectConfigSchema>;
 export const isLegacyProject = (cfg: ProjectConfig): boolean => !cfg.repo.url || !cfg.repo.mirrorDir;
 export type ProjectConfigInput = z.input<typeof projectConfigSchema>;
 
-export const notificationKinds = ['buildReady', 'buildFailed', 'testsFailed', 'newBackup', 'lowDisk', 'buildExpired'] as const;
+export const notificationKinds = ['buildReady', 'buildFailed', 'testsFailed', 'newBackup', 'lowDisk', 'buildExpired', 'branchRemoved'] as const;
 export type NotificationKind = (typeof notificationKinds)[number];
 
 export const appConfigSchema = z
@@ -367,6 +373,8 @@ export const appConfigSchema = z
             lowDisk: z.boolean().default(true),
             /** A live build passed its dropAfterDays (D45): it may be dropped. */
             buildExpired: z.boolean().default(true),
+            /** A branch deleted on GitHub was deleted in the app, or kept and needs the user (D50). */
+            branchRemoved: z.boolean().default(true),
           })
           .strict()
           .prefault({}),
