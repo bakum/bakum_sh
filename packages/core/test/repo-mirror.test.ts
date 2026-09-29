@@ -140,6 +140,13 @@ describe('the app mirror (git)', () => {
     expect(await sh(origin, 'rev-parse', 'refs/heads/feature/x')).toBe(sha);
     await git.fetch(mirror, 'origin');
     expect((await git.listBranches(mirror, 'origin')).map((b) => b.name)).toEqual(['feature/x', 'main']);
+
+    // A branch deleted on the remote disappears from the mirror (D49); worktrees keep their commits.
+    await sh(origin, 'branch', '-D', 'feature/x');
+    await git.fetch(mirror, 'origin');
+    expect((await git.listBranches(mirror, 'origin')).map((b) => b.name)).toEqual(['main']);
+    expect(await git.remoteSha(mirror, 'origin', 'feature/x')).toBeNull();
+    expect(await git.headSha(wt)).toBe(sha);
   });
 
   it('lists uncommitted files of the user folder without changing it', async () => {

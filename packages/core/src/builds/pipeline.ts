@@ -7,7 +7,7 @@ import { branches, builds, type BranchRow, type BuildRow, type JobRow } from '..
 import type { JobContext } from '../jobs/queue';
 import { resolveBranchScope } from '../config/effective';
 import * as git from '../git';
-import { assertFolderUsable, codeSource, ensureWorktree, type CodeSource } from '../git/worktrees';
+import { assertFolderUsable, codeSource, ensureWorktree, noRemoteBranch, type CodeSource } from '../git/worktrees';
 import { docker, dockerCli } from '../docker/client';
 import { ODOO_SERVICE, dataDirOf, generateCompose } from '../docker/compose';
 import { ensureTraefik } from '../docker/traefik';
@@ -126,7 +126,7 @@ async function stepCode(r: Run): Promise<string> {
     const wt = await ensureWorktree(ctx, cfg, r.branch);
     r.branch = branchRow(ctx, r.branch.id)!;
     sha = (r.job.params.targetSha as string | null) ?? (await git.remoteSha(from.repo, cfg.repo.remote, r.branch.name));
-    if (!sha) throw new BmError('NO_BRANCH_REF', `Ветка ${r.branch.name} не найдена в ${cfg.repo.remote}. Выполните fetch.`);
+    if (!sha) throw new BmError('NO_BRANCH_REF', noRemoteBranch(r.branch.name, cfg.repo.remote));
     const dirty = (await git.statusPorcelain(wt)).trim();
     if (dirty) {
       throw new BmError(

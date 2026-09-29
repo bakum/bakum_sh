@@ -9,7 +9,12 @@ import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
 import { samePath, toPosix } from '../util/paths';
 
-export const worktreePathFor = (cfg: ProjectConfig, slug: string): string => toPosix(path.join(cfg.repo.worktreesDir, cfg.id, slug));
+/** A branch of the project is gone from the mirror: fetch prunes branches deleted on the remote (D49). */
+export const noRemoteBranch = (name: string, remote: string): string =>
+  `Ветки «${name}» нет в ${remote}: её удалили или переименовали на GitHub. Если ветка только что создана, нажмите ` +
+  '«Обновить» (fetch); иначе удалите её в приложении.';
+
+export const worktreePathFor =(cfg: ProjectConfig, slug: string): string => toPosix(path.join(cfg.repo.worktreesDir, cfg.id, slug));
 
 /**
  * Git repository the app works in (D33): its own mirror; for a legacy project — the user's repository, used only to
@@ -61,9 +66,7 @@ export async function ensureWorktree(ctx: Ctx, cfg: ProjectConfig, b: BranchRow)
   if (existing) await git.worktreePrune(repo);
 
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  if (!(await git.remoteSha(repo, cfg.repo.remote, b.name))) {
-    throw new BmError('NO_BRANCH_REF', `Ветка «${b.name}» не найдена в ${cfg.repo.remote}. Выполните fetch.`);
-  }
+  if (!(await git.remoteSha(repo, cfg.repo.remote, b.name))) throw new BmError('NO_BRANCH_REF', noRemoteBranch(b.name, cfg.repo.remote));
   await git.worktreeAddDetached(repo, target, `${cfg.repo.remote}/${b.name}`);
   setWorktree(ctx, b.id, target);
   return target;

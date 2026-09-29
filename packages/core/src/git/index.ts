@@ -90,9 +90,9 @@ export async function listBranches(repo: string, remote: string): Promise<GitBra
   return [...map.entries()].map(([name, source]) => ({ name, source })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** `git fetch <remote>` (no prune, no tags rewrite). */
+/** `git fetch --prune <remote>` into the app's own mirror (D49): branches deleted on the remote disappear; no tags. */
 export async function fetch(repo: string, remote: string): Promise<void> {
-  const r = await execa('git', ['fetch', '--no-tags', remote], { cwd: repo, reject: false, timeout: 180_000, env: QUIET_ENV, windowsHide: true });
+  const r = await execa('git', ['fetch', '--prune', '--no-tags', remote], { cwd: repo, reject: false, timeout: 180_000, env: QUIET_ENV, windowsHide: true });
   assertGitFound(r);
   if (r.exitCode === 0) return;
   const stderr = String(r.stderr || r.stdout || (r.timedOut ? 'timed out' : ''));
