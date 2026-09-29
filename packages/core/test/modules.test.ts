@@ -12,8 +12,24 @@ import {
   modulesFromTree,
   parseModuleList,
   scanModules,
+  selectTestModules,
   splitInstallUpdate,
 } from '../src/modules';
+
+describe('modules to test (spec 8.8)', () => {
+  const input = { changed: ['b', 'a', 'x'], wanted: new Set(['a', 'c']) };
+  it('picks by tests.mode', () => {
+    expect(selectTestModules('none', input)).toEqual([]);
+    expect(selectTestModules('changed', input)).toEqual(['a', 'b', 'x']);
+    expect(selectTestModules('my', input)).toEqual(['a', 'c']);
+    expect(selectTestModules({ list: ['c', 'c', 'd'] }, input)).toEqual(['c', 'd']);
+  });
+  it('keeps only modules installed in the tested database', () => {
+    const available = new Set(['a', 'c', 'd']);
+    expect(selectTestModules('changed', { ...input, available })).toEqual(['a']);
+    expect(selectTestModules({ list: ['c', 'd', 'e'] }, { ...input, available })).toEqual(['c', 'd']);
+  });
+});
 
 const tree = [
   'README.md',

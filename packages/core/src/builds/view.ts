@@ -30,6 +30,9 @@ export function configHash(cfg: ProjectConfig, scope: ResolvedBranchScope, proxy
   return crypto.createHash('sha1').update(JSON.stringify(payload)).digest('hex').slice(0, 16);
 }
 
+/** tests.log of a build: next to its build.log (`<slug>-<n>.log` → `<slug>-<n>.tests.log`). */
+export const testsLogPath = (logPath: string): string => `${logPath.replace(/\.log$/, '')}.tests.log`;
+
 export function buildUrl(host: string, proxyPort: number | null): string {
   return `http://${host}${!proxyPort || proxyPort === 80 ? '' : `:${proxyPort}`}`;
 }

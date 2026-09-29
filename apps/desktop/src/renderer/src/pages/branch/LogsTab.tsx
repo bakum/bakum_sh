@@ -32,13 +32,16 @@ function colorize(lines: string[]): string[] {
   });
 }
 
-/** Logs (spec 8.9): odoo.log (docker logs -f), build.log; level filter, search, save. */
+/** Logs (spec 8.9): odoo.log (docker logs -f), build.log, tests.log; level filter, search, save. */
 export function LogsTab({ branch }: { branch: BranchView }) {
   const [params] = useSearchParams();
   const builds = useBm('builds.list', { branchId: branch.id, limit: 30 });
   const defaultBuild = params.get('build') ?? String(branch.activeBuild?.id ?? branch.liveBuild?.id ?? builds.data?.items[0]?.id ?? '');
   const [buildId, setBuildId] = useState<string>(defaultBuild);
-  const [source, setSource] = useState<'odoo' | 'build'>(params.get('build') || branch.activeBuild ? 'build' : 'odoo');
+  const initialSource = params.get('source');
+  const [source, setSource] = useState<'odoo' | 'build' | 'tests'>(
+    initialSource === 'tests' || initialSource === 'build' ? initialSource : params.get('build') || branch.activeBuild ? 'build' : 'odoo',
+  );
   const [minLevel, setMinLevel] = useState('all');
   const [search, setSearch] = useState('');
   const scheme = useComputedColorScheme('light');
@@ -93,8 +96,7 @@ export function LogsTab({ branch }: { branch: BranchView }) {
     lines.current = [];
     term.current?.reset();
     if (!buildId) return;
-    const topic = source === 'odoo' ? 'container.log' : 'build.log';
-    const unsub = window.bm.subscribe(topic, { buildId: Number(buildId) }, (data) => {
+    const onChunk = (data: unknown) => {
       const chunk = data as LogChunk;
       if (chunk.reset) {
         lines.current = [];
@@ -104,8 +106,10 @@ export function LogsTab({ branch }: { branch: BranchView }) {
       if (lines.current.length > MAX_LINES) lines.current.splice(0, lines.current.length - MAX_LINES);
       const shown = chunk.lines.filter(pass);
       if (shown.length) term.current?.write(colorize(shown).join('\n') + '\n');
-    });
-    return unsub;
+    };
+    return source === 'odoo'
+      ? window.bm.subscribe('container.log', { buildId: Number(buildId) }, onChunk)
+      : window.bm.subscribe('build.log', { buildId: Number(buildId), file: source }, onChunk);
   }, [buildId, source, scheme]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -127,11 +131,11 @@ export function LogsTab({ branch }: { branch: BranchView }) {
         <SegmentedControl
           size="xs"
           value={source}
-          onChange={(v) => setSource(v as 'odoo' | 'build')}
+          onChange={(v) => setSource(v as 'odoo' | 'build' | 'tests')}
           data={[
             { value: 'odoo', label: 'odoo.log' },
             { value: 'build', label: 'build.log' },
-            { value: 'tests', label: 'tests.log (этап 2)', disabled: true },
+            { value: 'tests', label: 'tests.log' },
           ]}
         />
         <Select size="xs" w={220} data={buildOptions} value={buildId} onChange={(v) => v && setBuildId(v)} />

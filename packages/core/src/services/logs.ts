@@ -3,7 +3,7 @@ import { PassThrough } from 'node:stream';
 import { BmError } from '@bm/shared';
 import type { Ctx } from '../context';
 import { docker } from '../docker/client';
-import { buildRow } from '../builds/view';
+import { buildRow, testsLogPath } from '../builds/view';
 import { buildContainers } from '../builds/drop';
 
 /** Collects lines and flushes them in batches (~100 ms) so a noisy log does not flood the UI. */
@@ -48,14 +48,18 @@ function tailLines(file: string, maxLines: number): { lines: string[]; size: num
   return { lines: lines.slice(-maxLines), size };
 }
 
-/** Subscription `build.log`: the build step log file, followed while open. */
-export function subscribeBuildLog(ctx: Ctx, buildId: number, emit: (d: unknown) => void): () => void {
+/** Subscription `build.log`: the build step log file (or its tests.log), followed while open. */
+export function subscribeBuildLog(ctx: Ctx, buildId: number, kind: 'build' | 'tests', emit: (d: unknown) => void): () => void {
   const b = buildRow(ctx, buildId);
   if (!b?.logPath) {
     emit({ lines: ['(лог сборки не найден)'], reset: true });
     return () => {};
   }
-  const file = b.logPath;
+  const file = kind === 'tests' ? testsLogPath(b.logPath) : b.logPath;
+  if (kind === 'tests' && !fs.existsSync(file) && b.status !== 'building' && b.status !== 'queued') {
+    emit({ lines: ['(тесты в этой сборке не запускались)'], reset: true });
+    return () => {};
+  }
   const bt = batcher(emit);
   const first = tailLines(file, 10000);
   bt.reset(first.lines);
@@ -153,10 +157,13 @@ export function subscribeStats(_ctx: Ctx, buildId: number, emit: (d: unknown) =>
   };
 }
 
-export async function readLogs(ctx: Ctx, p: { buildId: number; kind: 'build' | 'odoo'; tail?: number }): Promise<{ lines: string[]; path: string | null }> {
+export async function readLogs(ctx: Ctx, p: { buildId: number; kind: 'build' | 'tests' | 'odoo'; tail?: number }): Promise<{ lines: string[]; path: string | null }> {
   const b = buildRow(ctx, p.buildId);
   if (!b) throw new BmError('NO_BUILD', 'Сборка не найдена');
-  if (p.kind === 'build') return { lines: b.logPath ? tailLines(b.logPath, p.tail ?? 500).lines : [], path: b.logPath };
+  if (p.kind !== 'odoo') {
+    const file = b.logPath && (p.kind === 'tests' ? testsLogPath(b.logPath) : b.logPath);
+    return { lines: file ? tailLines(file, p.tail ?? 500).lines : [], path: file };
+  }
   const id = await containerFor(b.id);
   if (!id) return { lines: [], path: null };
   const buf = (await docker.getContainer(id).logs({ stdout: true, stderr: true, tail: p.tail ?? 500, follow: false })) as unknown as Buffer;

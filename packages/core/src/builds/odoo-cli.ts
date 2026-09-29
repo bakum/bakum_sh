@@ -1,7 +1,7 @@
-import { BmError, type ProjectConfig } from '@bm/shared';
+import { BmError, type ProjectConfig, type TestsResult } from '@bm/shared';
 import { dockerCli } from '../docker/client';
 import { dataDirOf, oneOffArgs } from '../docker/compose';
-import { parseOdooLog, type OdooLogSummary } from '../odoo-log';
+import { OdooLogParser, type OdooLogSummary } from '../odoo-log';
 
 /**
  * Server options of the configured command, reusable for one-off runs: everything after the Odoo executable
@@ -67,6 +67,19 @@ export function dbSubcommand(cfg: ProjectConfig, sub: string[]): { cmd: string[]
   };
 }
 
+/** Failed or errored tests in a result. */
+export const testsFailed = (t: TestsResult | null | undefined): boolean => !!t && t.failed + t.errors > 0;
+
+/**
+ * `--test-enable --test-tags …` for the given modules (spec 8.8): `tests.tags` is a template per module
+ * (`/{module}` by default); without `{module}` it is used as is.
+ */
+export function testArgs(tests: { tags: string; extraArgs: string[] }, modules: string[]): string[] {
+  const tpl = tests.tags.trim() || '/{module}';
+  const tags = tpl.includes('{module}') ? modules.map((m) => tpl.replaceAll('{module}', m)) : [tpl];
+  return ['--test-enable', '--test-tags', [...new Set(tags)].join(','), ...tests.extraArgs];
+}
+
 export interface OneOffResult {
   exitCode: number;
   summary: OdooLogSummary;
@@ -85,24 +98,29 @@ export async function runOdooOneOff(opts: {
   signal?: AbortSignal;
   timeoutMs?: number;
 }): Promise<OneOffResult> {
-  const lines: string[] = [];
+  const tail: string[] = [];
+  const parser = new OdooLogParser();
   opts.log(`$ docker ${['compose', 'run', ...opts.cmd].join(' ')}`);
   const r = await dockerCli(oneOffArgs(opts.composeFile, opts.project, opts.volumes ?? [], opts.cmd, Object.keys(opts.env ?? {})), {
     env: opts.env,
     onLine: (l) => {
-      lines.push(l);
-      if (lines.length > 20000) lines.splice(0, 5000);
+      parser.push(l);
+      tail.push(l);
+      if (tail.length > 60) tail.splice(0, 30);
       opts.log(l);
     },
     signal: opts.signal,
     timeoutMs: opts.timeoutMs ?? 3 * 3600_000,
   });
-  return { exitCode: r.exitCode, summary: parseOdooLog(lines), tail: lines.slice(-30) };
+  return { exitCode: r.exitCode, summary: parser.result(), tail: tail.slice(-30) };
 }
 
-/** Throws a user-facing error when an Odoo run failed (exit code or CRITICAL records). */
+/**
+ * Throws a user-facing error when an Odoo run failed (exit code or CRITICAL records). With `--stop-after-init`
+ * Odoo also exits with code 1 when tests failed: that is a test result, not a failed run.
+ */
 export function assertOdooOk(r: OneOffResult, what: string): void {
-  if (r.exitCode === 0 && r.summary.criticals === 0) return;
+  if (r.summary.criticals === 0 && (r.exitCode === 0 || testsFailed(r.summary.tests))) return;
   const detail = r.summary.problems.slice(0, 3).join('\n') || r.tail.slice(-8).join('\n');
   throw new BmError('ODOO_FAILED', `${what}: Odoo завершился с ошибкой (код ${r.exitCode}).\n${detail}\nПолный вывод — в build.log (вкладка Logs).`);
 }

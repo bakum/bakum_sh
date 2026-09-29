@@ -417,6 +417,12 @@ export async function isAncestor(repo: string, a: string, b: string): Promise<bo
   return r.exitCode === 0;
 }
 
+/** Best common ancestor of two commits, null when there is none. */
+export async function mergeBase(repo: string, a: string, b: string): Promise<string | null> {
+  const out = (await git(repo, ['merge-base', a, b], { allowFail: true })).trim();
+  return out || null;
+}
+
 const SEP = '\x1f';
 const REC = '\x1e';
 

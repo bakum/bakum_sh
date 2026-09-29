@@ -40,7 +40,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
   setLocalWatcher(watcher);
 
   ctx.rpc.registerTopics({
-    'build.log': (p, emit) => subscribeBuildLog(ctx, p.buildId, emit),
+    'build.log': (p, emit) => subscribeBuildLog(ctx, p.buildId, p.file, emit),
     'container.log': (p, emit) => subscribeContainerLog(ctx, p.buildId, emit),
     stats: (p, emit) => subscribeStats(ctx, p.buildId, emit),
   });

@@ -89,11 +89,11 @@ async function dropLeftovers(ctx: Ctx, cfg: ProjectConfig, log: Log): Promise<vo
       log(`БД ${db}: ${(err as Error).message}`);
     }
   }
-  for (const b of all) {
-    const dir = path.join(cfg.runtime.filestore.hostDir, b.dbName);
+  for (const db of all.flatMap((b) => [b.dbName, `${b.dbName}_test`])) {
+    const dir = path.join(cfg.runtime.filestore.hostDir, db);
     if (!fs.existsSync(dir)) continue;
     try {
-      assertOwned(cfg, { kind: 'filestore', path: dir, db: b.dbName }, reg);
+      assertOwned(cfg, { kind: 'filestore', path: dir, db }, reg);
       log(`rm filestore ${toPosix(dir)}`);
       await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 3 });
     } catch (err) {

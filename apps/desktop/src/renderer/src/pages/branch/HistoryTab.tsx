@@ -18,6 +18,7 @@ import {
 } from '@mantine/core';
 import { IconCheck, IconChevronDown, IconClock, IconPlayerPlay, IconX } from '@tabler/icons-react';
 import { Spinner } from '../../components/Spinner';
+import { TestsBadge } from '../../components/TestsBadge';
 import { notifications } from '@mantine/notifications';
 import type { BranchView, BuildView } from '@bm/shared';
 import { useBm } from '../../lib/query';
@@ -126,11 +127,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
             <Badge variant="light" color="gray" size="sm">
               БД {b.dbName}
             </Badge>
-            <Tooltip label="Тесты сборок — этап 2">
-              <Badge variant="outline" color="gray" size="sm">
-                Test: —
-              </Badge>
-            </Tooltip>
+            <TestsBadge tests={b.tests} onClick={() => nav(`/projects/${branch.projectId}/branches/${branch.id}/logs?build=${b.id}&source=tests`)} />
             <Badge variant="light" color="gray" size="sm" leftSection={<IconClock size={10} />}>
               {fmtDuration(b.createdAt, b.finishedAt)}
             </Badge>
@@ -200,7 +197,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
                 size="xs"
                 w={180}
                 placeholder="Шаг"
-                data={b.steps.filter((s) => s.name !== 'tests').map((s) => s.name)}
+                data={b.steps.map((s) => s.name)}
                 value={retryStep ?? failedStep}
                 onChange={setRetryStep}
               />

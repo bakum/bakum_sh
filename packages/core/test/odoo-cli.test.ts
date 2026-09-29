@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { projectConfigSchema } from '@bm/shared';
+import { projectConfigSchema, type TestsResult } from '@bm/shared';
 import { demzPreset, genericPreset, type PresetInputs } from '../src/config/presets';
-import { dbSubcommand, dbSubcommandOptions, demoArgs, serverBaseArgs } from '../src/builds/odoo-cli';
+import {
+  assertOdooOk,
+  dbSubcommand,
+  dbSubcommandOptions,
+  demoArgs,
+  serverBaseArgs,
+  testArgs,
+  testsFailed,
+  type OneOffResult,
+} from '../src/builds/odoo-cli';
 
 const inputs: PresetInputs = {
   id: 'demz',
@@ -63,5 +72,32 @@ describe('Odoo CLI arguments', () => {
       expect(demoArgs(cfg(v), true)).toEqual(['--with-demo']);
       expect(demoArgs(cfg(v), false)).toEqual([]);
     }
+  });
+});
+
+describe('test runs (spec 8.8)', () => {
+  it('builds --test-tags from the per-module template', () => {
+    expect(testArgs({ tags: '/{module}', extraArgs: [] }, ['a', 'b'])).toEqual(['--test-enable', '--test-tags', '/a,/b']);
+    expect(testArgs({ tags: '', extraArgs: ['--log-level=test'] }, ['a'])).toEqual(['--test-enable', '--test-tags', '/a', '--log-level=test']);
+    expect(testArgs({ tags: '-slow/{module}', extraArgs: [] }, ['a'])).toEqual(['--test-enable', '--test-tags', '-slow/a']);
+    // Without {module} the template is one tag for all modules.
+    expect(testArgs({ tags: 'post_install', extraArgs: [] }, ['a', 'b'])).toEqual(['--test-enable', '--test-tags', 'post_install']);
+  });
+
+  const result = (exitCode: number, tests: TestsResult | null, criticals = 0): OneOffResult => ({
+    exitCode,
+    summary: { errors: 0, criticals, warnings: 0, problems: [], tests },
+    tail: [],
+  });
+  const failing: TestsResult = { passed: 3, failed: 1, errors: 0, warnings: 0, failures: ['FAIL: T.test_x'] };
+
+  it('treats exit code 1 with failed tests as a test result, not a failed run', () => {
+    expect(() => assertOdooOk(result(1, failing), 'x')).not.toThrow();
+    expect(() => assertOdooOk(result(1, { ...failing, failed: 0 }), 'x')).toThrow(/код 1/);
+    expect(() => assertOdooOk(result(1, null), 'x')).toThrow(/код 1/);
+    expect(() => assertOdooOk(result(1, failing, 1), 'x')).toThrow(/код 1/);
+    expect(testsFailed(failing)).toBe(true);
+    expect(testsFailed({ ...failing, failed: 0 })).toBe(false);
+    expect(testsFailed(null)).toBe(false);
   });
 });

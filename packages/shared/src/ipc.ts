@@ -253,7 +253,7 @@ export const methods = {
   ),
 
   'logs.read': m<{ lines: string[]; path: string | null }>()(
-    z.object({ buildId: id, kind: z.enum(['build', 'odoo']), tail: z.number().int().optional() }).strict(),
+    z.object({ buildId: id, kind: z.enum(['build', 'tests', 'odoo']), tail: z.number().int().optional() }).strict(),
   ),
 
   'shell.open': m<{ ok: true; detail?: string }>()(
@@ -269,7 +269,8 @@ export type MethodResult<K extends MethodName> = NonNullable<Methods[K]['result'
 
 export const subscriptionTopics = {
   events: z.object({}).strict(),
-  'build.log': z.object({ buildId: id }).strict(),
+  /** build.log of a build, or its tests.log (`file: 'tests'`). */
+  'build.log': z.object({ buildId: id, file: z.enum(['build', 'tests']).default('build') }).strict(),
   'container.log': z.object({ buildId: id }).strict(),
   stats: z.object({ buildId: id }).strict(),
 } as const;

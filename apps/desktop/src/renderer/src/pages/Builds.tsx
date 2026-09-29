@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Code, Container, Group, Pagination, Select, Stack, Table, Text, Title } from '@mantine/core';
 import type { BuildStatus } from '@bm/shared';
 import { useBm } from '../lib/query';
+import { TestsBadge } from '../components/TestsBadge';
 import { fmtDate, fmtDuration, shortSha } from '../lib/format';
 
 const STATUS_COLOR: Record<BuildStatus, string> = {
@@ -67,9 +68,7 @@ export function BuildsPage() {
                   </Badge>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="xs" c="dimmed">
-                    этап 2
-                  </Text>
+                  <TestsBadge tests={b.tests} />
                 </Table.Td>
                 <Table.Td>{fmtDuration(b.createdAt, b.finishedAt)}</Table.Td>
                 <Table.Td>{fmtDate(b.createdAt)}</Table.Td>

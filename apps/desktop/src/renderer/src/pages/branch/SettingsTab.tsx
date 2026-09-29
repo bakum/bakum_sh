@@ -30,7 +30,8 @@ const FIELDS: Editable[] = [
   { path: 'buildOnAdd', label: 'Собирать при добавлении', kind: 'switch' },
   { path: 'idleStopHours', label: 'Остановка без активности, ч', kind: 'number', stage2: true },
   { path: 'dropAfterDays', label: 'Отбросить через, дней', kind: 'number', stage2: true },
-  { path: 'tests.mode', label: 'Тесты', kind: 'select', options: ['none', 'changed', 'my'], stage2: true },
+  { path: 'tests.mode', label: 'Тесты', kind: 'select', options: ['none', 'changed', 'my'] },
+  { path: 'tests.failBuild', label: 'Падение тестов роняет сборку', kind: 'switch' },
   { path: 'mails.enabled', label: 'Mailpit', kind: 'switch', stage2: true },
 ];
 

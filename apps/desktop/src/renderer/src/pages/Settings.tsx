@@ -147,16 +147,19 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
   },
   modules: {
     label: 'Модули и тесты',
-    stage: 'этап 2',
-    groups: [
-      {
-        description: 'Какие модули обновлять — в «Стадии и правила». Тесты сборок появятся на этапе 2.',
-        fields: [
-          { path: ['stages', 'development', 'tests', 'mode'], label: 'Тесты Development', type: 'select', options: ['none', 'changed', 'my'], stage: 'этап 2' },
-          { path: ['stages', 'development', 'tests', 'failBuild'], label: 'Падение тестов роняет сборку', type: 'switch', stage: 'этап 2' },
-        ],
-      },
-    ],
+    groups: (['development', 'production'] as const).map((s) => ({
+      title: `Тесты ${STAGE_NAMES[s]}`,
+      description:
+        s === 'development'
+          ? 'Какие модули обновлять — в «Стадии и правила». changed — изменённые модули (для чистой БД — изменённые относительно ветки Production), my — «мои» модули, none — без тестов. Чистая БД тестируется при установке модулей, копия — на временной копии <БД>_test.'
+          : undefined,
+      fields: [
+        { path: ['stages', s, 'tests', 'mode'], label: 'Какие модули тестировать', type: 'select', options: ['none', 'changed', 'my'], inherit: 'значение по умолчанию (odoo.sh)' },
+        { path: ['stages', s, 'tests', 'tags'], label: '--test-tags', type: 'text', description: 'шаблон на модуль, по умолчанию /{module}' },
+        { path: ['stages', s, 'tests', 'extraArgs'], label: 'Доп. аргументы Odoo', type: 'tags' },
+        { path: ['stages', s, 'tests', 'failBuild'], label: 'Падение тестов роняет сборку', type: 'switch', description: 'сборка не поднимается, живой остаётся предыдущая' },
+      ],
+    })),
   },
   mails: {
     label: 'Почта',
@@ -369,7 +372,7 @@ function AppSettings({ text, onSave, saving }: { text: string; onSave: (t: strin
       fields: [
         { path: ['desktop', 'notifications', 'buildReady'], label: 'Сборка готова', type: 'switch' },
         { path: ['desktop', 'notifications', 'buildFailed'], label: 'Сборка упала', type: 'switch' },
-        { path: ['desktop', 'notifications', 'testsFailed'], label: 'Тесты упали', type: 'switch', stage: 'этап 2' },
+        { path: ['desktop', 'notifications', 'testsFailed'], label: 'Тесты упали', type: 'switch' },
         { path: ['desktop', 'notifications', 'newBackup'], label: 'Найден новый бэкап прода', type: 'switch' },
         { path: ['desktop', 'notifications', 'lowDisk'], label: 'Мало места', type: 'switch' },
       ],

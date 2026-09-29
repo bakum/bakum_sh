@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { and, desc, eq, inArray, ne } from 'drizzle-orm';
-import { BmError, BUILD_STEPS, type BuildStep, type BuildStepName, type ProjectConfig, type ResolvedBranchScope } from '@bm/shared';
+import { BmError, BUILD_STEPS, type BuildStep, type BuildStepName, type ProjectConfig, type ResolvedBranchScope, type TestsResult } from '@bm/shared';
 import { branchDir, type Ctx } from '../context';
 import { branches, builds, type BranchRow, type BuildRow, type JobRow } from '../db/schema';
 import type { JobContext } from '../jobs/queue';
@@ -17,10 +17,10 @@ import * as pg from '../pg';
 import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
 import { assertSqlIdent } from '../config/templates';
-import { changedModules, matchInstalled, modulesFromTree, parseModuleList, splitInstallUpdate, type ModuleInfo } from '../modules';
-import { assertOdooOk, dbSubcommand, demoArgs, runOdooOneOff, serverBaseArgs } from './odoo-cli';
+import { changedModules, matchInstalled, modulesFromTree, parseModuleList, selectTestModules, splitInstallUpdate, type ModuleInfo } from '../modules';
+import { assertOdooOk, dbSubcommand, demoArgs, runOdooOneOff, serverBaseArgs, testArgs, testsFailed, type OneOffResult } from './odoo-cli';
 import { buildContainers, dropBuildResources, markDropped } from './drop';
-import { buildUrl, configHash, liveBuild } from './view';
+import { buildUrl, configHash, liveBuild, testsLogPath } from './view';
 import { branchByName, branchRow } from '../services/branch-rows';
 import { localWatcher } from '../services/watch-local';
 import { publishTray } from '../services/tray';
@@ -383,11 +383,11 @@ async function wantedModules(r: Run, sha: string): Promise<Set<string>> {
   return new Set(text ? parseModuleList(text) : []);
 }
 
-async function runModules(r: Run, install: string[], update: string[], extra: string[] = []): Promise<void> {
+async function runModules(r: Run, install: string[], update: string[], extra: string[] = [], log = r.log): Promise<OneOffResult> {
   const cmd = ['odoo', ...serverBaseArgs(r.cfg), '-d', r.build.dbName, '--stop-after-init', '--no-http', ...extra];
   if (install.length) cmd.push('-i', install.join(','));
   if (update.length) cmd.push('-u', update.join(','));
-  const res = await runOdooOneOff({ composeFile: r.composeFile, project: r.build.composeProject, cmd, log: r.log, signal: r.jc.signal });
+  const res = await runOdooOneOff({ composeFile: r.composeFile, project: r.build.composeProject, cmd, log, signal: r.jc.signal });
   assertOdooOk(res, 'Установка / обновление модулей');
   const check = update.includes('all') ? null : [...install, ...update];
   const pending = await pg.pendingModules(r.cfg.postgres, r.build.dbName, check);
@@ -395,6 +395,96 @@ async function runModules(r: Run, install: string[], update: string[], extra: st
     throw new BmError('MODULES_PENDING', `После обновления модули остались в состоянии to upgrade / to install: ${pending.join(', ')}. См. build.log.`);
   }
   if (res.summary.errors) r.log(`[step] в логе Odoo ошибок: ${res.summary.errors} (сборка продолжена)`);
+  return res;
+}
+
+/** Commit the build database comes from (spec 8.7): the live build for `update`, the source build for a copy. */
+function dbBaseCommit(r: Run): string | null {
+  if (r.build.kind === 'update') return r.prevLive?.commitSha ?? null;
+  if (!r.build.sourceBuildId) return null;
+  return r.ctx.db.select().from(builds).where(eq(builds.id, r.build.sourceBuildId)).get()?.commitSha ?? null;
+}
+
+interface ModuleDiff {
+  modules: string[];
+  removed: string[];
+  files: number;
+  /** `base` is not in the repository: `modules` are all modules of the build commit. */
+  unknownBase?: boolean;
+}
+
+/** Modules changed between `base` and the build commit, uncommitted edits of the user's folder included (spec 8.7). */
+async function modulesChangedSince(r: Run, base: string): Promise<ModuleDiff> {
+  const sha = r.build.commitSha!;
+  const from = src(r);
+  const toMods = await treeModules(r, sha);
+  // The source commit may be missing (e.g. unpushed commits of the user's folder, then back to GitHub).
+  if (!(await git.revParse(from.repo, base))) return { modules: toMods.map((m) => m.name), removed: [], files: 0, unknownBase: true };
+  const extra = from.kind === 'folder' ? await git.uncommittedFiles(from.dir) : [];
+  const files = [...new Set([...(base === sha ? [] : await git.diffNames(from.repo, base, sha)), ...extra])];
+  if (!files.length) return { modules: [], removed: [], files: 0 };
+  const ch = changedModules(files, toMods, await treeModules(r, base), r.cfg.repo.moduleRoots);
+  return { modules: ch.changed.map((m) => m.name), removed: ch.removed.map((m) => m.name), files: files.length };
+}
+
+/** Where a branch forked off Production: the base of `tests.mode: changed` for a fresh database. */
+async function productionMergeBase(r: Run): Promise<string | null> {
+  const prod = r.cfg.production.branch;
+  if (r.branch.name === prod) return null;
+  const from = src(r);
+  const prodSha = await git.remoteSha(from.repo, r.cfg.repo.remote, prod);
+  return prodSha ? git.mergeBase(from.repo, prodSha, r.build.commitSha!) : null;
+}
+
+/** Modules tested while a fresh database is installed (spec 8.8). */
+async function freshTestModules(r: Run, install: string[], wanted: Set<string>): Promise<string[]> {
+  const mode = r.scope.tests.mode;
+  if (mode === 'none') return [];
+  let changed = install;
+  if (mode === 'changed') {
+    const base = await productionMergeBase(r);
+    if (base) changed = (await modulesChangedSince(r, base)).modules;
+    else r.log('тесты: нет общей истории с веткой Production — тестируются устанавливаемые модули');
+  }
+  return selectTestModules(mode, { changed, wanted });
+}
+
+/** Odoo output of a test run also goes to tests.log (Logs → tests.log). */
+function testsLog(r: Run): { log: (l: string) => void; close: () => void } {
+  const out = fs.createWriteStream(testsLogPath(r.build.logPath!), { flags: 'w' });
+  return {
+    log: (l) => {
+      r.log(l);
+      out.write(`${l}\n`);
+    },
+    close: () => out.end(),
+  };
+}
+
+function testsSummary(t: TestsResult): string {
+  return `пройдено ${t.passed}, упало ${t.failed}, ошибок ${t.errors}${t.warnings ? `, предупреждений ${t.warnings}` : ''}`;
+}
+
+/** Stores the result of a test run; no summary line means no test matched the tags. */
+function saveTests(r: Run, t: TestsResult | null): void {
+  if (!t) r.log('[tests] итоговой строки тестов нет: ни один тест не совпал с --test-tags');
+  const res = t ?? { passed: 0, failed: 0, errors: 0, warnings: 0, failures: [] };
+  r.log(`[tests] ${testsSummary(res)}`);
+  patchBuild(r, { tests: res });
+}
+
+/** Result of the tests step; with `tests.failBuild` failed tests stop the build (the previous live build stays). */
+function checkTests(r: Run, where: string): string {
+  const t = r.build.tests;
+  if (!t) return where;
+  if (testsFailed(t) && r.scope.tests.failBuild) {
+    const list = t.failures.slice(0, 5).join('\n');
+    throw new BmError(
+      'TESTS_FAILED',
+      `Тесты не прошли (${testsSummary(t)}), а tests.failBuild: true — сборка не поднимается.${list ? `\n${list}` : ''}\nПодробности — в tests.log (вкладка Logs).`,
+    );
+  }
+  return `${testsSummary(t)} (${where})`;
 }
 
 /** Stops the live container before `-u` on the shared DB (`update`, spec 8.3). */
@@ -424,9 +514,20 @@ async function stepModules(r: Run): Promise<string> {
     // Enterprise addons in the addons path: the database becomes Enterprise only with web_enterprise installed.
     if (cfg.runtime.enterprise && !install.includes('web_enterprise')) install.push('web_enterprise');
     if (!install.length) install = ['base'];
-    await runModules(r, install, [], demoArgs(cfg, scope.withDemo));
+    // spec 8.8: on a fresh database the tests run during the installation itself.
+    const tested = await freshTestModules(r, install, wanted);
+    if (scope.tests.mode !== 'none') r.log(tested.length ? `[tests] модули: ${tested.join(', ')}` : '[tests] нет модулей для тестов');
+    const tl = tested.length ? testsLog(r) : null;
+    try {
+      const extra = [...demoArgs(cfg, scope.withDemo), ...(tested.length ? testArgs(scope.tests, tested) : [])];
+      const res = await runModules(r, install, [], extra, tl?.log);
+      patchBuild(r, { tests: null });
+      if (tl) saveTests(r, res.summary.tests);
+    } finally {
+      tl?.close();
+    }
     const tweaks = await applyTweaks(r);
-    return `-i ${install.length} модулей${scope.withDemo ? ' с демо' : ''}; ${tweaks.join(', ')}`;
+    return `-i ${install.length} модулей${scope.withDemo ? ' с демо' : ''}${r.build.tests ? ', с тестами' : ''}; ${tweaks.join(', ')}`;
   }
 
   const installed = await pg.installedModules(cfg.postgres, build.dbName);
@@ -441,28 +542,24 @@ async function stepModules(r: Run): Promise<string> {
     install = s.install;
   } else {
     // changed / version-bumped (stage 2: treated as changed): diff from the commit the database comes from (spec 8.7).
-    const base = build.kind === 'update' ? r.prevLive?.commitSha : r.ctx.db.select().from(builds).where(eq(builds.id, build.sourceBuildId ?? -1)).get()?.commitSha;
-    const from = src(r);
-    // Uncommitted edits of the user's folder are part of the build too.
-    const extra = from.kind === 'folder' ? await git.uncommittedFiles(from.dir) : [];
-    if (base && !(await git.revParse(from.repo, base))) {
-      // The source commit is not in this repository (e.g. unpushed commits of the user's folder, then back to GitHub).
-      const s = splitInstallUpdate(toMods.map((m) => m.name).filter((m) => installed.has(m)), installed, wanted);
+    const base = dbBaseCommit(r);
+    const d = base ? await modulesChangedSince(r, base) : null;
+    if (!base || !d) {
+      r.log('нет коммита-источника для сравнения — модули не обновляются');
+    } else if (d.unknownBase) {
+      const s = splitInstallUpdate(d.modules.filter((m) => installed.has(m)), installed, wanted);
       update = s.update;
       install = s.install;
       r.log(`коммит-источник ${base.slice(0, 7)} не найден — обновляются все установленные модули репозитория (${update.length})`);
-    } else if (base && (base !== sha || extra.length)) {
-      const files = [...new Set([...(await git.diffNames(from.repo, base, sha)), ...extra])];
-      const fromMods = await treeModules(r, base);
-      const ch = changedModules(files, toMods, fromMods, roots);
-      for (const m of ch.removed) r.log(`[warn] модуль ${m.name} удалён из репозитория — в БД не удаляется`);
-      const s = splitInstallUpdate(ch.changed.map((m) => m.name), installed, wanted);
+    } else if (d.files) {
+      for (const m of d.removed) r.log(`[warn] модуль ${m} удалён из репозитория — в БД не удаляется`);
+      const s = splitInstallUpdate(d.modules, installed, wanted);
       update = s.update;
       install = s.install;
       if (s.none.length) r.log(`не установлены и не в списке «моих»: ${s.none.join(', ')}`);
-      r.log(`изменено файлов: ${files.length}; -u ${update.join(',') || '—'}; -i ${install.join(',') || '—'}`);
+      r.log(`изменено файлов: ${d.files}; -u ${update.join(',') || '—'}; -i ${install.join(',') || '—'}`);
     } else {
-      r.log(base ? 'коммит не изменился — модули не обновляются' : 'нет коммита-источника для сравнения — модули не обновляются');
+      r.log('коммит не изменился — модули не обновляются');
     }
   }
   if (build.kind === 'update') await stopLiveForUpdate(r);
@@ -471,8 +568,58 @@ async function stepModules(r: Run): Promise<string> {
   return `${update.length ? `-u ${update.join(',')}` : ''}${install.length ? ` -i ${install.join(',')}` : ''}`.trim();
 }
 
+/**
+ * tests (spec 8.8): a fresh database was tested during `-i` (only the result is checked here); a copied database is
+ * tested on a temporary copy `<db>_test` (+ its filestore), removed after the run.
+ */
 async function stepTests(r: Run): Promise<string> {
-  return skip(r.scope.tests.mode === 'none' ? 'tests.mode: none' : 'тесты сборок — этап 2');
+  const { cfg, build, scope } = r;
+  if (scope.tests.mode === 'none') skip('tests.mode: none');
+  if (build.dbSource === 'fresh') {
+    if (!build.tests) skip('нет модулей для тестов');
+    return checkTests(r, 'при установке модулей');
+  }
+  const installed = await pg.installedModules(cfg.postgres, build.dbName);
+  const base = scope.tests.mode === 'changed' ? dbBaseCommit(r) : null;
+  const changed = base ? (await modulesChangedSince(r, base)).modules : [];
+  const mods = selectTestModules(scope.tests.mode, { changed, wanted: await wantedModules(r, build.commitSha!), available: installed });
+  if (!mods.length) {
+    patchBuild(r, { tests: null });
+    skip(scope.tests.mode === 'changed' ? 'нет изменённых установленных модулей' : 'нет установленных модулей для тестов');
+  }
+  const testDb = assertSqlIdent(`${build.dbName}_test`);
+  const fsDir = path.join(cfg.runtime.filestore.hostDir, testDb);
+  const reg = ownedRegistry(r.ctx, cfg.id);
+  const cleanup = async (): Promise<void> => {
+    if (await pg.dbExists(cfg.postgres, testDb)) {
+      assertOwned(cfg, { kind: 'db', name: testDb }, reg);
+      r.log(`DROP DATABASE ${testDb}`);
+      await pg.dropDatabase(cfg.postgres, testDb);
+    }
+    if (fs.existsSync(fsDir)) {
+      assertOwned(cfg, { kind: 'filestore', path: fsDir, db: testDb }, reg);
+      await fs.promises.rm(fsDir, { recursive: true, force: true, maxRetries: 3 });
+    }
+  };
+  // Leftovers of an interrupted run.
+  await cleanup();
+  const tl = testsLog(r);
+  try {
+    // Nothing uses the build database now: `new` has no container yet, `update` stopped it in the modules step.
+    r.log(`CREATE DATABASE "${testDb}" TEMPLATE "${build.dbName}"`);
+    await pg.createFromTemplate(cfg.postgres, testDb, build.dbName);
+    const srcFs = path.join(cfg.runtime.filestore.hostDir, build.dbName);
+    if (fs.existsSync(srcFs)) await copyTree(srcFs, fsDir, scope.filestoreCopy, r.log);
+    tl.log(`[tests] модули: ${mods.join(', ')}`);
+    const cmd = ['odoo', ...serverBaseArgs(cfg), '-d', testDb, '--stop-after-init', '--no-http', '-u', mods.join(','), ...testArgs(scope.tests, mods)];
+    const res = await runOdooOneOff({ composeFile: r.composeFile, project: build.composeProject, cmd, log: tl.log, signal: r.jc.signal });
+    assertOdooOk(res, `Тесты на копии ${testDb}`);
+    saveTests(r, res.summary.tests);
+  } finally {
+    tl.close();
+    await cleanup().catch((e) => r.log(`[warn] не удалось удалить ${testDb}: ${(e as Error).message}`));
+  }
+  return checkTests(r, `на копии ${testDb}`);
 }
 
 /** Waits for the Docker healthcheck of the service container (spec 8.3 step 8). */
@@ -639,10 +786,18 @@ export async function runBuild(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
     }
     log(`==> готово ${nowIso()}`);
     audit(ctx, { projectId: cfg.id, action: 'build.success', target: `${branch.name}#${r.build.number}` });
-    notify(ctx, 'buildReady', `Сборка готова: ${branch.name}`, `#${r.build.number} работает — ${buildUrl(r.build.host, ctx.proxyPort ?? ctx.store.app.proxyPort)}`, {
-      route: `/projects/${cfg.id}/branches/${branch.id}/history`,
-      url: buildUrl(r.build.host, ctx.proxyPort ?? ctx.store.app.proxyPort),
-    });
+    const url = buildUrl(r.build.host, ctx.proxyPort ?? ctx.store.app.proxyPort);
+    const t = r.build.tests;
+    if (t && testsFailed(t)) {
+      notify(ctx, 'testsFailed', `Тесты упали: ${branch.name}`, `#${r.build.number} работает, ${testsSummary(t)}`, {
+        route: `/projects/${cfg.id}/branches/${branch.id}/history`,
+      });
+    } else {
+      notify(ctx, 'buildReady', `Сборка готова: ${branch.name}`, `#${r.build.number} работает — ${url}`, {
+        route: `/projects/${cfg.id}/branches/${branch.id}/history`,
+        url,
+      });
+    }
   } catch (err) {
     const cancelled = jc.signal.aborted || (err as BmError).code === 'CANCELLED';
     const msg = cancelled ? 'Сборка отменена' : (err as Error).message;
@@ -652,7 +807,8 @@ export async function runBuild(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
     patchBuild(r, { status: 'failed', finishedAt: nowIso(), errorMessage: `Шаг ${current}: ${msg}` });
     await restorePrevious(r);
     audit(ctx, { projectId: cfg.id, action: 'build.failed', target: `${branch.name}#${r.build.number}`, result: 'failed', params: { step: current, error: msg } });
-    notify(ctx, 'buildFailed', `Сборка упала: ${branch.name}`, `#${r.build.number}, шаг ${current}: ${msg.split('\n')[0]}`, {
+    const kind = (err as BmError).code === 'TESTS_FAILED' ? 'testsFailed' : 'buildFailed';
+    notify(ctx, kind, kind === 'testsFailed' ? `Тесты упали: ${branch.name}` : `Сборка упала: ${branch.name}`, `#${r.build.number}, шаг ${current}: ${msg.split('\n')[0]}`, {
       route: `/projects/${cfg.id}/branches/${branch.id}/history`,
     });
     throw err;

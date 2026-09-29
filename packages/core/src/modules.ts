@@ -115,6 +115,18 @@ export function splitInstallUpdate(modules: string[], installed: Set<string>, wa
   return res;
 }
 
+/**
+ * Modules whose tests run (spec 8.8): `changed` — modules changed by the build (8.7), `my` — modulesToInstall,
+ * `{list}` — the list. `available` (modules installed in the tested database) filters the result when known.
+ */
+export function selectTestModules(
+  mode: 'none' | 'changed' | 'my' | { list: string[] },
+  input: { changed: string[]; wanted: Iterable<string>; available?: ReadonlySet<string> | null },
+): string[] {
+  const picked = mode === 'none' ? [] : mode === 'changed' ? input.changed : mode === 'my' ? [...input.wanted] : mode.list;
+  return [...new Set(picked)].filter((m) => !input.available || input.available.has(m)).sort();
+}
+
 /** modules_to_install.txt: one module per line, `#` comments, commas allowed. */
 export function parseModuleList(text: string): string[] {
   return text

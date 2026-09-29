@@ -72,10 +72,11 @@ export async function dropBuildResources(ctx: Ctx, cfg: ProjectConfig, b: BuildR
         await dropDatabase(cfg.postgres, db);
       }
     }
-    // 3. Filestore of the database.
-    const fsDir = path.join(cfg.runtime.filestore.hostDir, b.dbName);
-    if (fs.existsSync(fsDir)) {
-      assertOwned(cfg, { kind: 'filestore', path: fsDir, db: b.dbName }, reg);
+    // 3. Filestore of the database and of its test copy (left by an interrupted tests step).
+    for (const db of [b.dbName, `${b.dbName}_test`]) {
+      const fsDir = path.join(cfg.runtime.filestore.hostDir, db);
+      if (!fs.existsSync(fsDir)) continue;
+      assertOwned(cfg, { kind: 'filestore', path: fsDir, db }, reg);
       log(`rm filestore ${fsDir}`);
       await fs.promises.rm(fsDir, { recursive: true, force: true, maxRetries: 3 });
     }
