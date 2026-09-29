@@ -8,3 +8,4 @@ dist/
 coverage/
 test-results/
 /tmp/
+/apps/desktop/resources/icon.ico

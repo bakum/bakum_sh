@@ -10,7 +10,7 @@
     "dev": "node scripts/electron-vite.mjs dev",
     "build": "node scripts/electron-vite.mjs build",
     "start": "node scripts/electron-vite.mjs preview --skipBuild",
-    "package": "node scripts/electron-vite.mjs build && electron-builder --win --config electron-builder.yml",
+    "package": "node scripts/electron-vite.mjs build && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/make-icon.mjs && electron-builder --win --config electron-builder.yml",
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
     "rebuild-native": "electron-builder install-app-deps"
   },
