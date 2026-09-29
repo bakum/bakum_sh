@@ -228,7 +228,8 @@ export function SettingsPage() {
   }, [project.data]);
 
   const saveProject = (text: string) => update.mutateAsync({ projectId: pid!, yaml: text });
-  const go = (t: string | null) => nav(t === 'app' ? '/settings/app' : `/projects/${pid ?? ''}/settings/${t}`);
+  // Within a project the «Приложение» tab keeps the project route, so its tabs and the header's project stay.
+  const go = (t: string | null) => nav(pid ? `/projects/${pid}/settings/${t}` : '/settings/app');
 
   return (
     <Container size="xl" py="md">
