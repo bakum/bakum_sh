@@ -23,7 +23,22 @@ export function fmtDuration(from: string | null | undefined, to: string | null |
   return `${Math.floor(m / 60)} ч ${m % 60} мин`;
 }
 
-export const shortSha = (sha: string | null | undefined): string => (sha ? sha.slice(0, 7) : '—');
+export const TRIGGER_LABELS: Record<string, string> = {
+  new_commit: 'новый коммит',
+  rebuild: 'Rebuild',
+  manual: 'вручную',
+  import_backup: 'импорт бэкапа',
+  stage_change: 'смена стадии',
+};
+
+/** Start of a local calendar day (`YYYY-MM-DD`, as from `<input type="date">`) as an ISO time; `days` shifts it. */
+export function dayStartIso(day: string, days = 0): string {
+  const d = new Date(`${day}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+}
+
+export const shortSha =(sha: string | null | undefined): string => (sha ? sha.slice(0, 7) : '—');
 
 export function fmtBytes(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—';

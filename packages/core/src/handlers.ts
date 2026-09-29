@@ -124,7 +124,7 @@ export function registerHandlers(ctx: Ctx): void {
       return { ok: true as const };
     },
     'jobs.log': (p) => jobLog(ctx, p.jobId, p.tail),
-    'audit.list': (p) => listAudit(ctx, p.projectId, p.limit),
+    'audit.list': (p) => listAudit(ctx, p),
     'logs.read': (p) => readLogs(ctx, p),
     'system.cleanupOrphans': (p) => cleanupOrphans(ctx, p.items),
   });

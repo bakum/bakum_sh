@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { branchScopeSchema, levelSchema, stageSchema, type ProjectConfig, type AppConfig } from './config';
 import type {
   AppStateView,
+  AuditList,
   BackupFile,
   BranchesList,
   BranchView,
@@ -33,6 +34,7 @@ function m<R>() {
 const empty = z.object({}).strict();
 const projectId = z.string().regex(/^[a-z0-9-]+$/);
 const id = z.number().int().positive();
+const isoTime = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z$/, 'ожидается время ISO в UTC');
 /**
  * https://host/owner/repo(.git), git@host:owner/repo(.git), ssh://… or file:///<disk>/<path> (a local or network bare
  * repository); no credentials inside the URL except a user name.
@@ -179,6 +181,14 @@ export const methods = {
       .object({
         projectId: projectId.optional(),
         branchId: id.optional(),
+        stage: stageSchema.optional(),
+        status: z.enum(['queued', 'building', 'running', 'stopped', 'failed', 'dropped']).optional(),
+        trigger: z.enum(['new_commit', 'rebuild', 'manual', 'import_backup', 'stage_change']).optional(),
+        /** failed — failed or errored tests, passed — tests ran without failures, none — tests did not run. */
+        tests: z.enum(['failed', 'passed', 'none']).optional(),
+        /** Builds created at or after / before these ISO times. */
+        since: isoTime.optional(),
+        until: isoTime.optional(),
         offset: z.number().int().min(0).default(0),
         limit: z.number().int().min(1).max(200).default(20),
       })
@@ -248,8 +258,23 @@ export const methods = {
   'jobs.cancel': m<{ ok: true }>()(z.object({ jobId: id }).strict()),
   'jobs.log': m<{ lines: string[] }>()(z.object({ jobId: id, tail: z.number().int().min(1).max(2000).default(200) }).strict()),
 
-  'audit.list': m<{ id: number; at: string; projectId: string | null; action: string; target: string; result: string }[]>()(
-    z.object({ projectId: projectId.optional(), limit: z.number().int().optional() }).strict(),
+  'audit.list': m<AuditList>()(
+    z
+      .object({
+        projectId: projectId.optional(),
+        /** With a project: also the app-level records (app.yaml, updates). */
+        withApp: z.boolean().default(false),
+        /** Exact action (`build.success`) or a group prefix ending with a dot (`build.`). */
+        action: z.string().max(100).optional(),
+        /** Case-insensitive text in the target or the parameters. */
+        q: z.string().max(200).optional(),
+        result: z.enum(['ok', 'error']).optional(),
+        since: isoTime.optional(),
+        until: isoTime.optional(),
+        offset: z.number().int().min(0).default(0),
+        limit: z.number().int().min(1).max(500).default(50),
+      })
+      .strict(),
   ),
 
   'logs.read': m<{ lines: string[]; path: string | null }>()(

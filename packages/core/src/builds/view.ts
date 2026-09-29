@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
-import { and, desc, eq, inArray } from 'drizzle-orm';
-import type { BuildView, ProjectConfig, ResolvedBranchScope } from '@bm/shared';
+import { and, desc, eq, gte, inArray, lt, sql, type SQL } from 'drizzle-orm';
+import type { BuildView, MethodParamsParsed, ProjectConfig, ResolvedBranchScope } from '@bm/shared';
 import type { Ctx } from '../context';
-import { builds, type BranchRow, type BuildRow } from '../db/schema';
+import { branches, builds, type BranchRow, type BuildRow } from '../db/schema';
 import { containerPoll, containerStates } from '../docker/state';
 
 /**
@@ -78,6 +78,30 @@ export function toBuildView(
     isLive,
     dropAt,
   };
+}
+
+/** Builds (spec 8.11) and History: filtered page, newest first. */
+export function listBuilds(ctx: Ctx, p: MethodParamsParsed<'builds.list'>): { items: BuildView[]; total: number } {
+  const conds: SQL[] = [];
+  if (p.projectId) conds.push(eq(builds.projectId, p.projectId));
+  if (p.branchId) conds.push(eq(builds.branchId, p.branchId));
+  if (p.stage) conds.push(eq(builds.stage, p.stage));
+  if (p.status) conds.push(eq(builds.status, p.status));
+  if (p.trigger) conds.push(eq(builds.trigger, p.trigger));
+  // A JSON column may hold SQL NULL or the text 'null'.
+  const noTests = sql`(${builds.tests} IS NULL OR ${builds.tests} = 'null')`;
+  if (p.tests === 'none') conds.push(noTests);
+  else if (p.tests) {
+    const failed = sql`coalesce(json_extract(${builds.tests}, '$.failed'), 0) + coalesce(json_extract(${builds.tests}, '$.errors'), 0)`;
+    conds.push(sql`NOT ${noTests}`, p.tests === 'failed' ? sql`${failed} > 0` : sql`${failed} = 0`);
+  }
+  if (p.since) conds.push(gte(builds.createdAt, p.since));
+  if (p.until) conds.push(lt(builds.createdAt, p.until));
+  const where = conds.length ? and(...conds) : undefined;
+  const total = ctx.db.select({ n: sql<number>`count(*)` }).from(builds).where(where).get()?.n ?? 0;
+  const rows = ctx.db.select().from(builds).where(where).orderBy(desc(builds.id)).limit(p.limit).offset(p.offset).all();
+  const names = new Map(ctx.db.select({ id: branches.id, name: branches.name }).from(branches).all().map((b) => [b.id, b.name]));
+  return { items: rows.map((r) => toBuildView(ctx, r, { branchName: names.get(r.branchId) ?? '?' })), total };
 }
 
 export function buildRow(ctx: Ctx, id: number): BuildRow | undefined {

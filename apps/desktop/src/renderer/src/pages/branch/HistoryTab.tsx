@@ -23,18 +23,10 @@ import { notifications } from '@mantine/notifications';
 import type { BranchView, BuildView } from '@bm/shared';
 import { useBm } from '../../lib/query';
 import { call, errorText } from '../../lib/bm';
-import { fmtDate, fmtDuration, shortSha } from '../../lib/format';
+import { fmtDate, fmtDuration, shortSha, TRIGGER_LABELS } from '../../lib/format';
 import { shellOpen } from '../BranchPage';
 
 const PAGE = 10;
-
-const TRIGGER: Record<string, string> = {
-  new_commit: 'новый коммит',
-  rebuild: 'Rebuild',
-  manual: 'вручную',
-  import_backup: 'импорт бэкапа',
-  stage_change: 'смена стадии',
-};
 
 function dbSourceText(s: string): string {
   if (s.startsWith('backup:')) return `из бэкапа ${s.slice(7)}`;
@@ -96,7 +88,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
               {author}
             </Text>
             <Text size="xs" c="dimmed">
-              {fmtDate(b.createdAt)} · сборка #{b.number} · {TRIGGER[b.trigger] ?? b.trigger} · {b.kind === 'update' ? 'update' : 'new'}
+              {fmtDate(b.createdAt)} · сборка #{b.number} · {TRIGGER_LABELS[b.trigger] ?? b.trigger} · {b.kind === 'update' ? 'update' : 'new'}
             </Text>
           </Group>
           {commits.map((c) => (

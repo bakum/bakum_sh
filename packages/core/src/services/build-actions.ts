@@ -7,7 +7,7 @@ import { BmError, BUILD_STEPS, type BuildStepName, type ChangedModules } from '@
 import type { Ctx } from '../context';
 import { branches, builds, jobs, type BranchRow } from '../db/schema';
 import { getQueue } from '../jobs/queue';
-import { buildRow, buildUrl, liveBuild, toBuildView } from '../builds/view';
+import { buildRow, buildUrl, listBuilds, liveBuild, toBuildView } from '../builds/view';
 import { requestBuildChecked } from '../builds/request';
 import { listBackups } from '../builds/backups';
 import { serviceContainer } from '../builds/pipeline';
@@ -38,17 +38,6 @@ function view(ctx: Ctx, id: number) {
   const cfg = ctx.store.get(b.projectId)?.config;
   const scope = cfg && br ? resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope : null;
   return toBuildView(ctx, b, { branchName: br?.name ?? '?', dropAfterDays: scope?.dropAfterDays });
-}
-
-function listBuilds(ctx: Ctx, p: { projectId?: string; branchId?: number; offset: number; limit: number }) {
-  const conds = [];
-  if (p.projectId) conds.push(eq(builds.projectId, p.projectId));
-  if (p.branchId) conds.push(eq(builds.branchId, p.branchId));
-  const where = conds.length ? and(...conds) : undefined;
-  const total = ctx.db.select({ n: sql<number>`count(*)` }).from(builds).where(where).get()?.n ?? 0;
-  const rows = ctx.db.select().from(builds).where(where).orderBy(desc(builds.id)).limit(p.limit).offset(p.offset).all();
-  const names = new Map(ctx.db.select({ id: branches.id, name: branches.name }).from(branches).all().map((b) => [b.id, b.name]));
-  return { items: rows.map((r) => toBuildView(ctx, r, { branchName: names.get(r.branchId) ?? '?' })), total };
 }
 
 async function retry(ctx: Ctx, buildId: number, fromStep: string) {

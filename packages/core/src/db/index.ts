@@ -61,6 +61,8 @@ export function openDb(file: string): { db: Db; sqlite: Database.Database } {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   sqlite.pragma('busy_timeout = 5000');
+  // SQLite lower() folds ASCII only; searches over Russian text need Unicode case folding.
+  sqlite.function('ulower', { deterministic: true }, (s: unknown) => (typeof s === 'string' ? s.toLowerCase() : s));
   const version = sqlite.pragma('user_version', { simple: true }) as number;
   for (let i = version; i < MIGRATIONS.length; i++) {
     sqlite.transaction(() => {

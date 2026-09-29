@@ -175,6 +175,25 @@ export interface BuildView {
   dropAt: string | null;
 }
 
+/** A record of Audit Logs (spec 8.11); `diff` — line diff of a settings change (`+ ` / `- ` lines). */
+export interface AuditEntryView {
+  id: number;
+  at: string;
+  projectId: string | null;
+  action: string;
+  target: string;
+  params: Record<string, unknown>;
+  result: string;
+  diff: string | null;
+}
+
+export interface AuditList {
+  items: AuditEntryView[];
+  total: number;
+  /** Distinct actions of the filtered scope (project / app), for the action filter. */
+  actions: string[];
+}
+
 export interface JobView {
   id: number;
   type: JobType;
