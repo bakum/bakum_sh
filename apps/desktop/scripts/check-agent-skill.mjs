@@ -142,6 +142,15 @@ async function run(win) {
   check('Production собрана', rp.job.status === 'success' && rp.build.status === 'running', rp.job.error ?? rp.build.errorMessage ?? '');
   const rd = await rebuild(win, devBr);
   check('feature собрана', rd.job.status === 'success' && rd.build.status === 'running', rd.job.error ?? rd.build.errorMessage ?? '');
+  // «Применить» (v0.12.1): a live build marked «конфигурация изменилась» is recreated with the labels, its DB kept.
+  const envDoc = YAML.parseDocument((await bm(win, 'projects.get', { projectId: ID })).yaml);
+  envDoc.setIn(['runtime', 'env', 'BM_SKILL_CHECK'], '1');
+  await bm(win, 'projects.update', { projectId: ID, yaml: envDoc.toString() });
+  const marked = await bm(win, 'branches.get', { branchId: devBr.id });
+  check('плашка «конфигурация изменилась»', marked.badges.some((x) => x.kind === 'config-changed'), JSON.stringify(marked.badges));
+  const aj = await waitJob(win, (await bm(win, 'builds.action', { buildId: rd.build.id, action: 'apply-config' })).jobId);
+  const applied = await bm(win, 'branches.get', { branchId: devBr.id });
+  check('«Применить»: плашка ушла, та же база', aj.status === 'success' && !applied.badges.some((x) => x.kind === 'config-changed') && (await lastBuild(win, devBr.id)).dbName === rd.build.dbName, aj.error ?? '');
   const find = (b) => docker('ps', '-q', '--filter', `label=bm.project=${ID}`, '--filter', 'label=com.docker.compose.oneoff=False', '--filter', `label=bm.branch.name=${b}`);
   const cp = find('main');
   const cd = find('feature');

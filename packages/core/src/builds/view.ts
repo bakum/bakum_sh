@@ -27,7 +27,9 @@ export function configHash(cfg: ProjectConfig, scope: ResolvedBranchScope, proxy
     healthcheck: r.healthcheck,
     pg: cfg.postgres.internalHost,
     proxyPort,
-    v: 1,
+    // Bumped when the generated container changes in a way settings do not show: v2 — the bm.* labels of D52, so live
+    // builds get «конфигурация изменилась» and their «Применить» after the update.
+    v: 2,
     // The code folder is mounted into the container (D33); only present when it is the user's folder.
     ...(scope.folder ? { folder: scope.folder } : {}),
     // An image built by the app (D46): a Dockerfile edit changes the container. Absent otherwise (hashes unchanged).

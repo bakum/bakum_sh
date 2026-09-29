@@ -186,7 +186,7 @@ export function renderSkill(i: SkillInput): string {
     `- В PowerShell labels читай через ${code('ConvertFrom-Json')}, как выше: Windows PowerShell 5.1 выкидывает двойные кавычки`,
     `  из аргументов ${code(`docker inspect -f '{{index .Config.Labels "…"}}'`)}.`,
     `- Label ${code('bm.odoo.args')} пуст — сборка создана старой версией приложения. Попроси пользователя нажать`,
-    `  «Применить» (Settings проекта) или Rebuild; до этого задай ${code(`ARGS='${staticArgs}'`)}${usesAddonsPath ? ` и добавь к нему ${code('--addons-path=…')} из ${code(`docker inspect -f '{{json .Config.Cmd}}' $C`)}` : ''}.`,
+    `  «Применить» на странице ветки (плашка «конфигурация изменилась»: контейнер пересоздаётся, база остаётся); до этого задай${code(`ARGS='${staticArgs}'`)}${usesAddonsPath ? ` и добавь к нему ${code('--addons-path=…')} из ${code(`docker inspect -f '{{json .Config.Cmd}}' $C`)}` : ''}.`,
     '',
     '## Тесты',
     '',
