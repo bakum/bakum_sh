@@ -1,7 +1,10 @@
+import { BmError } from '@bm/shared';
 import type { Ctx } from '../context';
 import type { JobRow } from '../db/schema';
 import { getQueue, type JobContext } from '../jobs/queue';
-import { ensureManagedPostgres, pullImage } from '../docker/postgres';
+import { ensureManagedPostgres } from '../docker/postgres';
+import { buildImage, ensureImage } from '../docker/image';
+import { audit } from './audit';
 import { runtimeState } from '../state';
 import { log } from '../util/logger';
 
@@ -12,12 +15,25 @@ export function requestSetup(ctx: Ctx, projectId: string): number | null {
   return getQueue().enqueue('setup_project', { projectId });
 }
 
-/** Job `setup_project`: network, managed Postgres, `docker pull` of the Odoo image. */
+/** Job `setup_project`: network, managed Postgres, the Odoo image (`docker pull`, or `docker build` with runtime.build). */
 export async function setupProjectExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const cfg = ctx.store.require(job.projectId!);
   await ensureManagedPostgres(ctx, cfg, jc.log);
-  await pullImage(cfg.runtime.image, jc.log, jc.signal);
+  await ensureImage(cfg, cfg.runtime.image, jc.log, jc.signal);
   jc.log(`проект ${cfg.id} готов к сборкам`);
+}
+
+/** «Собрать образ» (Settings → Рантайм): `docker build` of runtime.build now, to check the Dockerfile (D46). */
+export function requestImageBuild(ctx: Ctx, projectId: string): { jobId: number } {
+  const cfg = ctx.store.require(projectId);
+  if (!cfg.runtime.build) throw new BmError('NO_BUILD_CONFIG', 'В настройках проекта не задан runtime.build (сборка образа из Dockerfile)');
+  return { jobId: getQueue().enqueue('build_image', { projectId }) };
+}
+
+export async function buildImageExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
+  const cfg = ctx.store.require(job.projectId!);
+  await buildImage(cfg, jc.log, jc.signal);
+  audit(ctx, { projectId: cfg.id, action: 'image.build', target: cfg.runtime.image, params: { context: cfg.runtime.build?.context, dockerfile: cfg.runtime.build?.dockerfile } });
 }
 
 /** Docker came up: start the managed Postgres of every enabled project (they also restart with Docker by themselves). */

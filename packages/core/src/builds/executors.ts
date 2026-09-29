@@ -9,6 +9,7 @@ import { dockerCli } from '../docker/client';
 import { generateCompose } from '../docker/compose';
 import { ensureTraefik } from '../docker/traefik';
 import { ensurePostgres } from '../docker/postgres';
+import { ensureImage } from '../docker/image';
 import { refreshContainers } from '../docker/watch';
 import { resolveBranchScope } from '../config/effective';
 import { codeSource } from '../git/worktrees';
@@ -92,6 +93,9 @@ async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void>
   const cfg = ctx.store.require(b.projectId);
   await ensureTraefik(ctx);
   await ensurePostgres(ctx, cfg, jc.log);
+  // A changed Dockerfile (runtime.build, D46) is what «Применить» is about: the image is rebuilt first.
+  const br = branchRow(ctx, b.branchId);
+  if (br) await ensureImage(cfg, resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope.image, jc.log, jc.signal);
   const hash = writeLiveCompose(ctx, b);
   jc.log('docker compose up -d (пересоздание контейнера, БД не трогается)');
   await compose(ctx, b, ['up', '-d', '--remove-orphans'], jc);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import YAML from 'yaml';
-import { Alert, Badge, Box, Button, Card, Container, Group, Stack, Switch, Table, Tabs, Text, Title } from '@mantine/core';
+import { Alert, Badge, Box, Button, Card, Code, Container, Group, Stack, Switch, Table, Tabs, Text, TextInput, Title } from '@mantine/core';
 import { EditionBadge, EditionLine } from '../components/EditionBadge';
 import { useBm, useBmMutation } from '../lib/query';
 import { YamlEditor } from '../components/YamlEditor';
@@ -122,7 +122,6 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
           { path: ['runtime', 'debug', 'containerPort'], label: 'Порт debugpy в контейнере', type: 'number' },
           { path: ['runtime', 'healthcheck', 'path'], label: 'Healthcheck, путь', type: 'text' },
           { path: ['runtime', 'healthcheck', 'timeoutSec'], label: 'Healthcheck, таймаут, с', type: 'number' },
-          { path: ['runtime', 'build'], label: 'Сборка образа (runtime.build)', type: 'text', stage: 'этап 2' },
           { path: ['runtime', 'composeTemplate'], label: 'Свой шаблон compose', type: 'text', stage: 'этап 3' },
         ],
       },
@@ -283,6 +282,9 @@ export function SettingsPage() {
                       <EditionLine edition={project.data.summary.edition} />
                     </Box>
                   )}
+                  {k === 'runtime' && !project.data.summary.legacy && (
+                    <RuntimeBuildCard projectId={pid!} yaml={project.data.yaml} build={project.data.config.runtime.build} image={project.data.config.runtime.image} onSave={saveProject} />
+                  )}
                   {k === 'postgres' && !project.data.summary.legacy && (
                     <MigratePostgresCard projectId={pid!} external={project.data.config.postgres.mode === 'external'} />
                   )}
@@ -362,6 +364,117 @@ export function SettingsPage() {
         </Tabs>
       </Stack>
     </Container>
+  );
+}
+
+/**
+ * runtime.build (D46): the app builds the Odoo image from a Dockerfile and tags it runtime.image. The tag must not name
+ * an image the app did not build (Core refuses it), so a project tag is suggested.
+ */
+function RuntimeBuildCard({
+  projectId,
+  yaml,
+  build,
+  image,
+  onSave,
+}: {
+  projectId: string;
+  yaml: string;
+  build: { context: string; dockerfile: string } | null;
+  image: string;
+  onSave: (text: string) => Promise<unknown>;
+}) {
+  const [context, setContext] = useState(build?.context ?? '');
+  const [dockerfile, setDockerfile] = useState(build?.dockerfile ?? 'Dockerfile');
+  const [tag, setTag] = useState(image);
+  const buildNow = useBmMutation('projects.buildImage', { success: 'Сборка образа поставлена в очередь' });
+  const jobs = useBm('jobs.list', { projectId, limit: 30 }, { refetchInterval: 3000 });
+  const job = (jobs.data ?? []).find((j) => j.type === 'build_image');
+  const [showLog, setShowLog] = useState(false);
+  const jobLog = useBm('jobs.log', { jobId: job?.id ?? 0, tail: 80 }, { enabled: !!job && showLog, refetchInterval: 3000 });
+  useEffect(() => {
+    setContext(build?.context ?? '');
+    setDockerfile(build?.dockerfile ?? 'Dockerfile');
+    setTag(image);
+  }, [build, image]);
+  const save = (next: { context: string; dockerfile: string } | null) => {
+    const doc = YAML.parseDocument(yaml);
+    doc.setIn(['runtime', 'build'], next);
+    if (next) doc.setIn(['runtime', 'image'], tag.trim());
+    return onSave(doc.toString());
+  };
+  const suggested = `bm-${projectId}-odoo:latest`;
+  return (
+    <Card withBorder mb="md" data-testid="runtime-build">
+      <Stack gap="xs">
+        <Group justify="space-between">
+          <Text fw={600}>Сборка образа Odoo из Dockerfile</Text>
+          <Badge color={build ? 'teal' : 'gray'} variant="light">
+            {build ? 'включена' : 'выключена'}
+          </Badge>
+        </Group>
+        <Text size="xs" c="dimmed">
+          Приложение само собирает образ перед каждой сборкой ветки и при «Применить» (кэш Docker делает это быстрым) и ставит ему тег из поля
+          «Образ Odoo». Изменение Dockerfile помечает живые сборки «конфигурация изменилась». Образ, собранный не приложением (например, образ
+          вашего docker-compose), приложение не перезапишет — задайте свой тег.
+        </Text>
+        <Group align="flex-end" gap="xs">
+          <TextInput label="Папка сборки (context)" w={420} value={context} onChange={(e) => setContext(e.currentTarget.value)} />
+          <Button
+            variant="default"
+            onClick={async () => {
+              const d = await window.bm.desktop.selectDirectory('Папка сборки образа (context)');
+              if (d) setContext(d);
+            }}
+          >
+            Выбрать…
+          </Button>
+          <TextInput label="Dockerfile" w={180} value={dockerfile} onChange={(e) => setDockerfile(e.currentTarget.value)} />
+        </Group>
+        <Group align="flex-end" gap="xs">
+          <TextInput label="Тег образа (runtime.image)" w={420} value={tag} onChange={(e) => setTag(e.currentTarget.value)} />
+          {tag !== suggested && (
+            <Button variant="subtle" onClick={() => setTag(suggested)}>
+              {suggested}
+            </Button>
+          )}
+        </Group>
+        <Group gap="xs">
+          <Button disabled={!context.trim() || !dockerfile.trim() || !tag.trim()} onClick={() => void save({ context: context.trim(), dockerfile: dockerfile.trim() })}>
+            {build ? 'Сохранить' : 'Включить'}
+          </Button>
+          {build && (
+            <>
+              <Button variant="default" loading={buildNow.isPending} onClick={() => buildNow.mutate({ projectId })}>
+                Собрать образ сейчас
+              </Button>
+              <Button variant="subtle" color="red" onClick={() => void save(null)}>
+                Выключить
+              </Button>
+            </>
+          )}
+        </Group>
+        {job && (
+          <Stack gap={4}>
+            <Group gap="xs">
+              <Text size="sm">Последняя сборка образа вручную:</Text>
+              <Badge color={job.status === 'success' ? 'teal' : job.status === 'failed' ? 'red' : 'orange'} variant="light" data-testid="image-job-status">
+                {job.status}
+              </Badge>
+              <Button size="compact-xs" variant="subtle" onClick={() => setShowLog((v) => !v)}>
+                {showLog ? 'Скрыть лог' : 'Лог'}
+              </Button>
+            </Group>
+            {job.error && (
+              <Text size="sm" c="red" style={{ whiteSpace: 'pre-wrap' }}>
+                {job.error}
+              </Text>
+            )}
+            {showLog && <Code block>{(jobLog.data?.lines ?? []).join('\n') || '…'}</Code>}
+          </Stack>
+        )}
+      </Stack>
+    </Card>
   );
 }
 

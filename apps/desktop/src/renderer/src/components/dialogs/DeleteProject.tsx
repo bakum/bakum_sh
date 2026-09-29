@@ -47,6 +47,11 @@ export function DeleteProjectButton({ projectId }: { projectId: string }) {
               <b>Postgres проекта:</b> {pv.data.postgres} — удаляются вместе со всеми базами.
             </Text>
           )}
+          {pv.data?.image && (
+            <Text size="sm">
+              <b>Образ Odoo, собранный приложением:</b> {pv.data.image}
+            </Text>
+          )}
           {pv.data && (
             <Text size="sm">
               <b>Файл настроек:</b> <Code>{pv.data.settingsFile}</Code> — удаляется без копии. <b>Реестр:</b> задач {pv.data.registry.jobs} (с логами),

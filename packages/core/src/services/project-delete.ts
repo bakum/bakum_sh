@@ -9,6 +9,7 @@ import { dropBuildResources } from '../builds/drop';
 import { removeWorktree } from '../git/worktrees';
 import * as git from '../git';
 import { ensureManagedPostgres, managedPgName, managedPgVolume, removeManagedPostgres } from '../docker/postgres';
+import { removeProjectImage } from '../docker/image';
 import { dbExists, dropDatabase } from '../pg';
 import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
@@ -54,6 +55,7 @@ export function projectDeletePreview(ctx: Ctx, projectId: string): ProjectDelete
     filestores: [...new Set(rows.map((b) => toPosix(path.join(cfg.runtime.filestore.hostDir, b.dbName))))].filter((p) => fs.existsSync(p)),
     worktrees: brs.map((b) => b.worktreePath).filter((p): p is string => !!p),
     postgres: cfg.postgres.mode === 'managed' ? `контейнер ${managedPgName(cfg.id)}, том ${managedPgVolume(cfg.id)} и сеть ${cfg.runtime.network}` : null,
+    image: cfg.runtime.build ? cfg.runtime.image : null,
     folders: ownFolders(ctx, cfg),
     settingsFile: toPosix(ctx.store.get(projectId)!.path),
     registry: {
@@ -146,6 +148,8 @@ export async function deleteProjectExecutor(ctx: Ctx, job: JobRow, jc: JobContex
   if (cfg.repo.path && fs.existsSync(cfg.repo.path)) await git.worktreePrune(cfg.repo.path);
   // The app's own Postgres goes last: dropping databases above still needs it.
   await removeManagedPostgres(ctx, cfg, jc.log);
+  // The Odoo image the app built for the project (runtime.build, D46): only with its bm.project label.
+  await removeProjectImage(cfg, jc.log);
 
   for (const dir of ownFolders(ctx, cfg)) {
     await removeOwnFolder(ctx, cfg, dir, jc.log).catch((e) => jc.log(`папка: ${(e as Error).message}`));

@@ -57,6 +57,8 @@ export interface ProjectDeletePreview {
   filestores: string[];
   worktrees: string[];
   postgres: string | null;
+  /** The Odoo image the app built (runtime.build, D46); removed only if it carries the project's label. */
+  image: string | null;
   /** The app's mirror, project folder in dataDir, build and job logs, the settings file. */
   folders: string[];
   settingsFile: string;
@@ -134,6 +136,8 @@ export const methods = {
   /** External Postgres → the app's own container (postgres.mode: managed) with the databases of the builds. */
   'projects.pgMigratePreview': m<PgMigratePreview>()(z.object({ projectId }).strict()),
   'projects.pgMigrate': m<JobRef>()(z.object({ projectId }).strict()),
+  /** `docker build` of runtime.build now (D46): checks the Dockerfile before a build needs the image. */
+  'projects.buildImage': m<JobRef>()(z.object({ projectId }).strict()),
 
   'config.get': m<{ yaml: string; value: unknown }>()(
     z.object({ projectId: projectId.optional(), level: levelSchema, branchId: id.optional() }).strict(),

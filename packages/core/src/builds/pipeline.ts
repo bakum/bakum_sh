@@ -11,7 +11,8 @@ import { assertFolderUsable, codeSource, ensureWorktree, type CodeSource } from 
 import { docker, dockerCli } from '../docker/client';
 import { ODOO_SERVICE, dataDirOf, generateCompose } from '../docker/compose';
 import { ensureTraefik } from '../docker/traefik';
-import { ensurePostgres, pullImage } from '../docker/postgres';
+import { ensurePostgres } from '../docker/postgres';
+import { ensureImage } from '../docker/image';
 import { refreshContainers } from '../docker/watch';
 import * as pg from '../pg';
 import { assertOwned } from '../safety';
@@ -817,8 +818,8 @@ export async function runBuild(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
   try {
     // Postgres must be up before any step: the app's own (D30) or the user's container, started when stopped.
     await ensurePostgres(ctx, cfg, log);
-    // «Odoo in Docker»: the official Odoo image is pulled by the app.
-    if (cfg.postgres.mode === 'managed') await pullImage(scope.image, log, jc.signal);
+    // The Odoo image: built from runtime.build (D46), pulled for «Odoo in Docker», or already there.
+    await ensureImage(cfg, scope.image, log, jc.signal);
     // A compose file is needed by one-off runs from the database step on (image, mounts, network).
     for (let i = startIdx; i < BUILD_STEPS.length; i++) {
       const name = BUILD_STEPS[i]!;

@@ -15,6 +15,7 @@ export type JobType =
   | 'restore_snapshot'
   | 'delete_snapshot'
   | 'export_db'
+  | 'build_image'
   | 'import_backup'
   | 'fetch'
   | 'apply_config'

@@ -18,7 +18,7 @@ export interface JobContext {
 export type Executor = (ctx: Ctx, job: JobRow, jc: JobContext) => Promise<void>;
 
 /** Job types that count against maxParallelBuilds. */
-const HEAVY: ReadonlySet<string> = new Set(['build', 'import_backup']);
+const HEAVY: ReadonlySet<string> = new Set(['build', 'import_backup', 'build_image']);
 
 /** Project-wide jobs: start when nothing else of the project runs; later jobs of the project wait for them. */
 const EXCLUSIVE: ReadonlySet<string> = new Set(['migrate_postgres']);
