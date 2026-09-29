@@ -32,7 +32,7 @@ export function BuildsPage() {
         <Group justify="space-between">
           <Title order={3}>Builds</Title>
           <Group>
-            <Select size="xs" placeholder="Стадия" clearable data={['production', 'staging', 'development']} value={stage} onChange={setStage} />
+            <Select size="xs" placeholder="Стадия" clearable data={['production', 'development']} value={stage} onChange={setStage} />
             <Select size="xs" placeholder="Статус" clearable data={['queued', 'building', 'running', 'stopped', 'failed', 'dropped']} value={status} onChange={setStatus} />
           </Group>
         </Group>

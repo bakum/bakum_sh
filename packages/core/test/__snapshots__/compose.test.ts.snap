@@ -54,7 +54,7 @@ services:
       bm.branch.name: 19.0-demz-crm
       bm.build: "42"
       bm.build.number: "3"
-      bm.stage: staging
+      bm.stage: development
       bm.db: o19_br_crm_3
       traefik.enable: "true"
       traefik.docker.network: demz-odoo-19_default

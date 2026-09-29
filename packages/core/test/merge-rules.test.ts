@@ -66,23 +66,21 @@ describe('mergeLevels (spec 9.1)', () => {
 describe('branch rules (spec 8.2)', () => {
   it('lays out DEMZ branches like odoo.sh', () => {
     expect(selectStage(demz, '19.0').stage).toBe('production');
-    expect(selectStage(demz, '19.0-demz-crm').stage).toBe('staging');
-    expect(selectStage(demz, '19.0-demz-prerelease').stage).toBe('staging');
     expect(selectStage(demz, 'backup/19.0-demz-prerelease-before-demzua-sync-2026-09-25').stage).toBe('ignore');
-    for (const b of ['19.0-demz-test1', '19.0-eusign_cp', 'demz-roman', '19.0-demz-perevertum']) {
-      expect(selectStage(demz, b)).toMatchObject({ stage: 'development', ruleIndex: 2 });
+    for (const b of ['19.0-demz-crm', '19.0-demz-prerelease', '19.0-demz-test1', '19.0-eusign_cp', 'demz-roman', '19.0-demz-perevertum']) {
+      expect(selectStage(demz, b)).toMatchObject({ stage: 'development', ruleIndex: 1 });
     }
   });
 
   it('first matching rule wins', () => {
-    const cfg = { ...demz, branchRules: [{ match: '19.0-*', stage: 'staging' as const }, { match: '19.0-demz-*', stage: 'ignore' as const }] };
-    expect(selectStage(cfg, '19.0-demz-x').stage).toBe('staging');
+    const cfg = { ...demz, branchRules: [{ match: '19.0-*', stage: 'development' as const }, { match: '19.0-demz-*', stage: 'ignore' as const }] };
+    expect(selectStage(cfg, '19.0-demz-x')).toMatchObject({ stage: 'development', ruleIndex: 0 });
   });
 
   it('supports regex matches and globs across slashes', () => {
-    const cfg = { ...demz, branchRules: [{ match: { regex: '^feat/\\d+' }, stage: 'staging' as const }] };
-    expect(selectStage(cfg, 'feat/12-x').stage).toBe('staging');
-    expect(selectStage(cfg, 'feat/x').stage).toBe('development');
+    const cfg = { ...demz, branchRules: [{ match: { regex: '^feat/\\d+' }, stage: 'ignore' as const }] };
+    expect(selectStage(cfg, 'feat/12-x').stage).toBe('ignore');
+    expect(selectStage(cfg, 'feat/x')).toMatchObject({ stage: 'development', ruleIndex: null });
     expect(globToRegex('backup/*').test('backup/a/b')).toBe(true);
     expect(globToRegex('19.0').test('1900')).toBe(false);
   });
@@ -90,8 +88,8 @@ describe('branch rules (spec 8.2)', () => {
   it('honours autoAddBranches modes', () => {
     expect(shouldAutoAdd({ ...demz, autoAddBranches: 'none' }, 'demz-roman')).toBeNull();
     expect(shouldAutoAdd({ ...demz, autoAddBranches: 'all' }, 'backup/x')).toBeNull();
-    const rulesOnly = { ...demz, autoAddBranches: 'rules' as const, branchRules: demz.branchRules.slice(0, 2) };
-    expect(shouldAutoAdd(rulesOnly, '19.0-demz-crm')?.stage).toBe('staging');
+    const rulesOnly = { ...demz, autoAddBranches: 'rules' as const, branchRules: [{ match: '19.0-demz-crm', stage: 'development' as const }] };
+    expect(shouldAutoAdd(rulesOnly, '19.0-demz-crm')?.stage).toBe('development');
     expect(shouldAutoAdd(rulesOnly, 'demz-roman')).toBeNull();
     expect(shouldAutoAdd({ ...rulesOnly, autoAddBranches: 'all' }, 'demz-roman')?.stage).toBe('development');
   });
@@ -107,13 +105,13 @@ describe('resolveBranchScope', () => {
     expect(f.image).toMatchObject({ value: 'demz-odoo-19-odoo', level: 'project' });
     expect(f['localTweaks.baseUrl']).toMatchObject({ value: true, level: 'app' });
     expect(f.env).toMatchObject({ value: { HOST: 'db' }, level: 'project' });
-    expect(r.ruleIndex).toBe(2);
+    expect(r.ruleIndex).toBe(1);
   });
 
-  it('uses stage defaults of the current stage after a manual move', () => {
-    const r = resolveBranchScope(demz, 'demz-roman', 'staging', null);
+  it('uses stage defaults of the current stage after a move to Production', () => {
+    const r = resolveBranchScope(demz, 'demz-roman', 'production', { folder: 'D:/work/demz' });
     expect(r.scope.folder).toBeNull();
-    expect(r.scope.database).toBe('copy:production');
+    expect(r.scope.database).toBe('backup');
     expect(r.ruleIndex).toBeNull();
   });
 });

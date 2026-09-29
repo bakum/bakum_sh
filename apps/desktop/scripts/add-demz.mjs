@@ -58,7 +58,7 @@ try {
   console.log('url:', p.config.repo.url, '| копия:', p.config.repo.mirrorDir, '| ваша папка:', p.config.repo.localFolder, '| старая схема:', p.summary.legacy);
   console.log('последний fetch:', p.summary.lastFetchAt, p.summary.lastFetchError ?? 'без ошибок');
   const l = await bm(win, 'branches.list', { projectId: 'demz' });
-  for (const s of ['production', 'staging', 'development']) console.log(`${s}: ${l[s].map((b) => `${b.name}${b.liveBuild ? ' (сборка)' : ''}`).join(', ')}`);
+  for (const s of ['production', 'development']) console.log(`${s}: ${l[s].map((b) => `${b.name}${b.liveBuild ? ' (сборка)' : ''}`).join(', ')}`);
   await win.evaluate(() => (location.hash = '#/projects/demz/branches'));
   await new Promise((r) => setTimeout(r, 2500));
   await shot(win, 'demz-branches');

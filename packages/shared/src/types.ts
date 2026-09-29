@@ -109,6 +109,8 @@ export interface BranchView {
   badges: BranchBadge[];
   url: string | null;
   lastActiveAt: string | null;
+  /** Hidden from the sidebar by the user (context menu «Скрыть»); builds keep working. */
+  hidden: boolean;
 }
 
 export type BranchBadgeKind =
@@ -136,10 +138,10 @@ export interface UnassignedBranch {
 export interface BranchesList {
   projectId: string;
   production: BranchView[];
-  staging: BranchView[];
   development: BranchView[];
   unassigned: UnassignedBranch[];
-  hiddenCount: number;
+  /** Branches not added because a rule says `stage: ignore`. */
+  ignoredCount: number;
 }
 
 export interface BuildView {

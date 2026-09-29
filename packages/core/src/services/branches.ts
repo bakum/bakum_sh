@@ -92,6 +92,7 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
     badges,
     url: live ? buildUrl(live.host, port) : null,
     lastActiveAt: b.lastActiveAt,
+    hidden: b.hidden,
   };
 }
 
@@ -114,17 +115,17 @@ export async function listBranches(ctx: Ctx, projectId: string): Promise<Branche
   }
   const added = new Set(rows.map((r) => r.name));
   const unassigned: UnassignedBranch[] = [];
-  let hidden = 0;
+  let ignored = 0;
   for (const g of known) {
     if (added.has(g.name)) continue;
     const sel = selectStage(cfg, g.name);
     if (sel.stage === 'ignore') {
-      hidden++;
+      ignored++;
       continue;
     }
     unassigned.push({ name: g.name, source: g.source, suggestedStage: sel.stage, ruleIndex: sel.ruleIndex });
   }
-  return { projectId, production: byStage('production'), staging: byStage('staging'), development: byStage('development'), unassigned, hiddenCount: hidden };
+  return { projectId, production: byStage('production'), development: byStage('development'), unassigned, ignoredCount: ignored };
 }
 
 export function getBranchView(ctx: Ctx, branchId: number): BranchView {
@@ -169,14 +170,14 @@ export async function recordHeads(ctx: Ctx, cfg: ProjectConfig, row: BranchRow):
 
 /**
  * Manual stage change (drag & drop). Fixes the stage (assignedBy=user). Moving a branch into Production rewrites
- * production.branch in the project file: the former production branch goes to Staging (spec 6).
+ * production.branch in the project file: the former production branch goes to Development (spec 6, D37).
  */
 export function setStage(ctx: Ctx, branchId: number, stage: Stage): BranchView {
   const b = mustBranch(ctx, branchId);
   const cfg = ctx.store.require(b.projectId);
   if (b.stage === stage) return getBranchView(ctx, branchId);
   if (b.stage === 'production') {
-    throw new BmError('BAD_STAGE', 'Production не может остаться без ветки: перетащите на Production другую ветку, текущая уйдёт в Staging.');
+    throw new BmError('BAD_STAGE', 'Production не может остаться без ветки: перетащите на Production другую ветку, текущая уйдёт в Development.');
   }
   if (stage === 'production') {
     const e = ctx.store.get(cfg.id)!;
@@ -190,6 +191,17 @@ export function setStage(ctx: Ctx, branchId: number, stage: Stage): BranchView {
   ctx.db.update(branches).set({ stage, assignedBy: 'user', stageChangedAt: nowIso() }).where(eq(branches.id, branchId)).run();
   audit(ctx, { projectId: cfg.id, action: 'branch.stage', target: b.name, params: { from: b.stage, to: stage } });
   bus.emit({ type: 'branch.changed', projectId: cfg.id, branchId });
+  return getBranchView(ctx, branchId);
+}
+
+/** «Скрыть» / «Показать» in the sidebar. Only the list changes: builds, auto-builds and the branch itself stay. */
+export function setHidden(ctx: Ctx, branchId: number, hidden: boolean): BranchView {
+  const b = mustBranch(ctx, branchId);
+  if (b.stage === 'production' && hidden) throw new BmError('BAD_STAGE', 'Продакшн-ветку скрыть нельзя.');
+  if (b.hidden === hidden) return getBranchView(ctx, branchId);
+  ctx.db.update(branches).set({ hidden }).where(eq(branches.id, branchId)).run();
+  audit(ctx, { projectId: b.projectId, action: hidden ? 'branch.hide' : 'branch.show', target: b.name });
+  bus.emit({ type: 'branch.changed', projectId: b.projectId, branchId });
   return getBranchView(ctx, branchId);
 }
 

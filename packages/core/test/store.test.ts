@@ -69,3 +69,35 @@ describe('ConfigStore', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe('Staging removal (D37)', () => {
+  it('moves stages.staging into the staging rules and rewrites the file on load', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bm-store-'));
+    const doc = YAML.parseDocument(YAML.stringify(cfg('proj1')));
+    doc.setIn(['stages', 'staging'], { database: 'copy:production', protected: true, tests: { mode: 'changed', failBuild: false } });
+    doc.set('branchRules', [
+      { match: ['crm', 'pre'], stage: 'staging', overrides: { protected: false, tests: { failBuild: true } } },
+      { match: 'backup/*', stage: 'ignore' },
+    ]);
+    doc.set('hooks', [{ point: 'after:up', action: { type: 'sql', sql: 'select 1' }, stages: ['staging', 'development'] }]);
+    fs.mkdirSync(path.join(dir, 'projects'), { recursive: true });
+    const file = path.join(dir, 'projects', 'proj1.yaml');
+    fs.writeFileSync(file, `# my comment
+${doc.toString()}`);
+
+    const store = new ConfigStore(dir);
+    store.load();
+    const c = store.require('proj1');
+    expect(c.branchRules[0]).toEqual({
+      match: ['crm', 'pre'],
+      stage: 'development',
+      overrides: { protected: false, tests: { failBuild: true, mode: 'changed' }, database: 'copy:production' },
+    });
+    expect(c.branchRules[1]).toMatchObject({ stage: 'ignore' });
+    expect(c.hooks[0]!.stages).toEqual(['development']);
+    const text = fs.readFileSync(file, 'utf8');
+    expect(text).toContain('# my comment');
+    expect(text).not.toContain('staging');
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

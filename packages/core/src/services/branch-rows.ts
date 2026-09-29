@@ -47,14 +47,14 @@ export function ensureBranchRow(ctx: Ctx, cfg: ProjectConfig, name: string, stag
 }
 
 /**
- * production.branch changed: the old production branch moves to Staging (spec 6), gets a regular slug,
+ * production.branch changed: the old production branch moves to Development (spec 6, D37), gets a regular slug,
  * the new one takes production.slug.
  */
 export function relayoutProductionBranch(ctx: Ctx, cfg: ProjectConfig, oldName: string): void {
   const old = branchByName(ctx, cfg.id, oldName);
   if (old && old.stage === 'production') {
-    const slug = slugFor(ctx, cfg, oldName, 'staging', old.id);
-    ctx.db.update(branches).set({ stage: 'staging', slug, assignedBy: 'user', stageChangedAt: nowIso() }).where(eq(branches.id, old.id)).run();
+    const slug = slugFor(ctx, cfg, oldName, 'development', old.id);
+    ctx.db.update(branches).set({ stage: 'development', slug, assignedBy: 'user', stageChangedAt: nowIso() }).where(eq(branches.id, old.id)).run();
   }
   const next = branchByName(ctx, cfg.id, cfg.production.branch);
   if (next) {

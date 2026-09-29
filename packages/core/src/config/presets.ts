@@ -25,26 +25,6 @@ export const APP_STAGE_DEFAULTS: Record<Stage, ResolvedBranchScope> = {
     env: {},
     localTweaks: { baseUrl: true, mailServer: true, adminPassword: true, extraSql: true },
   },
-  staging: {
-    database: 'copy:production',
-    cloneMethod: 'template',
-    filestoreCopy: 'hardlink',
-    install: 'my',
-    withDemo: false,
-    onNewCommit: 'update',
-    onForcePush: 'pause',
-    updateModules: 'changed',
-    folder: null,
-    tests: { mode: 'changed', tags: '/{module}', extraArgs: [], failBuild: false },
-    mails: { enabled: true },
-    idleStopHours: 0,
-    dropAfterDays: 30,
-    protected: true,
-    buildOnAdd: false,
-    image: '',
-    env: {},
-    localTweaks: { baseUrl: true, mailServer: true, adminPassword: true, extraSql: true },
-  },
   development: {
     database: 'fresh',
     cloneMethod: 'template',
@@ -199,18 +179,6 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
         idleStopHours: 0,
         dropAfterDays: 0,
       },
-      staging: {
-        database: 'copy:production',
-        cloneMethod: 'template',
-        onNewCommit: 'update',
-        onForcePush: 'pause',
-        updateModules: 'changed',
-        tests: { mode: 'changed', failBuild: false },
-        mails: { enabled: true },
-        idleStopHours: 0,
-        dropAfterDays: 30,
-        protected: true,
-      },
       development: {
         database: 'copy:production',
         install: 'my',
@@ -224,7 +192,6 @@ export function demzPreset(i: PresetInputs): ProjectConfigInput {
       },
     },
     branchRules: [
-      { match: ['19.0-demz-crm', '19.0-demz-prerelease'], stage: 'staging' },
       { match: 'backup/*', stage: 'ignore' },
       { match: '*', stage: 'development' },
     ],
@@ -259,7 +226,7 @@ export interface OdooPresetInputs {
  * «Odoo in Docker» preset (docs/decisions.md D32): nothing but a git repository is needed. The app runs the official
  * `odoo:<series>` image and its own Postgres container (`postgres.mode: managed`, D30) in the network `bm-<project>`.
  * Production starts from a fresh database (a backups folder turns it into a mirror of production later),
- * Staging copies Production, Development gets a fresh database with demo data — the odoo.sh behaviour.
+ * Development gets a fresh database with demo data — the odoo.sh behaviour.
  */
 export function odooPreset(i: OdooPresetInputs): ProjectConfigInput {
   const prefix = i.id.replace(/-/g, '_');
@@ -344,7 +311,6 @@ export function odooPreset(i: OdooPresetInputs): ProjectConfigInput {
     },
     stages: {
       production: { install, withDemo: false, onNewCommit: 'update', updateModules: 'changed' } satisfies BranchScope,
-      staging: { database: 'copy:production', onNewCommit: 'update', updateModules: 'changed' } satisfies BranchScope,
       development: { database: 'fresh', install, withDemo: true, onNewCommit: 'new' } satisfies BranchScope,
     },
     branchRules: [],

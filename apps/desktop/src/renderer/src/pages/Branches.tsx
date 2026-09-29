@@ -9,7 +9,7 @@ import { Sidebar } from '../components/Sidebar';
 import { BranchPage } from './BranchPage';
 import { MergeDialog } from '../components/dialogs/MergeDialog';
 
-const STAGE_LABEL: Record<Stage, string> = { production: 'Production', staging: 'Staging', development: 'Development' };
+const STAGE_LABEL: Record<Stage, string> = { production: 'Production', development: 'Development' };
 
 const lastBranchKey = (projectId: string) => `bm.lastBranch.${projectId}`;
 
@@ -47,7 +47,7 @@ export function BranchesPage() {
   const selectedId = bid ? Number(bid) : null;
   const fetching = !!jobs.data?.some((j) => j.type === 'fetch');
 
-  const all = list.data ? [...list.data.production, ...list.data.staging, ...list.data.development] : [];
+  const all = list.data ? [...list.data.production, ...list.data.development] : [];
 
   // The open branch (and its tab) is remembered per project: coming back from Settings, Builds or another project
   // opens it again; the first time — the Production branch.
@@ -73,7 +73,8 @@ export function BranchesPage() {
         await call('builds.action', { buildId: b.liveBuild.id, action });
       } else if (action === 'editor') await call('shell.open', { branchId: b.id, target: 'editor' });
       else if (action === 'logs') nav(`/projects/${projectId}/branches/${b.id}/logs`);
-      else if (action === 'production' || action === 'staging' || action === 'development') setMove({ b, stage: action });
+      else if (action === 'hide' || action === 'show') await call('branches.setHidden', { branchId: b.id, hidden: action === 'hide' });
+      else if (action === 'production' || action === 'development') setMove({ b, stage: action });
     } catch (e) {
       notifications.show({ color: 'red', title: 'Ошибка', message: errorText(e), autoClose: 12000 });
     }
@@ -169,12 +170,11 @@ function MoveDialog({ move, onClose, production }: { move: { b: BranchView; stag
       {!done ? (
         <Stack>
           <Text>
-            {STAGE_LABEL[move.b.stage]} → <b>{STAGE_LABEL[move.stage]}</b>. Стадия будет зафиксирована вручную: правила её больше не
-            меняют («Сбросить к правилу» — в Settings ветки).
+            {STAGE_LABEL[move.b.stage]} → <b>{STAGE_LABEL[move.stage]}</b>.
           </Text>
           {move.stage === 'production' && (
             <Alert color="orange" title="Смена продакшн-ветки">
-              Текущая продакшн-ветка {production ? <b>{production}</b> : ''} уйдёт в Staging. Зеркало прода для новой ветки нужно пересоздать
+              Текущая продакшн-ветка {production ? <b>{production}</b> : ''} уйдёт в Development. Зеркало прода для новой ветки нужно пересоздать
               импортом бэкапа (Backups → Импортировать).
             </Alert>
           )}

@@ -12,11 +12,10 @@ await bm(win, 'git.fetch', { projectId: pid });
 await waitJobs(win, pid);
 const l = await bm(win, 'branches.list', { projectId: pid });
 console.log('production :', l.production.map((b) => `${b.name}(${b.slug})`).join(', '));
-console.log('staging    :', l.staging.map((b) => `${b.name}(${b.slug})`).join(', '));
 console.log('development:', l.development.map((b) => `${b.name}(${b.slug})`).join(', '));
-console.log('unassigned :', l.unassigned.map((u) => u.name).join(', '), '| hidden:', l.hiddenCount);
+console.log('unassigned :', l.unassigned.map((u) => u.name).join(', '), '| ignored:', l.ignoredCount);
 
-const byName = (n) => [...l.production, ...l.staging, ...l.development].find((b) => b.name === n);
+const byName = (n) => [...l.production, ...l.development].find((b) => b.name === n);
 const crm = byName('19.0-demz-crm');
 const roman = byName('demz-roman');
 const perev = byName('19.0-demz-perevertum');
@@ -37,7 +36,7 @@ await win.click(`[data-testid="branch-19.0-demz-crm"]`);
 await win.waitForTimeout(1500);
 await shot(win, 'm2-branches');
 
-// Remove: demz-roman (development) and crm (staging → protection off first)
+// Remove: demz-roman and crm (protection off first, if its rule sets it)
 await bm(win, 'branches.delete', { branchId: roman.id, confirmSlug: roman.slug, deleteLocal: false, deleteRemote: false, forceDirty: false });
 await bm(win, 'branches.setOverrides', { branchId: crm.id, overrides: { protected: false } });
 await bm(win, 'branches.delete', { branchId: crm.id, confirmSlug: crm.slug, deleteLocal: false, deleteRemote: false, forceDirty: false });

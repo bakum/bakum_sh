@@ -34,8 +34,8 @@ const cfg = projectConfigSchema.parse(
 
 const input = {
   cfg,
-  scope: resolveBranchScope(cfg, '19.0-demz-crm', 'staging', null).scope,
-  branch: { id: 7, name: '19.0-demz-crm', slug: 'crm', stage: 'staging' },
+  scope: resolveBranchScope(cfg, '19.0-demz-crm', 'development', null).scope,
+  branch: { id: 7, name: '19.0-demz-crm', slug: 'crm', stage: 'development' },
   build: { id: 42, number: 3, dbName: 'o19_br_crm_3', host: 'crm.localhost', composeProject: 'bm-demz-crm', debugPort: 5701 },
   worktree: 'E:\\demz-odoo-19\\worktrees\\demz\\crm',
 };

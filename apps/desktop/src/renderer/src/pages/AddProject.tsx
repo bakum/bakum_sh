@@ -34,11 +34,11 @@ const PRESET_LABEL: Record<PresetId, string> = { odoo: 'Odoo в Docker', generic
 const PRESET_TEXT: Record<PresetId, string> = {
   odoo:
     'Приложение само поднимает официальный образ Odoo и свой Postgres в Docker — ничего, кроме репозитория, не нужно. ' +
-    'Production — чистая БД с вашими модулями (с папкой бэкапов — зеркало прода), Staging — копия Production, Development — чистая БД с демо-данными и новая сборка на каждый коммит.',
+    'Production — чистая БД с вашими модулями (с папкой бэкапов — зеркало прода), Development (все остальные ветки) — чистая БД с демо-данными и новая сборка на каждый коммит.',
   generic:
     'Уже настроенный Odoo в Docker: образ и монтирования берутся из найденного контейнера, Postgres — свой контейнер приложения. ' +
     'Development — чистая БД с «моими» модулями, новая сборка на каждый коммит.',
-  demz: 'Production = 19.0 (зеркало прода из бэкапа), Staging = 19.0-demz-crm и 19.0-demz-prerelease, Development — копия зеркала прода и обновление модулей на новый коммит.',
+  demz: 'Production = 19.0 (зеркало прода из бэкапа), остальные ветки — Development: копия зеркала прода и обновление модулей на новый коммит.',
 };
 
 type Source = 'clone' | 'folder';

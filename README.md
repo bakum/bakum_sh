@@ -1,7 +1,7 @@
 # Odoo Branch Manager — локальный odoo.sh
 
 Десктопное приложение для Windows 10 и Docker Desktop. Ветки git-репозитория с модулями Odoo раскладываются по стадиям
-Production / Staging / Development. На каждую ветку собирается изолированная сборка: контейнер Odoo, своя БД и свой код
+Production (одна ветка) и Development (все остальные). На каждую ветку собирается изолированная сборка: контейнер Odoo, своя БД и свой код
 (worktree). Сборка открывается во внешнем браузере по адресу `http://<ветка>.localhost` (при занятом 80-м порту —
 `http://<ветка>.localhost:8080`).
 
@@ -86,8 +86,8 @@ pnpm test        # unit-тесты Core (Vitest под ELECTRON_RUN_AS_NODE=1)
 4. Проверьте значения и YAML, нажмите «Создать проект». Первый fetch разложит ветки по правилам. Сразу готовится свой
    Postgres проекта, для «Odoo в Docker» — ещё и образ Odoo (первая загрузка — несколько минут).
 5. Production: если папка бэкапов (`production.backups.dir`) не задана, Rebuild создаёт чистую БД с вашими модулями.
-   Для зеркала прода: ветка Production → вкладка Backups → «Импортировать» бэкап (`.zip`). Из копий Production
-   собираются Staging (и Development у DEMZ).
+   Для зеркала прода: ветка Production → вкладка Backups → «Импортировать» бэкап (`.zip`). Из копии Production
+   собираются ветки Development, если у них `database: copy:production` (так у DEMZ).
 
 ## Как разрабатывать
 

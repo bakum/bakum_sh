@@ -20,7 +20,7 @@ export const branches = sqliteTable(
     projectId: text('project_id').notNull(),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
-    stage: text('stage', { enum: ['production', 'staging', 'development'] }).notNull(),
+    stage: text('stage', { enum: ['production', 'development'] }).notNull(),
     assignedBy: text('assigned_by', { enum: ['user', 'rule'] }).notNull(),
     worktreePath: text('worktree_path'),
     /** Tracking mode the worktree was created with (the effective setting may change later). */
@@ -32,6 +32,7 @@ export const branches = sqliteTable(
     stageChangedAt: text('stage_changed_at'),
     lastActiveAt: text('last_active_at'),
     createdAt: text('created_at').notNull(),
+    hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
   },
   (t) => [uniqueIndex('branches_project_name').on(t.projectId, t.name), uniqueIndex('branches_project_slug').on(t.projectId, t.slug)],
 );
@@ -41,7 +42,7 @@ export const builds = sqliteTable('builds', {
   branchId: integer('branch_id').notNull(),
   projectId: text('project_id').notNull(),
   number: integer('number').notNull(),
-  stage: text('stage', { enum: ['production', 'staging', 'development'] }).notNull(),
+  stage: text('stage', { enum: ['production', 'development'] }).notNull(),
   commitSha: text('commit_sha'),
   commits: text('commits', { mode: 'json' }).$type<CommitInfo[]>().notNull().default([]),
   trigger: text('trigger', { enum: ['new_commit', 'rebuild', 'manual', 'import_backup', 'stage_change'] }).notNull(),

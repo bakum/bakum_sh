@@ -74,7 +74,7 @@ export async function waitJobs(win, projectId, timeoutMs = 3600000, onTick) {
 
 export async function branch(win, projectId, name) {
   const l = await bm(win, 'branches.list', { projectId });
-  return [...l.production, ...l.staging, ...l.development].find((b) => b.name === name);
+  return [...l.production, ...l.development].find((b) => b.name === name);
 }
 
 export async function lastBuild(win, branchId) {

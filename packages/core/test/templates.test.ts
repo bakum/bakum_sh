@@ -60,7 +60,7 @@ describe('renderTemplate (spec 9.2)', () => {
 
   it('supports every documented variable', () => {
     const all = {
-      project: 'p', branch: 'b', slug: 's', slug_: 's_', stage: 'staging', build: 1, issue: '7', type: 'fix',
+      project: 'p', branch: 'b', slug: 's', slug_: 's_', stage: 'development', build: 1, issue: '7', type: 'fix',
       db: 'd', host: 'h', debugPort: 5701, worktree: 'E:/w', repoMount: '/mnt/r', sha: 'abcdef1234', shortSha: 'abcdef1',
     };
     const tpl = Object.keys(all).map((k) => `{${k}}`).join('|');

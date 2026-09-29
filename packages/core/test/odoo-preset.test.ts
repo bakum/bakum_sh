@@ -47,7 +47,6 @@ describe('«Odoo в Docker» preset (D32)', () => {
     expect(productionFromBackup(cfg, 'production', prod.database)).toBe(false);
     const dev = resolveBranchScope(cfg, 'feature', 'development', null).scope;
     expect(dev).toMatchObject({ database: 'fresh', install: 'roots', withDemo: true, onNewCommit: 'new' });
-    expect(resolveBranchScope(cfg, 'stage', 'staging', null).scope.database).toBe('copy:production');
   });
 
   it('mounts Enterprise read-only first in the addons path', () => {

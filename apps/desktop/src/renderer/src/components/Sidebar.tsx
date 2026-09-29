@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ActionIcon,
@@ -16,7 +16,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { IconChevronDown, IconChevronRight, IconPlus, IconRefresh, IconSearch } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight, IconEye, IconEyeOff, IconPlus, IconRefresh, IconSearch } from '@tabler/icons-react';
 import type { BranchesList, BranchView, Stage, UnassignedBranch } from '@bm/shared';
 import { StatusDot } from './StatusDot';
 import { fmtAgo } from '../lib/format';
@@ -24,7 +24,6 @@ import classes from './Sidebar.module.css';
 
 const STAGES: { key: Stage; title: string }[] = [
   { key: 'production', title: 'PRODUCTION' },
-  { key: 'staging', title: 'STAGING' },
   { key: 'development', title: 'DEVELOPMENT' },
 ];
 
@@ -34,10 +33,10 @@ export interface SidebarActions {
   onAddDialog: (stage: Stage) => void;
   onMerge: (source: BranchView, target: BranchView) => void;
   onFetch: () => void;
-  onContext: (b: BranchView, action: 'connect' | 'rebuild' | 'start' | 'stop' | 'editor' | 'logs' | Stage) => void;
+  onContext: (b: BranchView, action: 'connect' | 'rebuild' | 'start' | 'stop' | 'editor' | 'logs' | 'hide' | 'show' | Stage) => void;
 }
 
-/** Branches sidebar (spec 6): stages with drag & drop, filter, «не добавлены», context menu. */
+/** Branches sidebar (spec 6): stages with drag & drop, filter, hidden branches, «не добавлены», context menu. */
 export function Sidebar(props: {
   data: BranchesList | undefined;
   selectedId: number | null;
@@ -49,11 +48,18 @@ export function Sidebar(props: {
   const nav = useNavigate();
   const [filter, setFilter] = useState('');
   const [showUnassigned, setShowUnassigned] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const f = filter.trim().toLowerCase();
   const match = (n: string) => !f || n.toLowerCase().includes(f);
 
-  const all = useMemo(() => (props.data ? [...props.data.production, ...props.data.staging, ...props.data.development] : []), [props.data]);
+  const all = useMemo(() => (props.data ? [...props.data.production, ...props.data.development] : []), [props.data]);
+  const hiddenCount = all.filter((b) => b.hidden).length;
+  useEffect(() => {
+    if (!hiddenCount) setShowHidden(false);
+  }, [hiddenCount]);
+  // A filter also searches hidden branches: that is how one is found to be shown again.
+  const visible = (b: BranchView) => match(b.name) && (!b.hidden || showHidden || !!f);
 
   const onDragEnd = (e: DragEndEvent) => {
     const id = String(e.active.id);
@@ -99,13 +105,25 @@ export function Sidebar(props: {
               key={s.key}
               stage={s.key}
               title={s.title}
-              items={(props.data?.[s.key] ?? []).filter((b) => match(b.name))}
+              items={(props.data?.[s.key] ?? []).filter(visible)}
               selectedId={props.selectedId}
               onSelect={(b) => nav(`/projects/${props.projectId}/branches/${b.id}`)}
               onPlus={s.key === 'production' ? undefined : () => props.actions.onAddDialog(s.key)}
               onContext={props.actions.onContext}
             />
           ))}
+          {hiddenCount > 0 && (
+            <Box px="xs">
+              <UnstyledButton onClick={() => setShowHidden((v) => !v)} className={classes.groupHead} data-testid="toggle-hidden">
+                <Group gap={4}>
+                  {showHidden ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                  <Text size="xs" c="dimmed">
+                    {showHidden ? `Не показывать скрытые (${hiddenCount})` : `Показать скрытые (${hiddenCount})`}
+                  </Text>
+                </Group>
+              </UnstyledButton>
+            </Box>
+          )}
           <Box px="xs" pt="md" pb="xs">
             <UnstyledButton onClick={() => setShowUnassigned((v) => !v)} className={classes.groupHead}>
               <Group gap={4}>
@@ -113,10 +131,10 @@ export function Sidebar(props: {
                 <Text size="xs" fw={700} c="dimmed">
                   НЕ ДОБАВЛЕНЫ ({props.data?.unassigned.length ?? 0})
                 </Text>
-                {!!props.data?.hiddenCount && (
-                  <Tooltip label="Скрыты правилом stage: ignore">
+                {!!props.data?.ignoredCount && (
+                  <Tooltip label="Не показаны: правило веток stage: ignore">
                     <Badge size="xs" variant="light" color="gray">
-                      скрыто {props.data.hiddenCount}
+                      ignore {props.data.ignoredCount}
                     </Badge>
                   </Tooltip>
                 )}
@@ -189,7 +207,7 @@ function BranchRowItem({ b, selected, onSelect, onContext }: { b: BranchView; se
           style={style}
           {...drag.listeners}
           {...drag.attributes}
-          className={`${classes.row} ${selected ? classes.selected : ''} ${drop.isOver && !drag.isDragging ? classes.mergeOver : ''}`}
+          className={`${classes.row} ${selected ? classes.selected : ''} ${b.hidden ? classes.hidden : ''} ${drop.isOver && !drag.isDragging ? classes.mergeOver : ''}`}
           onClick={onSelect}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -225,14 +243,16 @@ function BranchRowItem({ b, selected, onSelect, onContext }: { b: BranchView; se
         {b.stage !== 'production' && (
           <>
             <Menu.Divider />
-            <Menu.Label>Сменить стадию</Menu.Label>
-            {(['production', 'staging', 'development'] as Stage[])
-              .filter((s) => s !== b.stage)
-              .map((s) => (
-                <Menu.Item key={s} onClick={() => onContext(b, s)}>
-                  → {s === 'production' ? 'Production' : s === 'staging' ? 'Staging' : 'Development'}
-                </Menu.Item>
-              ))}
+            <Menu.Item onClick={() => onContext(b, 'production')}>→ Production</Menu.Item>
+            {b.hidden ? (
+              <Menu.Item leftSection={<IconEye size={14} />} onClick={() => onContext(b, 'show')}>
+                Показать
+              </Menu.Item>
+            ) : (
+              <Menu.Item leftSection={<IconEyeOff size={14} />} onClick={() => onContext(b, 'hide')}>
+                Скрыть
+              </Menu.Item>
+            )}
           </>
         )}
       </Menu.Dropdown>

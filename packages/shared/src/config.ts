@@ -4,7 +4,8 @@
  */
 import { z } from 'zod';
 
-export const STAGES = ['production', 'staging', 'development'] as const;
+/** Two stages (D37): the production branch and everything else. Staging was dropped: it only differed by settings. */
+export const STAGES = ['production', 'development'] as const;
 export const stageSchema = z.enum(STAGES);
 export type Stage = z.infer<typeof stageSchema>;
 
@@ -125,7 +126,7 @@ export type BranchMatch = z.infer<typeof branchMatchSchema>;
 export const branchRuleSchema = z
   .object({
     match: branchMatchSchema,
-    stage: z.enum(['staging', 'development', 'ignore']),
+    stage: z.enum(['development', 'ignore']),
     overrides: branchScopeSchema.optional(),
   })
   .strict();
@@ -289,7 +290,6 @@ export const projectConfigSchema = z
     stages: z
       .object({
         production: branchScopeSchema.optional(),
-        staging: branchScopeSchema.optional(),
         development: branchScopeSchema.optional(),
       })
       .strict()

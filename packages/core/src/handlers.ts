@@ -22,6 +22,7 @@ import {
   mustBranch,
   previewBranch,
   resetToRule,
+  setHidden,
   setStage,
 } from './services/branches';
 import { requestFetch } from './services/fetch';
@@ -92,6 +93,7 @@ export function registerHandlers(ctx: Ctx): void {
     'branches.add': (p) => addBranch(ctx, p),
     'branches.setStage': (p) => setStage(ctx, p.branchId, p.stage),
     'branches.resetToRule': (p) => resetToRule(ctx, p.branchId),
+    'branches.setHidden': (p) => setHidden(ctx, p.branchId, p.hidden),
     'branches.setOverrides': async (p) => {
       if (p.overrides.folder) await assertFolderUsable(p.overrides.folder);
       setBranchOverrides(ctx, p.branchId, p.overrides);

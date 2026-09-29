@@ -1,7 +1,7 @@
 // Criteria 6 and 8 in the sandbox:
 //  6 — Fork 19.0-demz-test999 from 19.0 → Development, build from a copy of the prod mirror; a module change in the
 //      worktree + commit → the live build updates exactly that module (update, DB kept); not visible on the prod
-//      mirror, staging or localhost:8019; moving the branch to Staging and back changes the stage and offers Rebuild.
+//      mirror, other branches or localhost:8019; «Скрыть» / «Показать» in the context menu hide the branch and bring it back.
 //  8 — attach to debugpy with the generated launch.json → a breakpoint in the worktree file is hit.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -127,19 +127,16 @@ console.log('response after continue:', await req);
 await dap.send('disconnect', { terminateDebuggee: false });
 dap.close();
 
-step('criterion 6: move to Staging and back via the context menu');
+step('criterion 6: hide the branch and show it again via the context menu');
 await win.evaluate((id) => (location.hash = `#/projects/bmdev/branches/${id}/history`), t999.id);
 await win.waitForTimeout(2000);
-for (const target of ['Staging', 'Development']) {
+for (const action of ['Скрыть', 'Показать']) {
+  if (action === 'Показать') await win.click('[data-testid="toggle-hidden"]');
   await win.click(`[data-testid="branch-19.0-demz-test999"]`, { button: 'right' });
-  await win.click(`text=→ ${target}`);
-  await win.waitForSelector('text=Сменить стадию');
-  await shot(win, `c6-move-${target}`);
-  await win.click('button:has-text("Сменить стадию")');
-  await win.waitForSelector('text=Пересобрать ветку по правилам новой стадии сейчас?');
-  await shot(win, `c6-rebuild-offer-${target}`);
-  await win.click('button:has-text("Позже")');
+  await win.click(`text=${action}`);
+  await win.waitForTimeout(1000);
+  await shot(win, `c6-${action === 'Скрыть' ? 'hidden' : 'shown'}`);
   const now = await bm(win, 'branches.get', { branchId: t999.id });
-  console.log(`after move → ${now.stage} (${now.assignedBy}); badges: ${now.badges.map((b) => b.kind).join(',')}`);
+  console.log(`${action} → hidden=${now.hidden}; in sidebar: ${await win.isVisible('[data-testid="branch-19.0-demz-test999"]')}`);
 }
 await app.close();

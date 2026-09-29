@@ -47,6 +47,12 @@ const MIGRATIONS: string[] = [
   );
   CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `,
+  // D37: Staging is gone — its branches and builds become Development; branches can be hidden from the sidebar.
+  `
+  UPDATE branches SET stage = 'development' WHERE stage = 'staging';
+  UPDATE builds SET stage = 'development' WHERE stage = 'staging';
+  ALTER TABLE branches ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export function openDb(file: string): { db: Db; sqlite: Database.Database } {

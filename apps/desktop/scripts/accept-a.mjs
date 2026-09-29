@@ -39,8 +39,7 @@ for (let i = 0; i < 60; i++) {
 await win.waitForTimeout(2000);
 const l = await bm(win, 'branches.list', { projectId: 'demz' });
 console.log('production :', l.production.map((b) => b.name).join(', '));
-console.log('staging    :', l.staging.map((b) => b.name).join(', '));
 console.log('development:', l.development.map((b) => b.name).join(', '));
-console.log('not added  :', l.unassigned.map((b) => b.name).join(', ') || '—', '| hidden by rules:', l.hiddenCount);
+console.log('not added  :', l.unassigned.map((b) => b.name).join(', ') || '—', '| ignored by rules:', l.ignoredCount);
 await shot(win, 'A3-sidebar');
 await app.close();

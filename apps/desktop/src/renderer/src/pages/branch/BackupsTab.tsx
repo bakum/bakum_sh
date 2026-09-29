@@ -16,7 +16,7 @@ export function BackupsTab({ branch }: { branch: BranchView }) {
   const doImport = async (path: string) => {
     const r = await window.bm.desktop.confirm({
       message: 'Импортировать бэкап прода?',
-      detail: `${path}\n\nБудет собрано новое зеркало прода: восстановление, нейтрализация, postRestore SQL, обновление модулей. Текущее зеркало продолжит работать до успешного завершения. Staging и Development не затрагиваются.`,
+      detail: `${path}\n\nБудет собрано новое зеркало прода: восстановление, нейтрализация, postRestore SQL, обновление модулей. Текущее зеркало продолжит работать до успешного завершения. Ветки Development не затрагиваются.`,
       buttons: ['Импортировать', 'Отмена'],
     });
     if (r === 0) imp.mutate({ projectId: branch.projectId, path });

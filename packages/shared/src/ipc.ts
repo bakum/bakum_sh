@@ -149,6 +149,7 @@ export const methods = {
   ),
   'branches.setStage': m<BranchView>()(z.object({ branchId: id, stage: stageSchema }).strict()),
   'branches.resetToRule': m<BranchView>()(z.object({ branchId: id }).strict()),
+  'branches.setHidden': m<BranchView>()(z.object({ branchId: id, hidden: z.boolean() }).strict()),
   'branches.setOverrides': m<BranchView>()(z.object({ branchId: id, overrides: branchScopeSchema }).strict()),
   'branches.fork': m<{ branch: BranchView; jobId: number | null }>()(
     z.object({ branchId: id, name: z.string().min(1) }).strict(),

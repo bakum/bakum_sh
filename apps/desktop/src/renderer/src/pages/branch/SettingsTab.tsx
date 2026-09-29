@@ -99,7 +99,6 @@ export function SettingsTab({ branch }: { branch: BranchView }) {
               w={180}
               data={[
                 { value: 'production', label: 'Production' },
-                { value: 'staging', label: 'Staging' },
                 { value: 'development', label: 'Development' },
               ]}
               value={branch.stage}

@@ -29,7 +29,7 @@ import { ToolsTab } from './branch/ToolsTab';
 import { SettingsTab } from './branch/SettingsTab';
 import { Stage2 } from '../components/Stage2';
 
-const STAGE_COLOR = { production: 'plum', staging: 'blue', development: 'teal' } as const;
+const STAGE_COLOR = { production: 'plum', development: 'teal' } as const;
 
 export async function shellOpen(p: Parameters<typeof call<'shell.open'>>[1]) {
   try {

@@ -36,7 +36,7 @@ const want = (n) => !only.length || only.includes(n);
 const { app, win } = await launch({ BM_PROFILE: '' });
 
 if (want('4')) {
-  step('criterion 4: staging 19.0-demz-crm from a copy of the prod mirror');
+  step('criterion 4: 19.0-demz-crm from a copy of the prod mirror');
   const crm = await branch(win, PID, '19.0-demz-crm');
   await bm(win, 'builds.rebuild', { branchId: crm.id });
   const b = await waitBuild(win, crm);
@@ -137,15 +137,14 @@ if (want('6')) {
   console.log('/bm/ping :8019  :', await httpStatus('http://localhost:8019/bm/ping'));
   await win.evaluate((id) => (location.hash = `#/projects/demz/branches/${id}/history`), t999.id);
   await win.waitForTimeout(2000);
-  for (const target of ['Staging', 'Development']) {
+  for (const action of ['Скрыть', 'Показать']) {
+    if (action === 'Показать') await win.click('[data-testid="toggle-hidden"]');
     await win.click(`[data-testid="branch-19.0-demz-test999"]`, { button: 'right' });
-    await win.click(`text=→ ${target}`);
-    await win.click('button:has-text("Сменить стадию")');
-    await win.waitForSelector('text=Пересобрать ветку по правилам новой стадии сейчас?');
-    await shot(win, `C6-rebuild-offer-${target}`);
-    await win.click('button:has-text("Позже")');
+    await win.click(`text=${action}`);
+    await win.waitForTimeout(1000);
+    await shot(win, `C6-${action === 'Скрыть' ? 'hidden' : 'shown'}`);
     const now = await bm(win, 'branches.get', { branchId: t999.id });
-    console.log(`moved → ${now.stage} (${now.assignedBy}); badges: ${now.badges.map((b) => b.kind).join(',')}`);
+    console.log(`${action} → hidden=${now.hidden}; in sidebar: ${await win.isVisible('[data-testid="branch-19.0-demz-test999"]')}`);
   }
 }
 

@@ -10,7 +10,7 @@ import { DeleteProjectButton } from '../components/dialogs/DeleteProject';
 import { MigratePostgresCard } from '../components/dialogs/MigratePostgres';
 import { UpdatesCard } from '../components/UpdatesCard';
 
-const STAGE_NAMES = { production: 'Production', staging: 'Staging', development: 'Development' } as const;
+const STAGE_NAMES = { production: 'Production', development: 'Development' } as const;
 
 function stageFields(stage: keyof typeof STAGE_NAMES): FieldDef[] {
   const p = (k: string) => ['stages', stage, k];
@@ -77,7 +77,6 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
         ],
       },
       { title: 'Production', fields: stageFields('production') },
-      { title: 'Staging', fields: stageFields('staging') },
       { title: 'Development', fields: stageFields('development') },
     ],
   },
@@ -153,9 +152,8 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
       {
         description: 'Какие модули обновлять — в «Стадии и правила». Тесты сборок появятся на этапе 2.',
         fields: [
-          { path: ['stages', 'staging', 'tests', 'mode'], label: 'Тесты Staging', type: 'select', options: ['none', 'changed', 'my'], stage: 'этап 2' },
           { path: ['stages', 'development', 'tests', 'mode'], label: 'Тесты Development', type: 'select', options: ['none', 'changed', 'my'], stage: 'этап 2' },
-          { path: ['stages', 'staging', 'tests', 'failBuild'], label: 'Падение тестов роняет сборку', type: 'switch', stage: 'этап 2' },
+          { path: ['stages', 'development', 'tests', 'failBuild'], label: 'Падение тестов роняет сборку', type: 'switch', stage: 'этап 2' },
         ],
       },
     ],
@@ -167,7 +165,6 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
       {
         description: 'Mailpit в сборках — этап 2. Сейчас почтовые серверы копий прода остаются выключенными нейтрализацией.',
         fields: [
-          { path: ['stages', 'staging', 'mails', 'enabled'], label: 'Mailpit в Staging', type: 'switch', stage: 'этап 2' },
           { path: ['stages', 'development', 'mails', 'enabled'], label: 'Mailpit в Development', type: 'switch', stage: 'этап 2' },
         ],
       },

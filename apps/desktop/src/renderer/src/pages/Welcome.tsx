@@ -21,7 +21,7 @@ export function Welcome() {
             <Title order={2}>Odoo Branch Manager</Title>
           </Group>
           <Text>
-            Локальный odoo.sh: ветки git-репозитория раскладываются по стадиям Production / Staging / Development, на каждую
+            Локальный odoo.sh: ветки git-репозитория раскладываются по стадиям Production / Development, на каждую
             ветку собирается своя сборка Odoo (контейнер + БД + код) и открывается по адресу <Code>http://&lt;ветка&gt;.localhost</Code>.
           </Text>
           <Stepper active={0} size="sm">

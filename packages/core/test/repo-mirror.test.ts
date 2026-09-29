@@ -68,7 +68,7 @@ describe('project settings (D33)', () => {
     expect(() => projectConfigSchema.parse(bad)).toThrow(/только в настройках ветки/);
     const cfg = projectConfigSchema.parse(raw);
     expect(resolveBranchScope(cfg, 'feat', 'development', { folder: 'D:/work/shop' }).scope.folder).toBe('D:/work/shop');
-    expect(resolveBranchScope(cfg, 'feat', 'staging', { folder: 'D:/work/shop' }).scope.folder).toBeNull();
+    expect(resolveBranchScope(cfg, 'feat', 'production', { folder: 'D:/work/shop' }).scope.folder).toBeNull();
     expect(resolveBranchScope(cfg, 'feat', 'development', null).scope.folder).toBeNull();
   });
 });

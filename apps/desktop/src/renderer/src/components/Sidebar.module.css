@@ -36,6 +36,9 @@
 .mergeOver {
   outline: 2px dashed var(--mantine-color-plum-5, #a74584);
 }
+.hidden {
+  opacity: 0.5;
+}
 .flag {
   width: 7px;
   height: 7px;

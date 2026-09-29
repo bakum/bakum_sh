@@ -5,6 +5,7 @@ import chokidar, { type FSWatcher } from 'chokidar';
 import YAML from 'yaml';
 import { appConfigSchema, BmError, projectConfigSchema, type AppConfig, type ProjectConfig } from '@bm/shared';
 import { literalPrefix, renderTemplate, templateToRegex } from './templates';
+import { migrateProjectYaml } from './migrate';
 import { expandPath } from '../util/paths';
 import { log } from '../util/logger';
 
@@ -60,7 +61,19 @@ export class ConfigStore {
 
   private loadProjectFile(file: string): ProjectEntry {
     const id = path.basename(file, '.yaml');
-    const text = fs.readFileSync(file, 'utf8');
+    let text = fs.readFileSync(file, 'utf8');
+    const migrated = migrateProjectYaml(text);
+    if (migrated !== null) {
+      try {
+        parseProjectYaml(migrated);
+        this.writeFile(file, migrated);
+        text = migrated;
+        log().info({ file }, 'project file migrated: Staging stage removed (D37)');
+      } catch (err) {
+        // Left as is: the error of the original file is shown to the user below.
+        log().warn({ err, file }, 'project file migration failed');
+      }
+    }
     let entry: ProjectEntry;
     try {
       const cfg = parseProjectYaml(text);
@@ -95,6 +108,7 @@ export class ConfigStore {
 
   /** Validates and writes a project file. Cross-project name collisions are rejected (spec 11). */
   putProject(text: string, opts: { expectId?: string; create?: boolean }): ProjectConfig {
+    text = migrateProjectYaml(text) ?? text;
     const cfg = parseProjectYaml(text);
     if (opts.expectId && cfg.id !== opts.expectId) {
       throw new BmError('CONFIG_ID', `Нельзя менять id проекта (${opts.expectId} → ${cfg.id}). Создайте новый проект.`);
