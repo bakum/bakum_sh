@@ -6,7 +6,8 @@ import { toPosix } from '../util/paths';
 
 /**
  * Background git calls never ask anything: no terminal prompt, no Git Credential Manager window (D31).
- * Only an explicit «Войти» in the wizard lets the credential helper show its sign-in window.
+ * Only an explicit «Войти» (wizard, lost fetch access, Fork's «Войти и повторить») lets the credential helper show
+ * its sign-in window.
  */
 const QUIET_ENV = { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', LC_ALL: 'C' };
 
@@ -297,35 +298,65 @@ export async function folderRemoteUrl(dir: string): Promise<{ top: string; remot
   return { top, remote, url };
 }
 
+export type PushProblem = RemoteProblem | 'rules' | 'exists';
+
+/**
+ * Kind of a failed push of a new branch (D57), from its output (LC_ALL=C). `account` is the GitHub login the server
+ * refused («Permission to o/r.git denied to <login>»), so the user sees which sign-in Git used.
+ */
+export function classifyPushError(out: string): { problem: PushProblem; account: string | null; message: string } {
+  const who = /Permission to \S+ denied to ([\w-]+)\b(?! key)/i.exec(out)?.[1] ?? null; // not «denied to deploy key»
+  if (who || /Permission to \S+ denied|\b403\b|Write access to repository not granted|not allowed to push/i.test(out)) {
+    return {
+      problem: 'denied',
+      account: who,
+      message: who
+        ? `У учётной записи GitHub «${who}» нет права на запись в репозиторий.`
+        : 'Нет права на запись в репозиторий у учётной записи или токена, с которыми вошёл Git.',
+    };
+  }
+  // Repository rules / branch protection: «GH013: Repository rule violations», «[remote rejected] … (push declined …)».
+  if (/GH013|rule violations|protected branch|push declined|pre-receive hook declined/i.test(out)) {
+    return { problem: 'rules', account: null, message: 'Правила репозитория на GitHub не разрешают создать ветку с таким именем.' };
+  }
+  // --porcelain: «!\trefs/heads/x\t[rejected] (stale info)» when the branch already exists.
+  if (/already exists|\[rejected\]|stale info|non-fast-forward/i.test(out)) {
+    return { problem: 'exists', account: null, message: 'Ветка с таким именем уже есть в репозитории.' };
+  }
+  const c = classifyRemoteError(out);
+  return { problem: c.problem, account: null, message: c.message };
+}
+
 /**
  * Creates a branch on the remote (Fork, D33): `git push <remote> <sha>:refs/heads/<name>` from the mirror with the
- * credentials the Git credential helper already has. Never forces, never interactive.
+ * credentials the Git credential helper already has. Never forces. `interactive` («Войти и повторить», D57) lets Git
+ * Credential Manager show its sign-in window when it has no working credentials.
  */
-export async function pushNewBranch(mirror: string, remote: string, sha: string, name: string): Promise<void> {
+export async function pushNewBranch(mirror: string, remote: string, sha: string, name: string, opts: { interactive?: boolean } = {}): Promise<void> {
   // An empty lease: the push only creates the branch, it never moves an existing one.
   const r = await execa('git', ['push', '--porcelain', `--force-with-lease=refs/heads/${name}:`, remote, `${sha}:refs/heads/${name}`], {
     cwd: mirror,
     reject: false,
-    timeout: 180_000,
-    env: QUIET_ENV,
+    timeout: opts.interactive ? 300_000 : 180_000,
+    env: { ...QUIET_ENV, ...(opts.interactive ? { GCM_INTERACTIVE: 'auto' } : {}) },
     windowsHide: true,
   });
   assertGitFound(r);
   if (r.exitCode === 0) return;
   // --porcelain puts the per-ref status («[rejected] (stale info)») on stdout, the transport errors on stderr.
   const out = [r.stdout, r.stderr, r.timedOut ? 'timed out' : ''].map((x) => String(x ?? '')).filter(Boolean).join('\n');
-  if (/Permission to .* denied|\b403\b|write access|protected branch|not allowed to push/i.test(out)) {
-    throw new BmError(
-      'GIT_PUSH',
-      'Нет прав на запись в репозиторий. Войдите учётной записью с правом push или сохраните токен с доступом Contents — Read and write.',
-      { problem: 'denied' },
-    );
+  const c = classifyPushError(out);
+  if (c.problem === 'exists') throw new BmError('BRANCH_EXISTS', `Ветка «${name}» уже есть в репозитории. Выполните fetch.`);
+  const text = c.problem === 'other' ? String(r.stderr || out).trim() : c.message;
+  // For the hints: sign-in window only helps https; a user name in the URL means a token saved by the wizard.
+  const url = await remoteUrl(mirror, remote).catch(() => null);
+  let urlUser: string | null = null;
+  try {
+    urlUser = url?.startsWith('https://') ? decodeURIComponent(new URL(url).username) || null : null;
+  } catch {
+    urlUser = null;
   }
-  if (/already exists|\[rejected\]|stale info|non-fast-forward/i.test(out)) {
-    throw new BmError('BRANCH_EXISTS', `Ветка «${name}» уже есть в репозитории. Выполните fetch.`);
-  }
-  const c = classifyRemoteError(out);
-  throw new BmError('GIT_PUSH', `git push: ${c.problem === 'other' ? String(r.stderr || out).trim() : c.message}`, { problem: c.problem });
+  throw new BmError('GIT_PUSH', `git push: ${text}`, { problem: c.problem, account: c.account, https: !!url?.startsWith('https://'), urlUser });
 }
 
 export async function revParse(cwd: string, ref: string): Promise<string | null> {

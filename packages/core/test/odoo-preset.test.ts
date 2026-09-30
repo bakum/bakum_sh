@@ -7,7 +7,7 @@ import { projectConfigSchema } from '@bm/shared';
 import { odooPreset, type OdooPresetInputs } from '../src/config/presets';
 import { resolveBranchScope } from '../src/config/effective';
 import { managedPgCompose } from '../src/docker/postgres';
-import { classifyRemoteError, withUser } from '../src/git';
+import { classifyPushError, classifyRemoteError, withUser } from '../src/git';
 import { productionFromBackup } from '../src/builds/request';
 import { detectSeries } from '../src/detect';
 
@@ -102,6 +102,24 @@ describe('git remote errors (D31)', () => {
   it('puts the token user into the clone URL', () => {
     expect(withUser('https://github.com/acme/shop.git', 'x-access-token')).toBe('https://x-access-token@github.com/acme/shop.git');
     expect(withUser('https://old@github.com/acme/shop.git', 'bot')).toBe('https://bot@github.com/acme/shop.git');
+  });
+
+  it('tells why a Fork push failed and which account GitHub refused (D57)', () => {
+    const denied = classifyPushError(
+      "remote: Permission to DEMZ-UA/demz-odoo.git denied to someone.\nfatal: unable to access 'https://github.com/DEMZ-UA/demz-odoo.git/': The requested URL returned error: 403",
+    );
+    expect(denied).toMatchObject({ problem: 'denied', account: 'someone' });
+    expect(denied.message).toContain('«someone»');
+    expect(classifyPushError('remote: Write access to repository not granted.\nfatal: ... error: 403')).toMatchObject({ problem: 'denied', account: null });
+    expect(classifyPushError('ERROR: Permission to acme/shop.git denied to deploy key')).toMatchObject({ problem: 'denied', account: null });
+    expect(
+      classifyPushError(
+        'remote: error: GH013: Repository rule violations found for refs/heads/x.\n! [remote rejected] abc -> x (push declined due to repository rule violations)',
+      ).problem,
+    ).toBe('rules');
+    expect(classifyPushError('To https://github.com/a/b.git\n!\trefs/heads/x\t[rejected] (stale info)\nDone').problem).toBe('exists');
+    expect(classifyPushError("fatal: could not read Username for 'https://github.com': terminal prompts disabled").problem).toBe('auth');
+    expect(classifyPushError("fatal: unable to access 'https://github.com/a/b.git/': Could not resolve host: github.com").problem).toBe('network');
   });
 });
 

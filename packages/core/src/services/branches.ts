@@ -274,8 +274,9 @@ export function forkName(ctx: Ctx, projectId: string, input: string): { name: st
 /**
  * Fork (spec 8.10, D33): the new branch is created on the remote — `git push <remote> <sha>:refs/heads/<new>` from the
  * app's mirror (sha of the live build, else the head of the branch) → fetch → Development → build.
+ * `interactive`: «Войти и повторить» after a failed push — Git Credential Manager may show its sign-in window (D57).
  */
-export async function forkBranch(ctx: Ctx, p: { branchId: number; name: string }): Promise<{ branch: BranchView; jobId: number | null }> {
+export async function forkBranch(ctx: Ctx, p: { branchId: number; name: string; interactive?: boolean }): Promise<{ branch: BranchView; jobId: number | null }> {
   const src = mustBranch(ctx, p.branchId);
   const cfg = ctx.store.require(src.projectId);
   assertNotLegacy(cfg);
@@ -290,7 +291,7 @@ export async function forkBranch(ctx: Ctx, p: { branchId: number; name: string }
   const liveSha = live?.commitSha && (await git.revParse(repo, live.commitSha)) ? live.commitSha : null;
   const start = liveSha ?? (await git.remoteSha(repo, cfg.repo.remote, src.name));
   if (!start) throw new BmError('NO_BRANCH_REF', `Не найден коммит ветки «${src.name}». Выполните fetch.`);
-  await git.pushNewBranch(repo, cfg.repo.remote, start, n.name);
+  await git.pushNewBranch(repo, cfg.repo.remote, start, n.name, { interactive: p.interactive });
   await git.fetch(repo, cfg.repo.remote);
   invalidateGitCache(cfg.id);
   const row = ensureBranchRow(ctx, cfg, n.name, 'development', 'user');

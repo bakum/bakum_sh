@@ -187,7 +187,8 @@ export const methods = {
   'branches.setHidden': m<BranchView>()(z.object({ branchId: id, hidden: z.boolean() }).strict()),
   'branches.setOverrides': m<BranchView>()(z.object({ branchId: id, overrides: branchScopeSchema }).strict()),
   'branches.fork': m<{ branch: BranchView; jobId: number | null }>()(
-    z.object({ branchId: id, name: z.string().min(1) }).strict(),
+    // interactive: «Войти и повторить» — the Git Credential Manager sign-in window is allowed (D57).
+    z.object({ branchId: id, name: z.string().min(1), interactive: z.boolean().default(false) }).strict(),
   ),
   'branches.forkName': m<{ name: string; base: string; valid: boolean; error: string | null }>()(
     z.object({ projectId, name: z.string() }).strict(),
