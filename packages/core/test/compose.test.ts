@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import path from 'node:path';
 import YAML from 'yaml';
 import { projectConfigSchema } from '@bm/shared';
 import { demzPreset } from '../src/config/presets';
 import { resolveBranchScope } from '../src/config/effective';
-import { dataDirOf, generateCompose, oneOffArgs } from '../src/docker/compose';
+import { dataDirOf, generateCompose, ONEOFF_OVERRIDE, oneOffArgs, oneOffOverridePath } from '../src/docker/compose';
 
 const cfg = projectConfigSchema.parse(
   demzPreset({
@@ -84,10 +85,15 @@ describe('generateCompose', () => {
   it('keeps one-off runs out of Traefik', () => {
     const a = oneOffArgs('C:/x/compose.yml', 'bm-demz-crm', ['E:/b.zip:/bm-backup/b.zip:ro'], ['odoo', '--version']);
     expect(a).toEqual([
-      'compose', '-p', 'bm-demz-crm', '-f', 'C:/x/compose.yml', 'run', '--rm', '--no-deps', '-T',
+      'compose', '-p', 'bm-demz-crm', '-f', 'C:/x/compose.yml', '-f', oneOffOverridePath('C:/x/compose.yml'), 'run', '--rm', '--no-deps', '-T',
       '-l', 'traefik.enable=false', '-l', 'bm.oneoff=true', '-v', 'E:/b.zip:/bm-backup/b.zip:ro', 'odoo', 'odoo', '--version',
     ]);
     // Variables go by name only: compose reads the values from its own environment.
     expect(oneOffArgs('C:/x/compose.yml', 'p', [], ['odoo'], ['PGPASSWORD']).slice(-4)).toEqual(['-e', 'PGPASSWORD', 'odoo', 'odoo']);
+  });
+
+  it('runs one-offs without the service healthcheck (D60)', () => {
+    expect(path.basename(oneOffOverridePath('C:/x/compose.yml'))).toBe('compose.oneoff.yml');
+    expect(YAML.parse(ONEOFF_OVERRIDE)).toEqual({ services: { odoo: { healthcheck: { disable: true } } } });
   });
 });

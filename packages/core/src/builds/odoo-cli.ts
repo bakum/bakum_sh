@@ -1,6 +1,7 @@
+import fs from 'node:fs';
 import { BmError, type ProjectConfig, type TestsResult } from '@bm/shared';
 import { dockerCli } from '../docker/client';
-import { dataDirOf, oneOffArgs } from '../docker/compose';
+import { dataDirOf, ONEOFF_OVERRIDE, oneOffArgs, oneOffOverridePath } from '../docker/compose';
 import { renderTemplate, type TemplateVars } from '../config/templates';
 import { addonsDirsOfCode } from '../modules';
 import { OdooLogParser, type OdooLogSummary } from '../odoo-log';
@@ -146,6 +147,8 @@ export async function runOdooOneOff(opts: {
   const tail: string[] = [];
   const parser = new OdooLogParser();
   opts.log(`$ docker ${['compose', 'run', ...opts.cmd].join(' ')}`);
+  // Rewritten each time: compose files of older builds (and of older app versions) have no override yet.
+  fs.writeFileSync(oneOffOverridePath(opts.composeFile), ONEOFF_OVERRIDE);
   const r = await dockerCli(oneOffArgs(opts.composeFile, opts.project, opts.volumes ?? [], opts.cmd, Object.keys(opts.env ?? {})), {
     env: opts.env,
     onLine: (l) => {
