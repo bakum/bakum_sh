@@ -40,10 +40,10 @@ function stageFields(stage: keyof typeof STAGE_NAMES): FieldDef[] {
     { path: p('protected'), label: 'Защита от удаления', type: 'switch' },
     {
       path: p('deleteWithRemote'),
-      label: 'Удалять вместе с веткой на GitHub',
+      label: 'Удалять, если ветку удалили на GitHub',
       type: 'switch',
       description:
-        'ветку удалили на GitHub — после fetch она удаляется и в приложении вместе со сборками и их БД. Production, защищённые ветки, ветки со своей папкой и worktree с изменениями не удаляются',
+        'ветку удалили на GitHub — после fetch она удаляется и в приложении вместе со сборками и их БД. Production, защищённые ветки, ветки со своей папкой и worktree с изменениями не удаляются. Саму ветку на GitHub приложение не удаляет',
     },
     { path: p('onForcePush'), label: 'Force-push', type: 'select', options: ['pause', 'new'], inherit: inh },
     {

@@ -27,7 +27,7 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
           <>
             <Text size="sm">
               Будут отброшены все сборки ветки ({p?.builds ?? '…'}): БД, filestore и контейнеры. Worktree будет удалён. История остаётся в Audit
-              Logs. Ветка на GitHub и ваша папка с кодом не трогаются.
+              Logs. Ветка на GitHub и ваша папка с кодом не трогаются: если ветка больше не нужна, удалите её на GitHub сами.
             </Text>
             {p?.dirty && (
               <Alert color="red" title="В worktree есть незакоммиченные изменения">

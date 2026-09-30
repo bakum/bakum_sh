@@ -15,7 +15,7 @@ export const KEEP_REASON_TEXT: Record<KeepReason, string> = {
   production: 'это Production',
   protected: 'ветка защищена (protected)',
   folder: 'код сборки берётся из вашей папки',
-  setting: 'выключено «Удалять вместе с веткой на GitHub»',
+  setting: 'выключено «Удалять, если ветку удалили на GitHub»',
   dirty: 'в worktree есть незакоммиченные изменения',
 };
 

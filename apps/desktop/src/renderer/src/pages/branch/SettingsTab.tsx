@@ -14,6 +14,8 @@ interface Editable {
   options?: string[];
   /** Not acted upon yet: shown read-only with this badge («этап 2», «отложено»). */
   stage?: string;
+  /** Shown under the label when the name alone is ambiguous. */
+  hint?: string;
 }
 
 const FIELDS: Editable[] = [
@@ -29,7 +31,12 @@ const FIELDS: Editable[] = [
   { path: 'env', label: 'Переменные окружения', kind: 'env' },
   { path: 'protected', label: 'Защита от удаления', kind: 'switch' },
   { path: 'buildOnAdd', label: 'Собирать при добавлении', kind: 'switch' },
-  { path: 'deleteWithRemote', label: 'Удалять вместе с веткой на GitHub', kind: 'switch' },
+  {
+    path: 'deleteWithRemote',
+    label: 'Удалять, если ветку удалили на GitHub',
+    kind: 'switch',
+    hint: 'после fetch ветка удаляется и в приложении со сборками и БД; сама ветка на GitHub приложением не удаляется',
+  },
   { path: 'idleStopHours', label: 'Остановка без активности, ч', kind: 'number' },
   { path: 'dropAfterDays', label: 'Срок хранения (напоминание), дней', kind: 'number' },
   { path: 'tests.mode', label: 'Тесты', kind: 'select', options: ['none', 'changed', 'my'] },
@@ -146,6 +153,11 @@ export function SettingsTab({ branch }: { branch: BranchView }) {
                     <Text size="xs" c="dimmed">
                       {def.path}
                     </Text>
+                    {def.hint && (
+                      <Text size="xs" c="dimmed" maw={360}>
+                        {def.hint}
+                      </Text>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     {editing === def.path ? (

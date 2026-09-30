@@ -268,7 +268,7 @@ export function renderSkill(i: SkillInput): string {
     ...(protectedContainers.length || pg.protectedDbs.length
       ? [`- ${[...protectedContainers.map((c) => `контейнер ${code(c)}`), ...pg.protectedDbs.map((d) => `база ${code(d)}`)].join(', ')} — только по явной просьбе;`]
       : []),
-    '- удаление ветки на GitHub — только пользователь: если у ветки включено «Удалять вместе с веткой на GitHub», после',
+    '- удаление ветки на GitHub — только пользователь: если у ветки включено «Удалять, если ветку удалили на GitHub», после',
     '  fetch приложение удалит её сборку, базу, filestore и worktree. Данные нужны — сначала снапшот во вкладке Backups.',
     '',
     '## Если приложение ошиблось',
