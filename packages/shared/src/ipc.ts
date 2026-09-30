@@ -194,7 +194,7 @@ export const methods = {
     z.object({ projectId, name: z.string() }).strict(),
   ),
   'branches.merge': m<{ url: string }>()(z.object({ sourceId: id, targetId: id }).strict()),
-  'branches.deletePreview': m<{ dirty: string | null; builds: number; canDeleteRemote: boolean; protected: boolean }>()(
+  'branches.deletePreview': m<{ dirty: string | null; builds: number; canDeleteRemote: boolean; protected: boolean; folderBlocked: string | null }>()(
     z.object({ branchId: id }).strict(),
   ),
   'branches.delete': m<JobRef>()(

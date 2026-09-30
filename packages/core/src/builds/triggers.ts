@@ -4,6 +4,7 @@ import type { Ctx } from '../context';
 import { branches, type BranchRow } from '../db/schema';
 import { resolveBranchScope } from '../config/effective';
 import * as git from '../git';
+import { DETACHED, folderBranchMismatch } from '../git/worktrees';
 import { liveBuild } from './view';
 import { requestBuild } from './request';
 import { bus } from '../events';
@@ -27,6 +28,8 @@ export async function onNewCommit(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, sh
   const live = liveBuild(ctx, b.id);
   if (!live || live.commitSha === sha) return;
   if (b.pausedReason) return;
+  // Code from the folder while another branch is open there: nothing happens to the build (D59).
+  if (scope.folder && (await folderBranchMismatch(scope.folder, b.name).catch(() => DETACHED))) return;
   if (opts.forcePush) {
     if (scope.onForcePush === 'pause') {
       pause(ctx, b, 'force-push');

@@ -27,6 +27,7 @@ import { assertNotLegacy } from '../config/legacy';
 import { onProjectConfigChanged } from './projects';
 import { nowIso } from '../util/time';
 import { codeLagOf, lagBadge } from './code-lag';
+import { localWatcher } from './watch-local';
 
 /** Branch names known to git per project, refreshed by fetch. */
 const gitCache = new Map<string, GitBranchInfo[]>();
@@ -60,8 +61,17 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
   const hash = configHash(cfg, r.scope, port);
   const badges: BranchBadge[] = [];
   const head = r.scope.folder ? (b.lastSeenLocalSha ?? b.lastSeenRemoteSha) : b.lastSeenRemoteSha;
+  // D59: read by the folder watcher; the actions themselves check the folder again.
+  const folderBranch = r.scope.folder ? (localWatcher()?.folderBranch(b.id) ?? null) : null;
+  const folderBlocked = !!folderBranch && folderBranch !== b.name;
+  if (folderBlocked) {
+    badges.push({
+      kind: 'folder-wrong-branch',
+      text: `В папке ${r.scope.folder} открыта ветка ${folderBranch}, а не ${b.name}: сборка заблокирована, с ней ничего не происходит (работает только Stop). Откройте ${b.name} в папке — блокировка снимется сама.`,
+    });
+  }
   if (!live && !active) badges.push({ kind: 'no-build', text: 'Сборки нет' });
-  if (live && head && live.commitSha && head !== live.commitSha && !active) {
+  if (live && head && live.commitSha && head !== live.commitSha && !active && !folderBlocked) {
     badges.push({ kind: 'unbuilt-commits', text: 'Есть несобранные коммиты' });
   }
   if (live && b.stageChangedAt && b.stageChangedAt > live.createdAt) {
@@ -88,6 +98,8 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
     stage: b.stage,
     assignedBy: b.assignedBy,
     folder: r.scope.folder,
+    folderBranch,
+    folderBlocked,
     worktreePath: b.worktreePath,
     codeDir: r.scope.folder ?? b.worktreePath,
     protected: r.scope.protected,

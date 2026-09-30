@@ -25,6 +25,7 @@ import { useBm } from '../../lib/query';
 import { call, errorText } from '../../lib/bm';
 import { fmtDate, fmtDuration, shortSha, TRIGGER_LABELS } from '../../lib/format';
 import { shellOpen } from '../BranchPage';
+import { folderBlockHint } from '../../lib/folder-block';
 
 const PAGE = 5;
 
@@ -93,6 +94,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
   const commits = more ? b.commits : b.commits.slice(0, 3);
   const building = b.status === 'building' || b.status === 'queued';
   const failedStep = b.steps.find((s) => s.status === 'failed')?.name ?? null;
+  const blocked = folderBlockHint(branch);
   return (
     <Card withBorder padding="sm" data-testid={`build-${b.number}`}>
       <Group justify="space-between" wrap="nowrap" align="flex-start">
@@ -152,7 +154,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
         </Stack>
         <Stack gap={6} align="flex-end">
           {b.isLive ? (
-            <ConnectButton b={b} />
+            <ConnectButton b={b} blocked={blocked} />
           ) : b.status === 'dropped' ? (
             <Badge color="gray" size="lg" variant="outline">
               DROPPED
@@ -211,13 +213,21 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
                 value={retryStep ?? failedStep}
                 onChange={setRetryStep}
               />
-              <Button size="xs" leftSection={<IconPlayerPlay size={12} />} onClick={() => void act(call('builds.retry', { buildId: b.id, fromStep: retryStep ?? failedStep ?? 'code' }), 'Сборка перезапущена')}>
-                Повторить с шага
-              </Button>
+              <Tooltip label={blocked} disabled={!blocked} multiline w={320}>
+                <Button
+                  size="xs"
+                  leftSection={<IconPlayerPlay size={12} />}
+                  data-disabled={blocked ? true : undefined}
+                  onClick={() => !blocked && void act(call('builds.retry', { buildId: b.id, fromStep: retryStep ?? failedStep ?? 'code' }), 'Сборка перезапущена')}
+                >
+                  Повторить с шага
+                </Button>
+              </Tooltip>
               <Button
                 size="xs"
                 color="red"
                 variant="light"
+                disabled={!!blocked}
                 onClick={async () => {
                   const r = await window.bm.desktop.confirm({
                     message: `Отбросить сборку #${b.number}?`,
@@ -240,7 +250,8 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
   );
 }
 
-export function ConnectButton({ b }: { b: BuildView }) {
+/** `blocked` — why actions on the build are disabled (D59); only Stop stays. */
+export function ConnectButton({ b, blocked = null }: { b: BuildView; blocked?: string | null }) {
   const running = b.status === 'running' && (b.containerState === null || b.containerState === 'running');
   return (
     <Group gap={0} wrap="nowrap">
@@ -277,14 +288,23 @@ export function ConnectButton({ b }: { b: BuildView }) {
           </Menu.Item>
           <Menu.Item onClick={() => b.url && void window.bm.desktop.copy(b.url)}>Скопировать URL</Menu.Item>
           <Menu.Divider />
+          {blocked && (
+            <Menu.Label maw={280} style={{ whiteSpace: 'normal' }} data-testid="folder-blocked">
+              {blocked}
+            </Menu.Label>
+          )}
           {running ? (
             <Menu.Item onClick={() => void act(call('builds.action', { buildId: b.id, action: 'stop' }), 'Остановка…')}>Stop</Menu.Item>
           ) : (
-            <Menu.Item onClick={() => void act(call('builds.action', { buildId: b.id, action: 'start' }), 'Запуск…')}>Start</Menu.Item>
+            <Menu.Item disabled={!!blocked} onClick={() => void act(call('builds.action', { buildId: b.id, action: 'start' }), 'Запуск…')}>
+              Start
+            </Menu.Item>
           )}
-          <Menu.Item onClick={() => void act(call('builds.action', { buildId: b.id, action: 'restart' }), 'Перезапуск…')}>Restart</Menu.Item>
+          <Menu.Item disabled={!!blocked} onClick={() => void act(call('builds.action', { buildId: b.id, action: 'restart' }), 'Перезапуск…')}>
+            Restart
+          </Menu.Item>
           {b.configChanged && (
-            <Menu.Item onClick={() => void act(call('builds.action', { buildId: b.id, action: 'apply-config' }), 'Контейнер пересоздаётся…')}>
+            <Menu.Item disabled={!!blocked} onClick={() => void act(call('builds.action', { buildId: b.id, action: 'apply-config' }), 'Контейнер пересоздаётся…')}>
               Применить конфигурацию
             </Menu.Item>
           )}
@@ -294,6 +314,7 @@ export function ConnectButton({ b }: { b: BuildView }) {
               <Menu.Divider />
               <Menu.Item
                 color="red"
+                disabled={!!blocked}
                 onClick={async () => {
                   const r = await window.bm.desktop.confirm({
                     message: `Отбросить живую сборку #${b.number}?`,

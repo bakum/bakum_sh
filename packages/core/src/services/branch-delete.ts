@@ -4,7 +4,7 @@ import type { Ctx } from '../context';
 import { branches, builds, type JobRow } from '../db/schema';
 import * as git from '../git';
 import { resolveBranchScope } from '../config/effective';
-import { removeWorktree } from '../git/worktrees';
+import { assertFolderOnBranch, folderBlock, removeWorktree } from '../git/worktrees';
 import { dropBuildResources } from '../builds/drop';
 import { getQueue, type JobContext } from '../jobs/queue';
 import { mustBranch, invalidateGitCache } from './branches';
@@ -27,6 +27,8 @@ export async function deletePreview(ctx: Ctx, branchId: number) {
     builds: n,
     canDeleteRemote: false,
     protected: b.stage === 'production' || scope.protected,
+    // Deleting drops the builds, and a build is not dropped while another branch is open in its folder (D59).
+    folderBlocked: n ? await folderBlock(b, scope) : null,
   };
 }
 
@@ -37,6 +39,7 @@ export async function requestDelete(ctx: Ctx, p: { branchId: number; confirmSlug
   if (p.deleteRemote) throw new BmError('POSTPONED', 'Удаление ветки в origin отложено (docs/decisions.md D44): удалите её на GitHub.');
   const pv = await deletePreview(ctx, p.branchId);
   if (pv.protected) throw new BmError('PROTECTED', 'Ветка защищена: снимите защиту (protected) в Settings ветки. Production удалить нельзя.');
+  if (pv.folderBlocked) throw new BmError('FOLDER_WRONG_BRANCH', pv.folderBlocked);
   if (pv.dirty && !p.forceDirty) throw new BmError('WORKTREE_DIRTY', `В worktree есть незакоммиченные изменения:\n${pv.dirty}\nПодтвердите их потерю отдельно.`);
   return { jobId: getQueue().enqueue('delete_branch', { projectId: b.projectId, branchId: b.id }, { branch: b.name, ...p }) };
 }
@@ -58,6 +61,7 @@ export async function deleteBranchExecutor(ctx: Ctx, job: JobRow, jc: JobContext
     }
   }
   const all = ctx.db.select().from(builds).where(eq(builds.branchId, b.id)).all();
+  if (all.some((x) => x.status !== 'dropped')) await assertFolderOnBranch(b, resolveBranchScope(cfg, b.name, b.stage, b.overrides).scope, { usable: false });
   // Newest first: the live container is taken down with its own build.
   for (const x of all.sort((a, c) => c.number - a.number)) {
     if (x.status === 'dropped') continue;

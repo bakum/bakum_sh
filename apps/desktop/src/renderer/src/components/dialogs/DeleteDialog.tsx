@@ -23,6 +23,10 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
       <Stack>
         {p?.protected ? (
           <Alert color="orange">Ветка защищена (protected). Снимите защиту в Settings ветки, чтобы удалить её.</Alert>
+        ) : p?.folderBlocked ? (
+          <Alert color="red" data-testid="delete-folder-blocked">
+            {p.folderBlocked}
+          </Alert>
         ) : (
           <>
             <Text size="sm">
@@ -44,7 +48,7 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
           </Button>
           <Button
             color="red"
-            disabled={!!p?.protected || slug !== branch.slug || (!!p?.dirty && !forceDirty)}
+            disabled={!!p?.protected || !!p?.folderBlocked || slug !== branch.slug || (!!p?.dirty && !forceDirty)}
             loading={del.isPending}
             onClick={() =>
               del.mutate(

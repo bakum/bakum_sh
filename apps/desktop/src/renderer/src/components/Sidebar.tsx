@@ -222,6 +222,14 @@ function BranchRowItem({ b, selected, onSelect, onContext }: { b: BranchView; se
             <Text size="sm" truncate style={{ flex: 1 }}>
               {b.name}
             </Text>
+            {b.folderBlocked && (
+              // D59: another branch is open in the user's folder — the build is blocked.
+              <Tooltip multiline w={400} label={b.badges.find((x) => x.kind === 'folder-wrong-branch')?.text}>
+                <Badge size="xs" color="red" variant="light" data-testid={`folder-blocked-${b.name}`}>
+                  {b.folderBranch}
+                </Badge>
+              </Tooltip>
+            )}
             {b.codeLag ? (
               // D47: behind the code of the copied database — Rebuild is not the fix, pulling the source branch in is.
               <Tooltip multiline w={400} style={{ whiteSpace: 'pre-line' }} label={b.badges.find((x) => x.kind === 'behind-source' || x.kind === 'merged-behind')?.text}>
@@ -247,8 +255,17 @@ function BranchRowItem({ b, selected, onSelect, onContext }: { b: BranchView; se
         <Menu.Item disabled={!running} onClick={() => onContext(b, 'connect')}>
           Connect
         </Menu.Item>
-        <Menu.Item onClick={() => onContext(b, 'rebuild')}>Rebuild</Menu.Item>
-        {b.liveBuild && (running ? <Menu.Item onClick={() => onContext(b, 'stop')}>Stop</Menu.Item> : <Menu.Item onClick={() => onContext(b, 'start')}>Start</Menu.Item>)}
+        <Menu.Item disabled={b.folderBlocked} onClick={() => onContext(b, 'rebuild')}>
+          Rebuild
+        </Menu.Item>
+        {b.liveBuild &&
+          (running ? (
+            <Menu.Item onClick={() => onContext(b, 'stop')}>Stop</Menu.Item>
+          ) : (
+            <Menu.Item disabled={b.folderBlocked} onClick={() => onContext(b, 'start')}>
+              Start
+            </Menu.Item>
+          ))}
         <Menu.Item onClick={() => onContext(b, 'editor')}>VS Code</Menu.Item>
         <Menu.Item onClick={() => onContext(b, 'logs')}>Логи</Menu.Item>
         {b.stage !== 'production' && (

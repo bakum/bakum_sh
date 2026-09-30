@@ -7,6 +7,7 @@ import { branches, type BranchRow } from '../db/schema';
 import * as git from './index';
 import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
+import { resolveBranchScope } from '../config/effective';
 import { samePath, toPosix } from '../util/paths';
 
 /** A branch of the project is gone from the mirror: fetch prunes branches deleted on the remote (D49). */
@@ -47,6 +48,55 @@ export async function assertFolderUsable(folder: string): Promise<void> {
   const top = await git.topLevel(folder);
   if (!top) throw new BmError('NOT_A_REPO', `Папка «${folder}» не является git-репозиторием.`);
   if (!samePath(top, folder)) throw new BmError('NOT_REPO_ROOT', `Укажите корень репозитория: ${top}`);
+}
+
+/** The only job that runs while another branch is open in the folder (D59): it neither reads the code nor loses data. */
+export const FOLDER_SAFE_JOBS: ReadonlySet<string> = new Set(['stop']);
+
+/** Shown instead of a branch name when HEAD of the folder is detached (rebase, checkout of a commit). */
+export const DETACHED = '(detached)';
+
+/** Branch open in the user's folder when it is not `branchName` (DETACHED for a detached HEAD); null — it matches. */
+export async function folderBranchMismatch(folder: string, branchName: string): Promise<string | null> {
+  const current = (await git.currentBranch(folder)) ?? DETACHED;
+  return current === branchName ? null : current;
+}
+
+export const folderWrongBranchText = (folder: string, open: string, branchName: string): string =>
+  `В папке ${folder} открыта ветка ${open}, а сборка — ветки ${branchName}. Сборка заблокирована, с ней ничего не ` +
+  `происходит. Откройте в папке ${branchName} (git checkout ${branchName}) или выберите источник кода «С GitHub» ` +
+  '(вкладка Editor). Работает только Stop.';
+
+/**
+ * Why a build from the user's folder is blocked (D59), null — it is not: another branch is open in the folder. A folder
+ * that is gone or is not a repository does not block by itself (actions that read the code check it separately).
+ */
+export async function folderBlock(b: Pick<BranchRow, 'name'>, scope: Pick<ResolvedBranchScope, 'folder'>): Promise<string | null> {
+  if (!scope.folder) return null;
+  const dir = toPosix(path.resolve(scope.folder));
+  if (!fs.existsSync(dir) || !(await git.topLevel(dir))) return null;
+  const open = await folderBranchMismatch(dir, b.name);
+  return open ? folderWrongBranchText(dir, open, b.name) : null;
+}
+
+/**
+ * A build from the user's folder is blocked while another branch is open there (D59): the IDE switched branches, and
+ * building, restarting or updating modules would run that branch's code on this branch's database; dropping it is
+ * refused too. `usable` (actions that read the code) also requires the folder to be the root of a clone.
+ */
+export async function assertFolderOnBranch(b: Pick<BranchRow, 'name'>, scope: Pick<ResolvedBranchScope, 'folder'>, opts: { usable?: boolean } = {}): Promise<void> {
+  if (!scope.folder) return;
+  if (opts.usable ?? true) await assertFolderUsable(toPosix(path.resolve(scope.folder)));
+  const why = await folderBlock(b, scope);
+  if (why) throw new BmError('FOLDER_WRONG_BRANCH', why);
+}
+
+/** assertFolderOnBranch by branch id, for jobs and actions on a build (start, restart, modules, tests, drop…). */
+export async function assertBranchFolder(ctx: Ctx, branchId: number, opts: { usable?: boolean } = {}): Promise<void> {
+  const b = ctx.db.select().from(branches).where(eq(branches.id, branchId)).get();
+  const cfg = b ? ctx.store.get(b.projectId)?.config : null;
+  if (!b || !cfg) return;
+  await assertFolderOnBranch(b, resolveBranchScope(cfg, b.name, b.stage, b.overrides).scope, opts);
 }
 
 /**

@@ -101,6 +101,13 @@ export interface BranchView {
   assignedBy: 'user' | 'rule';
   /** The user's folder the code comes from (Development setting, D33); null — the app's mirror of the remote. */
   folder: string | null;
+  /** Branch open in `folder` ('(detached)' for a detached HEAD); null — no folder or not read yet. */
+  folderBranch: string | null;
+  /**
+   * Another branch is open in `folder` (D59): the build is blocked — only Stop works (no Drop, no Delete of the branch),
+   * commits in the folder do not trigger builds. Lifts itself once this branch is open there again.
+   */
+  folderBlocked: boolean;
   worktreePath: string | null;
   /** Folder the build mounts: `folder` or the worktree. */
   codeDir: string | null;
@@ -131,7 +138,9 @@ export type BranchBadgeKind =
   /** …and has no commits of its own: it is fully merged into the source. */
   | 'merged-behind'
   | 'no-build'
-  | 'discrepancy';
+  | 'discrepancy'
+  /** Another branch is open in the user's folder: the build is blocked (D59). */
+  | 'folder-wrong-branch';
 
 /** Code lag of a branch behind the build its database is copied from (D47). */
 export interface CodeLag {

@@ -65,8 +65,15 @@ export function EditorTab({ branch }: { branch: BranchView }) {
             <>
               <Text size="sm" c="dimmed">
                 Сборка монтирует вашу папку как есть: Restart показывает правки Python без коммита, новый коммит в папке запускает обновление сборки.
-                Приложение только читает папку и ничего в ней не меняет. Собирается та ветка, что открыта в папке.
+                Приложение только читает папку и ничего в ней не меняет. Если в папке открыта другая ветка, сборка блокируется (работает только Stop) до
+                возврата на {branch.name}.
               </Text>
+              {branch.folder && branch.folderBranch && folder.trim() === branch.folder && (
+                <Text size="sm" c={branch.folderBlocked ? 'red' : 'teal'} data-testid="folder-branch">
+                  Сейчас в папке открыта ветка <Code>{branch.folderBranch}</Code>
+                  {branch.folderBlocked ? ` — не ${branch.name}: сборка заблокирована.` : '.'}
+                </Text>
+              )}
               <Group align="flex-end">
                 <TextInput
                   style={{ flex: 1 }}

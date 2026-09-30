@@ -8,6 +8,7 @@ import { resolveBranchScope } from '../config/effective';
 import { branchProtected, buildUrl } from '../docker/compose';
 import { liveBuild } from '../builds/view';
 import { getQueue } from '../jobs/queue';
+import { assertBranchFolder } from '../git/worktrees';
 import { isInside, samePath, toPosix } from '../util/paths';
 
 /**
@@ -163,6 +164,7 @@ async function runJob(ctx: Ctx, cfg: ProjectConfig, ref: string | undefined, typ
   }
   const live = liveBuild(ctx, br.id);
   if (!live) throw new BmError('CLI_NO_BUILD', `У ветки ${br.name} нет живой сборки: соберите её в приложении (Rebuild).`);
+  await assertBranchFolder(ctx, br.id);
   const jobId = getQueue().enqueue(type, { projectId: cfg.id, branchId: br.id, buildId: live.id }, { number: live.number, ...params, source: 'cli' });
   io.out(`Задача #${jobId} (${type}) для ${br.name}, сборка #${live.number}`);
   return waitJob(ctx, jobId, io);

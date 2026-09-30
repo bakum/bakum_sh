@@ -7,7 +7,7 @@ import { branches, builds, type BranchRow, type BuildRow, type JobRow } from '..
 import type { JobContext } from '../jobs/queue';
 import { resolveBranchScope } from '../config/effective';
 import * as git from '../git';
-import { assertFolderUsable, codeSource, ensureWorktree, noRemoteBranch, type CodeSource } from '../git/worktrees';
+import { assertFolderOnBranch, codeSource, ensureWorktree, noRemoteBranch, type CodeSource } from '../git/worktrees';
 import { docker, dockerCli } from '../docker/client';
 import { ODOO_SERVICE, dataDirOf, generateCompose } from '../docker/compose';
 import { ensureTraefik } from '../docker/traefik';
@@ -116,12 +116,10 @@ async function stepCode(r: Run): Promise<string> {
   let sha: string | null;
   const from = src(r);
   if (from.kind === 'folder') {
-    // The user's own clone: mounted as is, only read (D33).
-    await assertFolderUsable(from.dir);
+    // The user's own clone: mounted as is, only read (D33); only while this branch is open there (D59).
+    await assertFolderOnBranch(r.branch, r.scope);
     sha = await git.headSha(from.dir);
     if (!sha) throw new BmError('NO_HEAD', `Не удалось прочитать HEAD в папке ${from.dir}`);
-    const current = await git.currentBranch(from.dir);
-    if (current !== r.branch.name) r.log(`[warn] в папке ${from.dir} открыта ветка ${current ?? '(detached)'}, а не ${r.branch.name}: собирается то, что лежит в папке`);
     const dirty = await git.uncommittedFiles(from.dir);
     if (dirty.length) r.log(`незакоммиченных файлов в папке: ${dirty.length} — они попадут в сборку`);
   } else {
@@ -848,6 +846,19 @@ export async function runBuild(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
   };
   const from = (job.params.fromStep as BuildStepName | undefined) ?? 'code';
   const startIdx = Math.max(0, BUILD_STEPS.indexOf(from));
+  // Another branch was opened in the user's folder while the build waited (D59): refuse before anything is touched —
+  // no step runs and the live build is not restored/started (restorePrevious could start a stopped one).
+  try {
+    await assertFolderOnBranch(branch, scope);
+  } catch (err) {
+    const msg = (err as Error).message;
+    log(`[error] ${msg}`);
+    out.end();
+    setStep(r, from, { status: 'failed', startedAt: nowIso(), finishedAt: nowIso() });
+    patchBuild(r, { status: 'failed', finishedAt: nowIso(), errorMessage: msg });
+    bus.emit({ type: 'branch.changed', projectId: cfg.id, branchId: branch.id });
+    throw err;
+  }
   patchBuild(r, { status: 'building', startedAt: r.build.startedAt ?? nowIso(), errorMessage: null, finishedAt: null });
   log(`==> ${cfg.id}/${branch.name} сборка #${build0.number} (${build0.kind}, ${build0.dbSource}, trigger ${build0.trigger})${startIdx ? ` с шага ${from}` : ''} ${nowIso()}`);
   let current: BuildStepName = 'code';

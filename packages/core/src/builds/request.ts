@@ -9,7 +9,7 @@ import { resolveBranchScope } from '../config/effective';
 import { assertHost, assertSqlIdent, parseBranchName, renderTemplate, slugUnderscore } from '../config/templates';
 import { branchRow } from '../services/branch-rows';
 import { configHash, liveBuild } from './view';
-import { assertFolderUsable } from '../git/worktrees';
+import { assertFolderOnBranch } from '../git/worktrees';
 import { assertNotLegacy } from '../config/legacy';
 import { getQueue } from '../jobs/queue';
 import { bus } from '../events';
@@ -34,7 +34,7 @@ export async function requestBuildChecked(ctx: Ctx, branchId: number, req: Build
   if (!b) throw new BmError('NO_BRANCH', 'Ветка не найдена');
   const cfg = ctx.store.require(b.projectId);
   const scope = resolveBranchScope(cfg, b.name, b.stage, b.overrides).scope;
-  if (scope.folder) await assertFolderUsable(scope.folder);
+  await assertFolderOnBranch(b, scope);
   return requestBuild(ctx, branchId, req);
 }
 

@@ -15,7 +15,7 @@ import { codeVars, serverBaseArgs } from '../builds/odoo-cli';
 import { resolveBranchScope } from '../config/effective';
 import { renderDeep } from '../config/templates';
 import * as git from '../git';
-import { codeSource } from '../git/worktrees';
+import { assertBranchFolder, codeSource, FOLDER_SAFE_JOBS } from '../git/worktrees';
 import * as pg from '../pg';
 import { changedModules, modulesFromTree, parseModuleList, splitInstallUpdate } from '../modules';
 import { branchByName, branchRow } from './branch-rows';
@@ -46,6 +46,7 @@ async function retry(ctx: Ctx, buildId: number, fromStep: string) {
   if (!(BUILD_STEPS as readonly string[]).includes(fromStep)) throw new BmError('BAD_STEP', `Неизвестный шаг ${fromStep}`);
   const active = ctx.db.select().from(builds).where(and(eq(builds.branchId, b.branchId), inArray(builds.status, ['queued', 'building']))).get();
   if (active) throw new BmError('BUILD_ACTIVE', `У ветки уже идёт сборка #${active.number}`);
+  await assertBranchFolder(ctx, b.branchId);
   const idx = BUILD_STEPS.indexOf(fromStep as BuildStepName);
   const steps = b.steps.map((s, i) => (i >= idx ? { ...s, status: 'pending' as const, startedAt: null, finishedAt: null, note: undefined } : s));
   // The previous live build may have changed since (e.g. another build became live).
@@ -257,8 +258,10 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
 
 export function registerBuildHandlers(ctx: Ctx): void {
   const q = () => getQueue();
-  const enqueueFor = (type: 'drop' | 'start' | 'stop' | 'restart' | 'apply_config' | 'modules' | 'tests', buildId: number, params: Record<string, unknown> = {}) => {
+  const enqueueFor = async (type: 'drop' | 'start' | 'stop' | 'restart' | 'apply_config' | 'modules' | 'tests', buildId: number, params: Record<string, unknown> = {}) => {
     const b = mustBuild(ctx, buildId);
+    // Refused at once while another branch is open in the user's folder: no job, nothing in History (D59).
+    if (!FOLDER_SAFE_JOBS.has(type)) await assertBranchFolder(ctx, b.branchId, { usable: type !== 'drop' });
     return { jobId: q().enqueue(type, { projectId: b.projectId, branchId: b.branchId, buildId: b.id }, { number: b.number, ...params }) };
   };
   ctx.rpc.register({
@@ -281,9 +284,9 @@ export function registerBuildHandlers(ctx: Ctx): void {
       if (!b.live) throw new BmError('BAD_STATE', 'Действие доступно только для живой сборки');
       return enqueueFor(p.action === 'apply-config' ? 'apply_config' : p.action, p.buildId);
     },
-    'builds.stopAll': () => {
+    'builds.stopAll': async () => {
       const live = ctx.db.select().from(builds).where(and(eq(builds.live, true), eq(builds.status, 'running'))).all();
-      for (const b of live) enqueueFor('stop', b.id);
+      for (const b of live) await enqueueFor('stop', b.id);
       return { jobs: live.length };
     },
     'builds.changedModules': (p) => changedModulesPreview(ctx, p.branchId),

@@ -6,6 +6,7 @@ import type { BranchView } from '@bm/shared';
 import { useBm, useBmMutation } from '../../lib/query';
 import { call, errorText } from '../../lib/bm';
 import { shellOpen } from '../BranchPage';
+import { folderBlockHint } from '../../lib/folder-block';
 
 /** Tools (spec 8.9): psql, connection string, admin password, manual modules, Debug (launch.json). */
 export function ToolsTab({ branch }: { branch: BranchView }) {
@@ -18,6 +19,7 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
   const [update, setUpdate] = useState<string[]>([]);
   const tests = useBmMutation('builds.testsAction', { success: 'Тесты поставлены в очередь' });
   const [testMods, setTestMods] = useState<string[]>([]);
+  const blocked = folderBlockHint(branch);
   if (!live) return <Alert color="gray">У ветки нет живой сборки.</Alert>;
 
   return (
@@ -111,7 +113,11 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
       <Card withBorder>
         <Stack>
           <Title order={5}>Изменённые модули</Title>
-          {changed.data ? (
+          {blocked ? (
+            <Text size="sm" c="dimmed">
+              В папке открыта другая ветка — список не показывается.
+            </Text>
+          ) : changed.data ? (
             <>
               <Text size="xs" c="dimmed">
                 {changed.data.from ? `${changed.data.from.slice(0, 7)}..${changed.data.to?.slice(0, 7)}` : 'нет базы для сравнения'} · файлов: {changed.data.files}
@@ -134,11 +140,16 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
       <Card withBorder>
         <Stack>
           <Title order={5}>Модули вручную</Title>
+          {blocked && (
+            <Alert color="red" variant="light" py={6} data-testid="tools-blocked">
+              <Text size="sm">{blocked}</Text>
+            </Alert>
+          )}
           <TagsInput label="Установить (-i)" value={install} onChange={setInstall} placeholder="имя_модуля" />
           <TagsInput label="Обновить (-u)" value={update} onChange={setUpdate} placeholder="имя_модуля" />
           <Group justify="flex-end">
             <Button
-              disabled={!install.length && !update.length}
+              disabled={!!blocked || (!install.length && !update.length)}
               loading={mods.isPending}
               onClick={() => mods.mutate({ buildId: live.id, install, update }, { onSuccess: () => { setInstall([]); setUpdate([]); } })}
             >
@@ -155,7 +166,7 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
           <Group justify="flex-end">
             <Button
               variant="default"
-              disabled={!testMods.length}
+              disabled={!!blocked || !testMods.length}
               loading={tests.isPending}
               onClick={() => tests.mutate({ buildId: live.id, modules: testMods })}
             >

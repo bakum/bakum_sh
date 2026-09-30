@@ -12,7 +12,7 @@ import { ensurePostgres } from '../docker/postgres';
 import { ensureImage } from '../docker/image';
 import { refreshContainers } from '../docker/watch';
 import { resolveBranchScope } from '../config/effective';
-import { codeSource } from '../git/worktrees';
+import { assertBranchFolder, codeSource } from '../git/worktrees';
 import { branchRow } from '../services/branch-rows';
 import { publishTray } from '../services/tray';
 import { audit } from '../services/audit';
@@ -100,6 +100,7 @@ export function writeLiveCompose(ctx: Ctx, b: BuildRow): string {
 /** «Применить» (spec 9.1): recreate the container with the current configuration, the database is kept. */
 async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const b = mustBuild(ctx, job.buildId);
+  await assertBranchFolder(ctx, b.branchId);
   const cfg = ctx.store.require(b.projectId);
   await ensureTraefik(ctx);
   await ensurePostgres(ctx, cfg, jc.log);
@@ -117,6 +118,7 @@ async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void>
 /** Manual -i / -u from the Tools tab: stop → odoo -i/-u → start. */
 async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const b = mustBuild(ctx, job.buildId);
+  await assertBranchFolder(ctx, b.branchId);
   const cfg = ctx.store.require(b.projectId);
   const p = job.params as { install?: string[]; update?: string[] };
   const file = liveCompose(ctx, b);
@@ -143,6 +145,7 @@ async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> 
  */
 async function testsJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const b = mustBuild(ctx, job.buildId);
+  await assertBranchFolder(ctx, b.branchId);
   const cfg = ctx.store.require(b.projectId);
   const br = branchRow(ctx, b.branchId);
   if (!br) throw new BmError('NO_BRANCH', 'Ветка сборки удалена');
@@ -212,11 +215,13 @@ async function testsJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   }
 }
 
+/** Jobs on a build refuse while another branch is open in the user's folder (D59); only stop does not. */
 export function registerBuildExecutors(q: JobQueue): void {
   q.register('build', runBuild);
   q.register('import_backup', runBuild);
   q.register('drop', async (ctx, job, jc) => {
     const b = mustBuild(ctx, job.buildId);
+    await assertBranchFolder(ctx, b.branchId, { usable: false });
     const buildLog = b.logPath ? fs.createWriteStream(b.logPath, { flags: 'a' }) : null;
     await dropBuild(ctx, b, (l) => {
       jc.log(l);
@@ -228,6 +233,7 @@ export function registerBuildExecutors(q: JobQueue): void {
   });
   q.register('start', async (ctx, job, jc) => {
     const b = mustBuild(ctx, job.buildId);
+    await assertBranchFolder(ctx, b.branchId);
     await ensurePostgres(ctx, ctx.store.require(b.projectId), jc.log);
     await compose(ctx, b, ['up', '-d', '--remove-orphans'], jc);
     done(ctx, b, 'start');
@@ -239,6 +245,7 @@ export function registerBuildExecutors(q: JobQueue): void {
   });
   q.register('restart', async (ctx, job, jc) => {
     const b = mustBuild(ctx, job.buildId);
+    await assertBranchFolder(ctx, b.branchId);
     await ensurePostgres(ctx, ctx.store.require(b.projectId), jc.log);
     await compose(ctx, b, ['restart'], jc);
     done(ctx, b, 'restart');

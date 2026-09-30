@@ -20,6 +20,7 @@ import { StatusDot } from '../components/StatusDot';
 import { ForkDialog } from '../components/dialogs/ForkDialog';
 import { DeleteDialog } from '../components/dialogs/DeleteDialog';
 import { useRebuild } from '../components/useRebuild';
+import { folderBlockHint } from '../lib/folder-block';
 import { HistoryTab } from './branch/HistoryTab';
 import { ShellTab } from './branch/ShellTab';
 import { EditorTab } from './branch/EditorTab';
@@ -57,6 +58,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
   const cfgUrl = project.data?.config?.repo.url;
   const repoUrl = cfgUrl ? cfgUrl.replace(/^(https:\/\/)[^@/]+@/, '$1') : github ? `https://github.com/${github}.git` : null;
   const live = b.liveBuild;
+  const blocked = folderBlockHint(b);
   const setTab = (t: string | null) => nav(`/projects/${projectId}/branches/${branchId}/${t ?? 'history'}`);
 
   return (
@@ -133,7 +135,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
                 <Alert
                   key={x.kind}
                   // D47: a lag is only a warning when the missing commits change modules; otherwise Rebuild is safe.
-                  color={x.kind === 'discrepancy' ? 'red' : x.kind === 'behind-source' || x.kind === 'merged-behind' ? (b.codeLag?.modules.length ? 'yellow' : 'gray') : 'orange'}
+                  color={x.kind === 'discrepancy' || x.kind === 'folder-wrong-branch' ? 'red' : x.kind === 'behind-source' || x.kind === 'merged-behind' ? (b.codeLag?.modules.length ? 'yellow' : 'gray') : 'orange'}
                   variant="light"
                   py={4}
                   data-testid={`badge-${x.kind}`}
@@ -142,12 +144,12 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
                     <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
                       {x.text}
                     </Text>
-                    {(x.kind === 'stage-changed' || x.kind === 'unbuilt-commits' || x.kind === 'mirror-newer' || x.kind === 'force-push' || x.kind === 'dirty-worktree') && (
+                    {!blocked && (x.kind === 'stage-changed' || x.kind === 'unbuilt-commits' || x.kind === 'mirror-newer' || x.kind === 'force-push' || x.kind === 'dirty-worktree') && (
                       <Button size="compact-xs" onClick={() => rebuild(b, x.kind === 'stage-changed' ? 'stage_change' : 'rebuild')}>
                         Rebuild
                       </Button>
                     )}
-                    {x.kind === 'config-changed' && live && (
+                    {x.kind === 'config-changed' && live && !blocked && (
                       <Button size="compact-xs" onClick={() => void call('builds.action', { buildId: live.id, action: 'apply-config' }).catch((e) => notifications.show({ color: 'red', message: errorText(e) }))}>
                         Применить
                       </Button>
@@ -172,9 +174,17 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
             <Tabs.Tab value="settings">Settings</Tabs.Tab>
           </Tabs.List>
           <Group gap={6} wrap="nowrap">
-            <Button leftSection={<IconRefresh size={14} />} loading={!!b.activeBuild} onClick={() => rebuild(b, 'rebuild')}>
-              Rebuild
-            </Button>
+            <Tooltip label={blocked} disabled={!blocked} multiline w={320}>
+              <Button
+                leftSection={<IconRefresh size={14} />}
+                loading={!!b.activeBuild}
+                data-disabled={blocked ? true : undefined}
+                data-testid="rebuild"
+                onClick={() => !blocked && rebuild(b, 'rebuild')}
+              >
+                Rebuild
+              </Button>
+            </Tooltip>
             <Button
               variant="default"
               leftSection={<IconBrandGithub size={14} />}

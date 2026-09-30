@@ -8,6 +8,7 @@ import { branches, type BranchRow } from '../db/schema';
 import * as git from '../git';
 import { resolveBranchScope } from '../config/effective';
 import { onNewCommit } from '../builds/triggers';
+import { DETACHED } from '../git/worktrees';
 import { bus } from '../events';
 import { log } from '../util/logger';
 
@@ -19,8 +20,27 @@ export class LocalWatcher {
   private watchers = new Map<number, { watcher: FSWatcher; folder: string }>();
   private timer: NodeJS.Timeout | null = null;
   private checking = new Set<number>();
+  /** Branch open in the folder of each folder branch (DETACHED for a detached HEAD), as last read (D59). */
+  private open = new Map<number, string>();
 
   constructor(private readonly ctx: Ctx) {}
+
+  /** Branch open in the folder of a branch; undefined — not a folder branch or not read yet. */
+  folderBranch(branchId: number): string | undefined {
+    return this.open.get(branchId);
+  }
+
+  /** Reads the branch open in the folder; returns whether it is the branch itself. Emits branch.changed on change. */
+  private async readOpen(b: BranchRow, folder: string): Promise<boolean> {
+    const current = (await git.currentBranch(folder).catch(() => null)) ?? DETACHED;
+    if (this.open.get(b.id) !== current) {
+      const known = this.open.has(b.id);
+      this.open.set(b.id, current);
+      if (current !== b.name) log().info({ branch: b.name, open: current }, 'folder has another branch open: builds blocked');
+      if (known) bus.emit({ type: 'branch.changed', projectId: b.projectId, branchId: b.id });
+    }
+    return current === b.name;
+  }
 
   start(): void {
     void this.sync();
@@ -53,8 +73,10 @@ export class LocalWatcher {
       if (want.get(id) !== w.folder) {
         void w.watcher.close();
         this.watchers.delete(id);
+        this.open.delete(id);
       }
     }
+    for (const id of this.open.keys()) if (!want.has(id)) this.open.delete(id);
     for (const { b, folder } of rows) {
       if (this.watchers.has(b.id) || !fs.existsSync(folder)) continue;
       const gitDir = await git.gitDir(folder).catch(() => null);
@@ -62,8 +84,10 @@ export class LocalWatcher {
       if (!gitDir) continue;
       // Any branch of the folder may be checked out: watch HEAD and all local branch refs.
       const files = [path.join(gitDir, 'HEAD'), ...(common ? [path.join(common, 'refs', 'heads'), path.join(common, 'packed-refs')] : [])];
+      const onBranch = await this.readOpen(b, folder);
       // The folder was just chosen (or the app started): its HEAD now is the starting point, so the next commit counts.
-      if (!b.lastSeenLocalSha) {
+      // HEAD of another branch is not a starting point of this one (D59).
+      if (!b.lastSeenLocalSha && onBranch) {
         const head = await git.headSha(folder).catch(() => null);
         if (head) this.ctx.db.update(branches).set({ lastSeenLocalSha: head }).where(eq(branches.id, b.id)).run();
       }
@@ -87,6 +111,8 @@ export class LocalWatcher {
       if (!e?.config || isLegacyProject(e.config)) return;
       const scope = resolveBranchScope(e.config, b.name, b.stage, b.overrides).scope;
       if (!scope.folder || !fs.existsSync(scope.folder)) return;
+      // Another branch open in the folder (switched in the IDE): the build is blocked, its commits are not ours (D59).
+      if (!(await this.readOpen(b, scope.folder))) return;
       const sha = await git.headSha(scope.folder);
       if (!sha || sha === b.lastSeenLocalSha) return;
       this.ctx.db.update(branches).set({ lastSeenLocalSha: sha }).where(eq(branches.id, b.id)).run();
