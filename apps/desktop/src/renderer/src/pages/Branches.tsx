@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, Box, Button, Center, Group, Modal, Select, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import type { BranchView, Stage } from '@bm/shared';
+import type { BranchesList, BranchView, Stage } from '@bm/shared';
 import { useBm, useBmMutation } from '../lib/query';
 import { call, errorText } from '../lib/bm';
 import { Sidebar } from '../components/Sidebar';
@@ -150,7 +150,7 @@ export function BranchesPage() {
       </Box>
 
       <MoveDialog move={move} onClose={() => setMove(null)} production={list.data?.production[0]?.name ?? null} />
-      <AddDialog stage={addStage} projectId={projectId} options={list.data?.unassigned.map((u) => u.name) ?? []} onClose={() => setAddStage(null)} />
+      <AddDialog stage={addStage} projectId={projectId} options={list.data?.unassigned.map((u) => u.name) ?? []} autoAdd={list.data?.autoAdd ?? 'none'} onClose={() => setAddStage(null)} />
       <MergeDialog value={merge} branches={all} onClose={() => setMerge(null)} />
     </Box>
   );
@@ -220,21 +220,74 @@ function MoveDialog({ move, onClose, production }: { move: { b: BranchView; stag
   );
 }
 
-function AddDialog({ stage, projectId, options, onClose }: { stage: Stage | null; projectId: string; options: string[]; onClose: () => void }) {
+/** Where new remote branches go by `autoAddBranches`: under «+» they only show up when fetch did not add them. */
+const AUTO_ADD_TEXT: Record<BranchesList['autoAdd'], string> = {
+  all: 'Новые ветки с GitHub приложение добавляет само при fetch. Здесь бывают только ветки, которые вы удалили из приложения.',
+  rules: 'Новые ветки с GitHub, подходящие под правила стадий, приложение добавляет само при fetch. Здесь — остальные и те, что вы удалили из приложения.',
+  none: 'Ветку, только что созданную на GitHub, здесь видно после fetch.',
+};
+
+function AddDialog({
+  stage,
+  projectId,
+  options,
+  autoAdd,
+  onClose,
+}: {
+  stage: Stage | null;
+  projectId: string;
+  options: string[];
+  autoAdd: BranchesList['autoAdd'];
+  onClose: () => void;
+}) {
   const nav = useNavigate();
   const [name, setName] = useState<string | null>(null);
   const add = useBmMutation('branches.add');
+  useEffect(() => setName(null), [stage]);
+  const preview = useBm('branches.addPreview', { projectId, name: name ?? '', stage: stage ?? 'development' }, { enabled: !!stage && !!name });
   if (!stage) return null;
+  const pv = name ? preview.data : undefined;
   return (
     <Modal opened onClose={onClose} title={`Добавить ветку в ${STAGE_LABEL[stage]}`}>
       <Stack>
-        <Select label="Ветка (origin/* и локальные)" searchable data={options} value={name} onChange={setName} nothingFoundMessage="Нет ветки — выполните fetch" />
+        <Text size="sm">Подключает к приложению ветку, которая уже есть в репозитории на GitHub. Новую ветку здесь создать нельзя.</Text>
+        {options.length ? (
+          <Select
+            label="Ветка из репозитория, ещё не добавленная в приложение"
+            searchable
+            data={options}
+            value={name}
+            onChange={setName}
+            nothingFoundMessage="Такой ветки нет — выполните fetch"
+            data-autofocus
+          />
+        ) : (
+          <Alert color="gray">Все ветки репозитория уже добавлены в приложение.</Alert>
+        )}
+        <Text size="sm" c="dimmed">
+          {AUTO_ADD_TEXT[autoAdd]}
+        </Text>
+        {pv && (
+          <Text size="sm">
+            Ветка появится в {STAGE_LABEL[stage]}; на GitHub ничего не меняется.{' '}
+            {pv.build ? 'Сразу начнётся сборка' : 'Сборка сама не начнётся (выключено «Собирать при добавлении») — запустите её кнопкой Rebuild на странице ветки'}
+            : код из <b>{name}</b>, база —{' '}
+            {pv.copyOf ? (
+              <>
+                копия базы <b>{pv.copyOf}</b>
+              </>
+            ) : (
+              `чистая${pv.withDemo ? ' с демо-данными' : ''}`
+            )}
+            .
+          </Text>
+        )}
         <Text size="sm" c="dimmed">
           Новую ветку от существующей создаёт Fork на странице ветки-источника.
         </Text>
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
-            Отмена
+            {options.length ? 'Отмена' : 'Закрыть'}
           </Button>
           <Button
             disabled={!name}

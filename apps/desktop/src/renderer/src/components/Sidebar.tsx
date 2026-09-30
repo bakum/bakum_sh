@@ -173,9 +173,11 @@ function StageGroup(props: {
           {props.title}
         </Text>
         {props.onPlus && (
-          <ActionIcon size="sm" onClick={props.onPlus} aria-label={`Добавить в ${props.title}`}>
-            <IconPlus size={14} />
-          </ActionIcon>
+          <Tooltip label="Добавить существующую ветку с GitHub">
+            <ActionIcon size="sm" onClick={props.onPlus} aria-label={`Добавить в ${props.title}`}>
+              <IconPlus size={14} />
+            </ActionIcon>
+          </Tooltip>
         )}
       </Group>
       {!props.items.length && (

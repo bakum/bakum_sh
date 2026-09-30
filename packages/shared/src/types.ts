@@ -167,6 +167,8 @@ export interface BranchesList {
   unassigned: UnassignedBranch[];
   /** Branches not added because a rule says `stage: ignore`. */
   ignoredCount: number;
+  /** `autoAddBranches` of the project: with `all` / `rules` new remote branches are added by fetch, not under «+». */
+  autoAdd: 'none' | 'rules' | 'all';
 }
 
 export interface BuildView {

@@ -14,6 +14,7 @@ import { requestSetup } from './services/project-setup';
 import { allocatePgPort } from './docker/postgres';
 import {
   addBranch,
+  addPreview,
   forkBranch,
   forkName,
   getBranchView,
@@ -95,6 +96,7 @@ export function registerHandlers(ctx: Ctx): void {
     'branches.get': (p) => getBranchView(ctx, p.branchId),
     'branches.gitList': async (p) => gitBranches(ctx, ctx.store.require(p.projectId)),
     'branches.add': (p) => addBranch(ctx, p),
+    'branches.addPreview': (p) => addPreview(ctx, p),
     'branches.setStage': (p) => setStage(ctx, p.branchId, p.stage),
     'branches.resetToRule': (p) => resetToRule(ctx, p.branchId),
     'branches.setHidden': (p) => setHidden(ctx, p.branchId, p.hidden),

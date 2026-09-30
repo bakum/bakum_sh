@@ -132,7 +132,7 @@ export async function listBranches(ctx: Ctx, projectId: string): Promise<Branche
     }
     unassigned.push({ name: g.name, source: g.source, suggestedStage: sel.stage, ruleIndex: sel.ruleIndex });
   }
-  return { projectId, production: byStage('production'), development: byStage('development'), unassigned, ignoredCount: ignored };
+  return { projectId, production: byStage('production'), development: byStage('development'), unassigned, ignoredCount: ignored, autoAdd: cfg.autoAddBranches };
 }
 
 export function getBranchView(ctx: Ctx, branchId: number): BranchView {
@@ -163,6 +163,15 @@ export async function addBranch(ctx: Ctx, p: { projectId: string; name: string; 
   const scope = resolveBranchScope(cfg, row.name, row.stage, row.overrides).scope;
   if (p.build ?? scope.buildOnAdd) await requestBuildChecked(ctx, row.id, { trigger: 'manual' });
   return getBranchView(ctx, row.id);
+}
+
+/** What adding a branch to a stage will do: build right away or not, and where its database comes from. */
+export function addPreview(ctx: Ctx, p: { projectId: string; name: string; stage: Stage }) {
+  const cfg = ctx.store.require(p.projectId);
+  const scope = resolveBranchScope(cfg, p.name, p.stage, null).scope;
+  const database = scope.database === 'backup' ? 'fresh' : scope.database;
+  const copyOf = !database.startsWith('copy:') ? null : database === 'copy:production' ? cfg.production.branch : database.slice('copy:'.length);
+  return { build: scope.buildOnAdd, fresh: database === 'fresh', copyOf, withDemo: scope.withDemo };
 }
 
 /** Remembers the current remote head so only later commits count as "new" (the folder head is tracked by LocalWatcher). */

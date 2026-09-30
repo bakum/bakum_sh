@@ -179,6 +179,9 @@ export const methods = {
   'branches.add': m<BranchView>()(
     z.object({ projectId, name: z.string().min(1), stage: stageSchema.optional(), build: z.boolean().optional() }).strict(),
   ),
+  'branches.addPreview': m<{ build: boolean; fresh: boolean; copyOf: string | null; withDemo: boolean }>()(
+    z.object({ projectId, name: z.string().min(1), stage: stageSchema }).strict(),
+  ),
   'branches.setStage': m<BranchView>()(z.object({ branchId: id, stage: stageSchema }).strict()),
   'branches.resetToRule': m<BranchView>()(z.object({ branchId: id }).strict()),
   'branches.setHidden': m<BranchView>()(z.object({ branchId: id, hidden: z.boolean() }).strict()),
