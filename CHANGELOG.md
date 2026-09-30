@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.13.12] — 2026-09-30
+
 ### Исправлено
 - После тестов в `tests.log` (и после шагов сборки, модулей, снимков) были десятки ошибок
   `psycopg2.InterfaceError: cursor already closed` на `GET /web/login`: временный контейнер Odoo получал healthcheck
