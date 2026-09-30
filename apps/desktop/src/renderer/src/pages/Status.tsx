@@ -165,9 +165,11 @@ export function StatusPage() {
                     <Table.Td w={40}>
                       <Checkbox
                         checked={selected.includes(orphanKey(o))}
-                        onChange={(e) =>
-                          setSelected((x) => (e.currentTarget.checked ? [...x, orphanKey(o)] : x.filter((k) => k !== orphanKey(o))))
-                        }
+                        onChange={(e) => {
+                          // Read before setState: the updater may run after the event, when currentTarget is already null.
+                          const checked = e.currentTarget.checked;
+                          setSelected((x) => (checked ? [...x, orphanKey(o)] : x.filter((k) => k !== orphanKey(o))));
+                        }}
                       />
                     </Table.Td>
                     <Table.Td w={140}>{ORPHAN_KIND[o.kind] ?? o.kind}</Table.Td>
