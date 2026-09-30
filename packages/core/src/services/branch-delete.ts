@@ -20,7 +20,7 @@ export async function deletePreview(ctx: Ctx, branchId: number) {
   const cfg = ctx.store.require(b.projectId);
   const scope = resolveBranchScope(cfg, b.name, b.stage, b.overrides).scope;
   let dirty: string | null = null;
-  if (b.worktreePath) dirty = (await git.statusPorcelain(b.worktreePath).catch(() => '')).trim() || null;
+  if (b.worktreePath) dirty = (await git.worktreeChanges(b.worktreePath).catch(() => [])).join('\n') || null;
   const n = ctx.db.select().from(builds).where(eq(builds.branchId, b.id)).all().filter((x) => x.status !== 'dropped').length;
   return {
     dirty,
@@ -68,7 +68,9 @@ export async function deleteBranchExecutor(ctx: Ctx, job: JobRow, jc: JobContext
   if (b.worktreePath) {
     jc.log(`git worktree remove ${b.worktreePath}`);
     // remoteGone: keepReasonOf above found no user changes; only Python bytecode may be left there.
-    await removeWorktree(ctx, cfg, b, !!params.forceDirty || !!params.remoteGone);
+    // Only Odoo's bytecode left (no user changes): `git worktree remove` still needs --force for untracked files.
+    const onlyBytecode = !!b.worktreePath && !(await git.worktreeChanges(b.worktreePath).catch(() => ['?'])).length;
+    await removeWorktree(ctx, cfg, b, !!params.forceDirty || !!params.remoteGone || onlyBytecode);
   }
   ctx.db.delete(builds).where(eq(builds.branchId, b.id)).run();
   ctx.db.delete(branches).where(eq(branches.id, b.id)).run();

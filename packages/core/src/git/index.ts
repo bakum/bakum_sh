@@ -419,6 +419,22 @@ export async function statusPorcelain(worktree: string): Promise<string> {
   return git(worktree, ['status', '--porcelain']);
 }
 
+/**
+ * `git status --porcelain` lines that are the user's work. Python bytecode Odoo writes into the mounted code
+ * (`__pycache__/`, `*.pyc`, untracked) is not: without it in .gitignore every app worktree looks dirty after a build.
+ */
+export function userChanges(porcelain: string): string[] {
+  return porcelain
+    .split('\n')
+    .map((l) => l.trimEnd())
+    .filter((l) => l && !(l.startsWith('?? ') && /(^|\/)__pycache__\/$|\.pyc$/.test(l.slice(3))));
+}
+
+/** The user's uncommitted work in an app worktree, as porcelain lines (see userChanges). */
+export async function worktreeChanges(worktree: string): Promise<string[]> {
+  return userChanges(await statusPorcelain(worktree));
+}
+
 /** Files changed but not committed in a folder (modified, staged, untracked), repo-relative; read-only. */
 export async function uncommittedFiles(dir: string): Promise<string[]> {
   const out = await git(dir, ['status', '--porcelain', '--untracked-files=all', '--no-renames']);

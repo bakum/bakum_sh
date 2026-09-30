@@ -34,8 +34,8 @@ export async function onNewCommit(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, sh
     }
   }
   if (!scope.folder && b.worktreePath) {
-    const dirty = await git.statusPorcelain(b.worktreePath).catch(() => '');
-    if (dirty.trim()) {
+    const dirty = await git.worktreeChanges(b.worktreePath).catch(() => []);
+    if (dirty.length) {
       pause(ctx, b, 'dirty-worktree');
       return;
     }

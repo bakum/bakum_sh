@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { remoteGoneDecision, userChanges } from '../src/services/remote-gone';
+import { remoteGoneDecision } from '../src/services/remote-gone';
+import { userChanges } from '../src/git';
 import { APP_STAGE_DEFAULTS } from '../src/config/presets';
 
 describe('branch deleted on the remote (D50)', () => {

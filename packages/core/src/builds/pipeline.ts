@@ -129,7 +129,7 @@ async function stepCode(r: Run): Promise<string> {
     r.branch = branchRow(ctx, r.branch.id)!;
     sha = (r.job.params.targetSha as string | null) ?? (await git.remoteSha(from.repo, cfg.repo.remote, r.branch.name));
     if (!sha) throw new BmError('NO_BRANCH_REF', noRemoteBranch(r.branch.name, cfg.repo.remote));
-    const dirty = (await git.statusPorcelain(wt)).trim();
+    const dirty = (await git.worktreeChanges(wt)).join('\n');
     if (dirty) {
       throw new BmError(
         'WORKTREE_DIRTY',

@@ -39,17 +39,9 @@ export async function isGoneFromRemote(cfg: ProjectConfig, b: BranchRow): Promis
   return !!b.lastSeenRemoteSha && !(await git.remoteSha(repoDir(cfg), cfg.repo.remote, b.name));
 }
 
-/** `git status --porcelain` lines that are the user's work: Python bytecode Odoo writes into the mounted code is not. */
-export function userChanges(porcelain: string): string[] {
-  return porcelain
-    .split('\n')
-    .map((l) => l.trimEnd())
-    .filter((l) => l && !(l.startsWith('?? ') && /(^|\/)__pycache__\/$|\.pyc$/.test(l.slice(3))));
-}
-
 export async function keepReasonOf(cfg: ProjectConfig, b: BranchRow): Promise<KeepReason | null> {
   const scope = resolveBranchScope(cfg, b.name, b.stage, b.overrides).scope;
-  const dirty = b.worktreePath ? userChanges(await git.statusPorcelain(b.worktreePath).catch(() => '')).length > 0 : false;
+  const dirty = b.worktreePath ? (await git.worktreeChanges(b.worktreePath).catch(() => [])).length > 0 : false;
   return remoteGoneDecision({ stage: b.stage, scope, protectedBranch: cfg.repo.protectedBranches.includes(b.name), dirty });
 }
 
