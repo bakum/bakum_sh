@@ -66,6 +66,12 @@ const api: BmApi = {
       send({ kind: 'req', id, method, params });
     });
   },
+  settle(method, params) {
+    return api.call(method, params).then(
+      (result) => ({ ok: true as const, result }),
+      (e: Error & { code?: string; details?: unknown }) => ({ ok: false as const, error: { message: e.message, code: e.code, details: e.details } }),
+    );
+  },
   subscribe(topic, params, handler) {
     const id = nextId++;
     subs.set(id, { topic, params, handler });

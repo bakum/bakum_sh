@@ -5,8 +5,11 @@ export interface BmCallError extends Error {
   details?: unknown;
 }
 
-export function call<K extends MethodName>(method: K, params: MethodParams<K>): Promise<MethodResult<K>> {
-  return window.bm.call(method, params);
+/** Rejects with an Error that keeps Core's `code` and `details` (window.bm.call would lose them on contextBridge). */
+export async function call<K extends MethodName>(method: K, params: MethodParams<K>): Promise<MethodResult<K>> {
+  const r = await window.bm.settle(method, params);
+  if (r.ok) return r.result;
+  throw Object.assign(new Error(r.error.message), { code: r.error.code, details: r.error.details }) as BmCallError;
 }
 
 export const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));

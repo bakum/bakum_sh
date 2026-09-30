@@ -62,8 +62,9 @@ pnpm monorepo, TypeScript strict, ESM:
 (`'area.name': m<Result>()(zodParams)`); Core validates params and dispatches (`core/src/rpc.ts`); handlers are wired in
 `core/src/handlers.ts` (some areas register their own, e.g. `services/build-actions.ts`). The renderer uses
 `useBm(method, params)` / `useBmMutation(method)` from `renderer/src/lib/query.ts`; any successful mutation invalidates
-all queries. Push updates: `bus.emit({ type: '…changed' })` in Core → `events` topic → renderer refetch. New RPC method =
-schema in `ipc.ts` + handler registration + UI call.
+all queries. Errors keep Core's `code` / `details` only through `call()` in `lib/bm.ts` (preload `settle`; a rejected
+`window.bm.call` loses them on contextBridge). Push updates: `bus.emit({ type: '…changed' })` in Core → `events`
+topic → renderer refetch. New RPC method = schema in `ipc.ts` + handler registration + UI call.
 
 **Settings.** YAML files in `%APPDATA%\Odoo Branch Manager\` (`app.yaml`, `projects/<id>.yaml`), loaded and watched by
 `core/src/config/store.ts`; hand edits are picked up live. Programmatic changes patch the YAML document

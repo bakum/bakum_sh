@@ -24,8 +24,13 @@ export interface BmDesktop {
   };
 }
 
+/** Outcome of a call as plain data: contextBridge copies only `message` of a rejected Error, not `code` / `details`. */
+export type CallOutcome<R> = { ok: true; result: R } | { ok: false; error: { message: string; code?: string; details?: unknown } };
+
 export interface BmApi {
   call<K extends MethodName>(method: K, params: MethodParams<K>): Promise<MethodResult<K>>;
+  /** Same call, never rejects: the renderer rebuilds the error with its code and details (lib/bm.ts). */
+  settle<K extends MethodName>(method: K, params: MethodParams<K>): Promise<CallOutcome<MethodResult<K>>>;
   subscribe(topic: Topic, params: Record<string, unknown>, handler: (data: unknown) => void): () => void;
   onCoreStatus(cb: (s: CoreStatus) => void): () => void;
   desktop: BmDesktop;
