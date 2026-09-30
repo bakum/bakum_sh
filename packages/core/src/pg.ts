@@ -100,12 +100,14 @@ export async function createFromTemplate(cfg: PgCfg, db: string, src: string): P
   });
 }
 
-export async function createEmpty(cfg: PgCfg, db: string): Promise<void> {
+export async function createEmpty(cfg: PgCfg, db: string, opts: { collateC?: boolean } = {}): Promise<void> {
   assertSqlIdent(db);
   await withPg(cfg, 'postgres', async (c) => {
     const exists = await c.query('SELECT 1 FROM pg_database WHERE datname = $1', [db]);
     if ((exists.rowCount ?? 0) > 0) return;
-    await c.query(`CREATE DATABASE "${db}" OWNER "${assertSqlIdent(cfg.user, 'пользователь БД')}" ENCODING 'UTF8' TEMPLATE template0`);
+    // LC_COLLATE 'C' — what Odoo's own restore (`_create_empty_database`) uses: more useful indexes.
+    const collate = opts.collateC ? ` LC_COLLATE 'C'` : '';
+    await c.query(`CREATE DATABASE "${db}" OWNER "${assertSqlIdent(cfg.user, 'пользователь БД')}" ENCODING 'UTF8'${collate} TEMPLATE template0`);
   });
 }
 

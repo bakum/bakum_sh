@@ -1,6 +1,7 @@
 // Odoo 16–18 in the «Odoo in Docker» preset (D38): for each series a tiny repository with one module, a project from
 // the wizard's proposal, Production (no demo) and Development (demo) builds, then a backup of Production restored
-// through `odoo db load -n`. Pulls odoo:16.0 / 17.0 / 18.0. Usage: node check-odoo-versions.mjs [16.0 17.0 …]
+// with neutralization (D61: dump.sql through psql, then `odoo neutralize`). Pulls odoo:16.0 / 17.0 / 18.0.
+// Usage: node check-odoo-versions.mjs [16.0 17.0 …]
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -104,7 +105,7 @@ async function checkVersion(win, version) {
   const dev = await build(win, id, devBr, 'Development');
   if (dev) check('Development с демо', sql(id, dev.dbName, "SELECT demo FROM ir_module_module WHERE name='base'") === 't');
 
-  // 3. A backup of Production (`odoo db dump`) restored with neutralization (`odoo db load -f -n`).
+  // 3. A backup of Production (`odoo db dump`) restored with neutralization (D61).
   if (prod) {
     const cname = containerOf(prod.id);
     const inC = `/tmp/${id}-backup.zip`;
@@ -114,7 +115,7 @@ async function checkVersion(win, version) {
     check('дамп Production', fs.existsSync(file) && fs.statSync(file).size > 0);
     const ij = await waitJob(win, (await bm(win, 'backups.import', { projectId: id, path: file })).jobId);
     const b = await lastBuild(win, prodBr.id);
-    check('импорт бэкапа (odoo db load -n)', ij.status === 'success' && b.status === 'running', ij.error ?? b.errorMessage ?? '');
+    check('импорт бэкапа .zip', ij.status === 'success' && b.status === 'running', ij.error ?? b.errorMessage ?? '');
     if (b.status === 'running') {
       const neutralized = sql(id, b.dbName, "SELECT value FROM ir_config_parameter WHERE key='database.is_neutralized'");
       check('БД нейтрализована', neutralized.toLowerCase() === 'true', neutralized || '(нет параметра)');

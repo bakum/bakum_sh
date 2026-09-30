@@ -22,7 +22,6 @@ import { bumpedModules, changedModules, matchInstalled, modulesFromTree, parseMo
 import {
   assertOdooOk,
   codeVars,
-  dbSubcommand,
   demoArgs,
   neutralizeCommand,
   runOdooOneOff,
@@ -31,7 +30,7 @@ import {
   testsFailed,
   type OneOffResult,
 } from './odoo-cli';
-import { copyDatabaseByDump, restoreDumpFile } from '../docker/pg-tools';
+import { copyDatabaseByDump, restoreDumpFile, restoreSqlStream } from '../docker/pg-tools';
 import { buildContainers, dropBuildResources, markDropped } from './drop';
 import { buildUrl, configHash, liveBuild, testsLogPath } from './view';
 import { branchByName, branchRow } from '../services/branch-rows';
@@ -41,7 +40,7 @@ import { notify } from '../services/notify';
 import { audit } from '../services/audit';
 import { bus } from '../events';
 import { listeningPorts } from '../util/ports';
-import { toPosix } from '../util/paths';
+import { extractEntry, openZip } from '../util/zip';
 import { copyTree } from '../util/fs-tree';
 import { commits, computeCodeLag } from '../services/code-lag';
 import { log as coreLog } from '../util/logger';
@@ -238,9 +237,72 @@ async function restoreDump(r: Run, file: string): Promise<void> {
   }
   if (res.exitCode !== 0) r.log(`[warn] pg_restore завершился с кодом ${res.exitCode}: часть объектов не восстановлена (обычно роли и права сервера прода), подробности выше`);
   r.log(`восстановлено: таблиц ${fp.tables}, установленных модулей ${fp.modules}`);
-  const { cmd, env } = neutralizeCommand(cfg, build.dbName, vars(r));
-  const n = await runOdooOneOff({ composeFile: r.composeFile, project: build.composeProject, cmd, env, log: r.log, signal: r.jc.signal });
+  await neutralize(r);
+}
+
+async function neutralize(r: Run): Promise<void> {
+  const { cmd, env } = neutralizeCommand(r.cfg, r.build.dbName, vars(r));
+  const n = await runOdooOneOff({ composeFile: r.composeFile, project: r.build.composeProject, cmd, env, log: r.log, signal: r.jc.signal });
   assertOdooOk(n, 'Нейтрализация (odoo neutralize)');
+}
+
+const mb = (bytes: number): string => `${Math.round(bytes / 1024 / 1024)} МБ`;
+
+/**
+ * Odoo backup `.zip` (dump.sql + filestore/, spec 8.4): what `odoo db load -f -n` does, but the archive is read by Core
+ * on the host (D61). dump.sql streams into psql through the container's stdin, filestore is unpacked straight into the
+ * build's folder, then `odoo neutralize`. Odoo itself would read the archive through the Docker Desktop mount of the
+ * Windows folder (9p), which fails on big backups with «Cannot allocate memory».
+ */
+async function restoreOdooZip(r: Run, file: string): Promise<void> {
+  const { cfg, build } = r;
+  const name = path.basename(file);
+  const zip = await openZip(file).catch((err: Error) => {
+    throw new BmError('RESTORE_FAILED', `Не удалось открыть ${name} как zip-архив: ${err.message}. Проверьте, что файл скачан целиком.`);
+  });
+  try {
+    const dump = zip.entries.find((e) => e.fileName === 'dump.sql');
+    if (!dump) throw new BmError('RESTORE_FAILED', `В ${name} нет dump.sql: это не бэкап Odoo (нужен zip из менеджера баз Odoo или odoo db dump).`);
+    const files = zip.entries.filter((e) => e.fileName.startsWith('filestore/') && !e.fileName.endsWith('/'));
+    // A retry starts over: a half-restored database is not trusted.
+    await dropOwnDb(r, build.dbName);
+    await pg.createEmpty(cfg.postgres, build.dbName, { collateC: true });
+    r.log(`psql ← dump.sql из ${name} (${mb(dump.uncompressedSize)}) → ${build.dbName}`);
+    const res = await restoreSqlStream({
+      cfg,
+      buildId: build.id,
+      db: build.dbName,
+      name: 'dump.sql',
+      size: dump.uncompressedSize,
+      sql: () => zip.open(dump),
+      log: r.log,
+      signal: r.jc.signal,
+    });
+    if (res.exitCode !== 0) throw new BmError('RESTORE_FAILED', `psql завершился с кодом ${res.exitCode}: dump.sql не загружен в ${build.dbName}. См. build.log.`);
+    const fp = await pg.dbFingerprint(cfg.postgres, build.dbName);
+    if (fp.modules <= 0) throw new BmError('RESTORE_FAILED', `После загрузки dump.sql в ${build.dbName} нет установленных модулей Odoo: архив не является бэкапом БД Odoo. См. build.log.`);
+    r.log(`восстановлено: таблиц ${fp.tables}, установленных модулей ${fp.modules}`);
+
+    const dst = path.join(cfg.runtime.filestore.hostDir, build.dbName);
+    if (fs.existsSync(dst)) {
+      assertOwned(cfg, { kind: 'filestore', path: dst, db: build.dbName }, ownedRegistry(r.ctx, cfg.id));
+      r.log(`повтор шага: удаляю ${dst}`);
+      await fs.promises.rm(dst, { recursive: true, force: true });
+    }
+    await fs.promises.mkdir(dst, { recursive: true });
+    let bytes = 0;
+    for (const e of files) {
+      if (r.jc.signal.aborted) throw new BmError('CANCELLED', 'Операция отменена');
+      await extractEntry(zip, e, dst, e.fileName.slice('filestore/'.length)).catch((err: Error) => {
+        throw new BmError('RESTORE_FAILED', `Не удалось распаковать ${e.fileName} из ${name}: ${err.message}`);
+      });
+      bytes += e.uncompressedSize;
+    }
+    r.log(`filestore: файлов ${files.length}, ${mb(bytes)} → ${dst}`);
+  } finally {
+    zip.close();
+  }
+  await neutralize(r);
 }
 
 async function stepDatabase(r: Run): Promise<string> {
@@ -254,23 +316,8 @@ async function stepDatabase(r: Run): Promise<string> {
     assertOwned(cfg, { kind: 'db', name: build.dbName }, reg);
     patchBuild(r, { createdResources: { ...build.createdResources, db: true, filestore: true } });
     if (isDumpBackup(file)) await restoreDump(r, file);
-    else {
-      const inContainer = `/bm-backup/${path.basename(file)}`;
-      // spec 8.4: `odoo db load -f -n` — restore DB + filestore and neutralize in one Odoo call (no -c before `db`).
-      const { cmd, env } = dbSubcommand(cfg, ['load', '-f', '-n', build.dbName, inContainer], vars(r));
-      const res = await runOdooOneOff({
-        composeFile: r.composeFile,
-        project: build.composeProject,
-        cmd,
-        env,
-        volumes: [`${toPosix(file)}:${inContainer}:ro`],
-        log: r.log,
-        signal: r.jc.signal,
-      });
-      assertOdooOk(res, 'Восстановление бэкапа (odoo db load)');
-      if (!(await pg.dbExists(cfg.postgres, build.dbName))) throw new BmError('RESTORE_FAILED', `После odoo db load БД ${build.dbName} не появилась. См. build.log.`);
-    }
-    // Mandatory neutralization is part of `load -n`; then postRestore SQL and its verification (spec 8.4).
+    else await restoreOdooZip(r, file);
+    // Neutralized by now; then postRestore SQL and its verification (spec 8.4).
     for (const sqlFile of cfg.production.postRestore.sql) {
       if (!fs.existsSync(sqlFile)) throw new BmError('NO_SQL', `postRestore.sql: файл ${sqlFile} не найден`);
       r.log(`postRestore: ${sqlFile}`);
@@ -343,7 +390,7 @@ async function stepFilestore(r: Run): Promise<string> {
   if (build.kind === 'update') skip('filestore живой сборки сохраняется');
   const dst = path.join(cfg.runtime.filestore.hostDir, build.dbName);
   if (build.dbSource.startsWith('backup:')) {
-    if (!isDumpBackup(build.dbSource)) skip('восстановлен вместе с БД (odoo db load)');
+    if (!isDumpBackup(build.dbSource)) skip('распакован из бэкапа на шаге database');
     await fs.promises.mkdir(dst, { recursive: true });
     r.log('[warn] в .dump нет filestore: вложения и картинки прода в этой сборке не откроются (нужен бэкап .zip)');
     return 'в .dump нет filestore — пустой каталог';

@@ -1,4 +1,5 @@
 import Docker from 'dockerode';
+import type { Writable } from 'node:stream';
 import { execa } from 'execa';
 import { BmError } from '@bm/shared';
 
@@ -24,12 +25,18 @@ export interface RunResult {
   stderr: string;
 }
 
+/** The reader of our stdin is gone (the process exited): its exit code tells why, not this error. */
+const STDIN_CLOSED = new Set(['EPIPE', 'ECONNRESET', 'EOF', 'ERR_STREAM_PREMATURE_CLOSE', 'ERR_STREAM_DESTROYED', 'ERR_STREAM_WRITE_AFTER_END']);
+export const isStdinClosed = (err: unknown): boolean => STDIN_CLOSED.has((err as { code?: string } | null)?.code ?? '');
+
 /**
  * `docker …` CLI (compose, run). Argument arrays only. Output lines are streamed to `onLine` (build log).
+ * `feed` writes the process's stdin (`docker run -i`); when it fails for a reason of its own (not the process having
+ * exited), the process is killed and that error thrown.
  */
 export async function dockerCli(
   args: string[],
-  opts: { cwd?: string; onLine?: (line: string) => void; timeoutMs?: number; signal?: AbortSignal; input?: string; env?: Record<string, string> } = {},
+  opts: { cwd?: string; onLine?: (line: string) => void; timeoutMs?: number; signal?: AbortSignal; input?: string; feed?: (stdin: Writable) => Promise<void>; env?: Record<string, string> } = {},
 ): Promise<RunResult> {
   const sub = execa('docker', args, {
     cwd: opts.cwd,
@@ -55,8 +62,18 @@ export async function dockerCli(
       if (buf) opts.onLine!(buf);
     });
   }
+  let feedErr: unknown = null;
+  const fed = opts.feed && sub.stdin
+    ? opts.feed(sub.stdin).catch((err: unknown) => {
+        if (isStdinClosed(err)) return;
+        feedErr = err;
+        sub.kill();
+      })
+    : null;
   const r = await sub;
+  await fed;
   if (r.isCanceled) throw new BmError('CANCELLED', 'Операция отменена');
+  if (feedErr) throw feedErr;
   return { exitCode: r.exitCode ?? -1, stdout: String(r.stdout ?? ''), stderr: String(r.stderr ?? '') };
 }
 

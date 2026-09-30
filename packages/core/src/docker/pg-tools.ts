@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
+import { Transform, type Readable, type Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { BmError, type ProjectConfig } from '@bm/shared';
-import { dockerCli, type RunResult } from './client';
+import { dockerCli, isStdinClosed, type RunResult } from './client';
 import { externalPgContainer } from './postgres';
 import { toPosix } from '../util/paths';
 
@@ -22,6 +24,8 @@ interface PgToolOpts {
   script: string;
   args: string[];
   volumes?: string[];
+  /** Writes the container's stdin (`docker run -i`). */
+  feed?: (stdin: Writable) => Promise<void>;
   log: (l: string) => void;
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -53,6 +57,7 @@ export async function runPgTool(o: PgToolOpts): Promise<RunResult> {
     'PGPORT=5432',
     '-e',
     `PGUSER=${pg.user}`,
+    ...(o.feed ? ['-i'] : []),
     ...(o.volumes ?? []).flatMap((v) => ['-v', v]),
     '--entrypoint',
     'sh',
@@ -63,7 +68,7 @@ export async function runPgTool(o: PgToolOpts): Promise<RunResult> {
     ...o.args,
   ];
   try {
-    return await dockerCli(args, { env: pg.password ? { PGPASSWORD: pg.password } : {}, onLine: o.log, signal: o.signal, timeoutMs: o.timeoutMs ?? 6 * 3600_000 });
+    return await dockerCli(args, { env: pg.password ? { PGPASSWORD: pg.password } : {}, onLine: o.log, feed: o.feed, signal: o.signal, timeoutMs: o.timeoutMs ?? 6 * 3600_000 });
   } catch (err) {
     // Cancelled: the docker CLI is gone, the container may still run.
     await dockerCli(['rm', '-f', name]).catch(() => {});
@@ -98,5 +103,43 @@ export async function restoreDumpFile(o: Omit<PgToolOpts, 'script' | 'args' | 'v
     volumes: [`${toPosix(o.file)}:${inContainer}:ro`],
     script: 'pg_restore --no-owner --no-acl -j 4 -d "$1" "$2"',
     args: [o.db, inContainer],
+  });
+}
+
+/**
+ * Plain SQL (`dump.sql` of an Odoo backup, D61) into an empty database. psql reads it from the container's stdin, so
+ * nothing goes through the Docker Desktop mount of Windows folders. As in Odoo's `restore_db`, psql goes on past SQL
+ * errors (they reach the log) and query results are discarded; the caller checks the database content. Progress is
+ * logged every 10% of `size` (uncompressed bytes).
+ */
+export async function restoreSqlStream(
+  o: Omit<PgToolOpts, 'script' | 'args' | 'volumes' | 'feed'> & { db: string; sql: () => Promise<Readable>; size: number; name: string },
+): Promise<RunResult> {
+  return runPgTool({
+    ...o,
+    script: 'psql -X -q -d "$1" >/dev/null',
+    args: [o.db],
+    feed: async (stdin) => {
+      const src = await o.sql();
+      let done = 0;
+      let next = 10;
+      const progress = new Transform({
+        transform(chunk: Buffer, _enc, cb) {
+          done += chunk.length;
+          const pct = o.size > 0 ? Math.floor((done * 100) / o.size) : 0;
+          if (pct >= next && pct < 100) {
+            o.log(`  ${o.name}: ${pct}%`);
+            next = pct - (pct % 10) + 10;
+          }
+          cb(null, chunk);
+        },
+      });
+      try {
+        await pipeline(src, progress, stdin);
+      } catch (err) {
+        if (isStdinClosed(err)) throw err;
+        throw new BmError('BACKUP_READ', `Не удалось прочитать ${o.name} из архива: ${(err as Error).message}`);
+      }
+    },
   });
 }
