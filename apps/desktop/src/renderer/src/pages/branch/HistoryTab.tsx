@@ -26,7 +26,7 @@ import { call, errorText } from '../../lib/bm';
 import { fmtDate, fmtDuration, shortSha, TRIGGER_LABELS } from '../../lib/format';
 import { shellOpen } from '../BranchPage';
 
-const PAGE = 10;
+const PAGE = 5;
 
 function dbSourceText(s: string): string {
   if (s.startsWith('backup:')) return `из бэкапа ${s.slice(7)}`;
@@ -50,7 +50,11 @@ export function HistoryTab({ branch }: { branch: BranchView }) {
   const [page, setPage] = useState(1);
   const q = useBm('builds.list', { branchId: branch.id, offset: (page - 1) * PAGE, limit: PAGE }, { refetchInterval: branch.activeBuild ? 2000 : 8000 });
   const items = q.data?.items ?? [];
-  if (q.data && !items.length) {
+  const total = q.data?.total ?? 0;
+  const pages = Math.ceil(total / PAGE);
+  // Builds were dropped and the page is gone: back to the last one.
+  if (q.data && total && page > pages) setPage(pages);
+  if (q.data && !total) {
     return (
       <Alert color="gray" variant="light">
         Сборок ещё не было. Нажмите Rebuild, чтобы собрать ветку по правилам стадии {branch.stage}.
@@ -59,6 +63,12 @@ export function HistoryTab({ branch }: { branch: BranchView }) {
   }
   return (
     <Stack>
+      <Group justify="space-between" data-testid="history-header">
+        <Text size="sm" c="dimmed">
+          Сборок: {total}
+        </Text>
+        {pages > 1 && <Pagination total={pages} value={page} onChange={setPage} size="sm" />}
+      </Group>
       <Timeline bulletSize={30} lineWidth={2}>
         {items.map((b) => (
           <Timeline.Item key={b.id} bullet={<Avatar size={28} radius="xl" color="plum">{(b.commits[0]?.author ?? '?').slice(0, 1).toUpperCase()}</Avatar>}>
@@ -66,7 +76,11 @@ export function HistoryTab({ branch }: { branch: BranchView }) {
           </Timeline.Item>
         ))}
       </Timeline>
-      {(q.data?.total ?? 0) > PAGE && <Pagination total={Math.ceil(q.data!.total / PAGE)} value={page} onChange={setPage} size="sm" />}
+      {pages > 1 && (
+        <Group justify="flex-end">
+          <Pagination total={pages} value={page} onChange={setPage} size="sm" />
+        </Group>
+      )}
     </Stack>
   );
 }
