@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ActionIcon,
   Alert,
@@ -26,6 +26,7 @@ import { HEADER_BG } from '../theme';
 import classes from './Shell.module.css';
 import { AppFooter } from './AppFooter';
 import { UpdateBanner } from './UpdateBanner';
+import { ErrorBoundary } from './ErrorBoundary';
 
 const JOB_LABELS: Record<string, string> = {
   build: 'Сборка',
@@ -44,6 +45,7 @@ const JOB_LABELS: Record<string, string> = {
 export function Shell() {
   const { pid } = useParams();
   const nav = useNavigate();
+  const loc = useLocation();
   const projects = useBm('projects.list', {});
   const status = useBm('system.status', {}, { refetchInterval: 15000 });
   const jobs = useBm('jobs.list', { active: true }, { refetchInterval: 5000 });
@@ -166,7 +168,9 @@ export function Shell() {
       )}
       <UpdateBanner />
       <Box className={classes.main}>
-        <Outlet />
+        <ErrorBoundary resetKey={loc.pathname} scope="page">
+          <Outlet />
+        </ErrorBoundary>
       </Box>
       <AppFooter />
     </Box>

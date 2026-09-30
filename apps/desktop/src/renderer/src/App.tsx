@@ -7,6 +7,7 @@ import { theme } from './theme';
 import { EventsProvider } from './lib/events';
 import { useBm } from './lib/query';
 import { Shell } from './components/Shell';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Welcome } from './pages/Welcome';
 import { AddProject } from './pages/AddProject';
 import { SettingsPage } from './pages/Settings';
@@ -29,23 +30,25 @@ export function App() {
         <EventsProvider>
           <HashRouter>
             <RouteMemory />
-            <Routes>
-              <Route path="/welcome" element={<Welcome />} />
-              <Route element={<Shell />}>
-                <Route path="/" element={<Home />} />
-                <Route path="/projects/new" element={<AddProject />} />
-                <Route path="/projects/:pid/branches" element={<BranchesPage />} />
-                <Route path="/projects/:pid/branches/:bid" element={<BranchesPage />} />
-                <Route path="/projects/:pid/branches/:bid/:tab" element={<BranchesPage />} />
-                <Route path="/projects/:pid/builds" element={<BuildsPage />} />
-                <Route path="/projects/:pid/audit" element={<AuditPage />} />
-                <Route path="/projects/:pid/settings" element={<SettingsPage />} />
-                <Route path="/projects/:pid/settings/:tab" element={<SettingsPage />} />
-                <Route path="/settings/app" element={<SettingsPage />} />
-                <Route path="/status" element={<StatusPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
-            </Routes>
+            <ErrorBoundary scope="root">
+              <Routes>
+                <Route path="/welcome" element={<Welcome />} />
+                <Route element={<Shell />}>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/projects/new" element={<AddProject />} />
+                  <Route path="/projects/:pid/branches" element={<BranchesPage />} />
+                  <Route path="/projects/:pid/branches/:bid" element={<BranchesPage />} />
+                  <Route path="/projects/:pid/branches/:bid/:tab" element={<BranchesPage />} />
+                  <Route path="/projects/:pid/builds" element={<BuildsPage />} />
+                  <Route path="/projects/:pid/audit" element={<AuditPage />} />
+                  <Route path="/projects/:pid/settings" element={<SettingsPage />} />
+                  <Route path="/projects/:pid/settings/:tab" element={<SettingsPage />} />
+                  <Route path="/settings/app" element={<SettingsPage />} />
+                  <Route path="/status" element={<StatusPage />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Route>
+              </Routes>
+            </ErrorBoundary>
           </HashRouter>
         </EventsProvider>
       </QueryClientProvider>
