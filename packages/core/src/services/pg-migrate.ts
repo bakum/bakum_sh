@@ -172,7 +172,7 @@ export async function pgMigrateExecutor(ctx: Ctx, job: JobRow, jc: JobContext): 
     }
     // Odoo writes to its database: live builds are stopped so each copy is consistent.
     for (const x of live) {
-      const cs = await buildContainers(x.id);
+      const cs = await buildContainers(x);
       if (!cs.some((c) => !c.oneoff && (c.state === 'running' || c.state === 'restarting'))) continue;
       running.push(x);
       jc.log(`docker compose stop ${x.composeProject}`);

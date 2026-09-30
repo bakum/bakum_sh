@@ -87,18 +87,20 @@ export function subscribeBuildLog(ctx: Ctx, buildId: number, kind: 'build' | 'te
 }
 
 /** The container to show for a build: its service container, else a running one-off step container. */
-async function containerFor(buildId: number): Promise<string | null> {
-  const cs = await buildContainers(buildId);
+async function containerFor(ctx: Ctx, buildId: number): Promise<string | null> {
+  const b = buildRow(ctx, buildId);
+  if (!b) return null;
+  const cs = await buildContainers(b);
   return (cs.find((c) => !c.oneoff) ?? cs.find((c) => c.state === 'running'))?.id ?? null;
 }
 
 /** Subscription `container.log`: `docker logs -f` of the build container (odoo.log). */
-export function subscribeContainerLog(_ctx: Ctx, buildId: number, emit: (d: unknown) => void): () => void {
+export function subscribeContainerLog(ctx: Ctx, buildId: number, emit: (d: unknown) => void): () => void {
   const bt = batcher(emit);
   let closed = false;
   let stream: NodeJS.ReadableStream | null = null;
   void (async () => {
-    const id = await containerFor(buildId).catch(() => null);
+    const id = await containerFor(ctx, buildId).catch(() => null);
     if (closed) return;
     if (!id) {
       bt.reset(['(контейнер сборки не найден: сборка остановлена, отброшена или ещё не поднята)']);
@@ -125,11 +127,11 @@ export function subscribeContainerLog(_ctx: Ctx, buildId: number, emit: (d: unkn
 }
 
 /** Subscription `stats`: live CPU / RAM of the build container (the Monitor tab reads `monitor.get`, D45). */
-export function subscribeStats(_ctx: Ctx, buildId: number, emit: (d: unknown) => void): () => void {
+export function subscribeStats(ctx: Ctx, buildId: number, emit: (d: unknown) => void): () => void {
   let closed = false;
   let stream: NodeJS.ReadableStream | null = null;
   void (async () => {
-    const id = await containerFor(buildId);
+    const id = await containerFor(ctx, buildId);
     if (!id || closed) return;
     stream = (await docker.getContainer(id).stats({ stream: true })) as unknown as NodeJS.ReadableStream;
     let buf = '';
@@ -164,7 +166,7 @@ export async function readLogs(ctx: Ctx, p: { buildId: number; kind: 'build' | '
     const file = b.logPath && (p.kind === 'tests' ? testsLogPath(b.logPath) : b.logPath);
     return { lines: file ? tailLines(file, p.tail ?? 500).lines : [], path: file };
   }
-  const id = await containerFor(b.id);
+  const id = await containerFor(ctx, b.id);
   if (!id) return { lines: [], path: null };
   const buf = (await docker.getContainer(id).logs({ stdout: true, stderr: true, tail: p.tail ?? 500, follow: false })) as unknown as Buffer;
   const out: string[] = [];

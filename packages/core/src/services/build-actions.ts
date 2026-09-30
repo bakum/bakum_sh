@@ -236,7 +236,7 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
     case 'terminal':
     case 'bash':
     case 'odoo-shell': {
-      const c = await serviceContainer(needBuild().id);
+      const c = await serviceContainer(needBuild());
       if (!c) throw new BmError('NOT_RUNNING', 'Контейнер сборки не найден: запустите сборку (Start)');
       const argv =
         p.target === 'odoo-shell'

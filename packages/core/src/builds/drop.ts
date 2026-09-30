@@ -17,9 +17,12 @@ import { nowIso } from '../util/time';
 
 type Log = (line: string) => void;
 
-/** Containers (service and one-off) labelled with this build. */
-export async function buildContainers(buildId: number): Promise<{ id: string; name: string; labels: Record<string, string>; state: string; oneoff: boolean }[]> {
-  const list = await docker.listContainers({ all: true, filters: { label: [`bm.build=${buildId}`] } });
+/**
+ * Containers (service and one-off) labelled with this build. Build ids are unique only within one registry, and
+ * profiles (BM_PROFILE) share Docker: the project label keeps a dev-profile build off the working profile's containers.
+ */
+export async function buildContainers(b: { projectId: string; id: number }): Promise<{ id: string; name: string; labels: Record<string, string>; state: string; oneoff: boolean }[]> {
+  const list = await docker.listContainers({ all: true, filters: { label: [`bm.project=${b.projectId}`, `bm.build=${b.id}`] } });
   return list.map((c) => ({
     id: c.Id,
     name: (c.Names[0] ?? '').replace(/^\//, ''),
@@ -38,7 +41,7 @@ export async function buildContainers(buildId: number): Promise<{ id: string; na
 export async function dropBuildResources(ctx: Ctx, cfg: ProjectConfig, b: BuildRow, log: Log): Promise<void> {
   const reg = ownedRegistry(ctx, cfg.id);
   // 1. Containers of this build (service container if it serves this build, leftover one-off containers).
-  for (const c of await buildContainers(b.id)) {
+  for (const c of await buildContainers(b)) {
     assertOwned(cfg, { kind: 'container', name: c.name, labels: c.labels }, reg);
     // D55: after a recreate the container's anonymous volumes are no longer its own; `down -v` leaves them behind.
     const volumes = await anonymousVolumes(c.id);

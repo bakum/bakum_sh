@@ -47,7 +47,7 @@ export function failInterruptedBuilds(ctx: Ctx, stale: JobRow[]): void {
     const restartOf = dbStep?.status === 'running' && b.sourceBuildId ? b.sourceBuildId : b.kind === 'update' ? b.previousBuildId : null;
     // `update` stops the live container before -u: after an interruption it is started again (spec 8.3).
     if (restartOf) {
-      void buildContainers(restartOf)
+      void buildContainers({ projectId: b.projectId, id: restartOf })
         .then((cs) => Promise.all(cs.filter((c) => !c.oneoff && c.state !== 'running').map((c) => docker.getContainer(c.id).start())))
         .catch((err) => log().warn({ err }, 'restart copy source failed'));
     }

@@ -51,10 +51,10 @@ export async function compose(ctx: Ctx, b: BuildRow, args: string[], jc: JobCont
   await refreshContainers(ctx).catch(() => {});
 }
 
-async function waitHealthy(buildId: number, timeoutSec: number, jc: JobContext): Promise<void> {
+async function waitHealthy(b: { projectId: string; id: number }, timeoutSec: number, jc: JobContext): Promise<void> {
   const until = Date.now() + timeoutSec * 1000;
   while (Date.now() < until) {
-    const c = (await buildContainers(buildId)).find((x) => !x.oneoff);
+    const c = (await buildContainers(b)).find((x) => !x.oneoff);
     if (c) {
       const info = await docker.getContainer(c.id).inspect();
       if (info.State.Health?.Status === 'healthy') return;
@@ -109,7 +109,7 @@ async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void>
   const hash = writeLiveCompose(ctx, b);
   jc.log('docker compose up -d (пересоздание контейнера, БД не трогается)');
   await compose(ctx, b, ['up', '-d', '--remove-orphans'], jc);
-  await waitHealthy(b.id, cfg.runtime.healthcheck.timeoutSec, jc);
+  await waitHealthy(b, cfg.runtime.healthcheck.timeoutSec, jc);
   ctx.db.update(builds).set({ configHash: hash, status: 'running' }).where(eq(builds.id, b.id)).run();
   done(ctx, b, 'applyConfig');
 }
@@ -182,7 +182,7 @@ async function testsJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
       await copyDatabaseByDump({ cfg, buildId: b.id, src: b.dbName, dst: testDb, log: jc.log, signal: jc.signal });
     } else {
       // CREATE DATABASE … TEMPLATE needs a source without connections: the running build is stopped for the copy.
-      const running = (await buildContainers(b.id)).some((c) => !c.oneoff && c.state === 'running');
+      const running = (await buildContainers(b)).some((c) => !c.oneoff && c.state === 'running');
       if (running) await compose(ctx, b, ['stop'], jc);
       try {
         tl(`CREATE DATABASE "${testDb}" TEMPLATE "${b.dbName}"`);

@@ -317,7 +317,7 @@ async function stepDatabase(r: Run): Promise<string> {
       return `копия ${src.dbName} (сборка #${src.number}) через pg_dump за ${Math.round((Date.now() - t0) / 1000)} с`;
     }
     // The source Odoo is stopped for the copy (connections block CREATE DATABASE … TEMPLATE).
-    const srcContainer = (await buildContainers(src.id)).find((c) => !c.oneoff && c.state === 'running');
+    const srcContainer = (await buildContainers(src)).find((c) => !c.oneoff && c.state === 'running');
     if (srcContainer) {
       assertOwned(cfg, { kind: 'container', name: srcContainer.name, labels: srcContainer.labels }, reg);
       r.log(`stop ${srcContainer.name} на время копирования`);
@@ -560,7 +560,7 @@ function checkTests(r: Run, where: string): string {
 /** Stops the live container before `-u` on the shared DB (`update`, spec 8.3). */
 async function stopLiveForUpdate(r: Run): Promise<void> {
   if (!r.prevLive) return;
-  for (const c of await buildContainers(r.prevLive.id)) {
+  for (const c of await buildContainers(r.prevLive)) {
     if (c.oneoff || c.state !== 'running') continue;
     assertOwned(r.cfg, { kind: 'container', name: c.name, labels: c.labels }, ownedRegistry(r.ctx, r.cfg.id));
     r.log(`stop ${c.name}`);
@@ -721,7 +721,7 @@ async function waitHealthy(r: Run, timeoutSec: number): Promise<void> {
   let last = '';
   while (Date.now() < until) {
     if (r.jc.signal.aborted) throw new BmError('CANCELLED', 'Операция отменена');
-    const c = (await buildContainers(r.build.id)).find((x) => !x.oneoff);
+    const c = (await buildContainers(r.build)).find((x) => !x.oneoff);
     if (c) {
       const info = await docker.getContainer(c.id).inspect();
       const h = info.State.Health?.Status ?? (info.State.Running ? 'running' : info.State.Status);
@@ -805,7 +805,7 @@ async function restorePrevious(r: Run): Promise<void> {
       r.log('возврат живой сборки: docker compose up с прежней конфигурацией');
       await dockerCli(['compose', '-p', prev.composeProject, '-f', r.liveComposeFile, 'up', '-d', '--remove-orphans'], { onLine: r.log });
     } else if (r.build.kind === 'update' || upStarted) {
-      const c = (await buildContainers(prev.id)).find((x) => !x.oneoff && x.state !== 'running');
+      const c = (await buildContainers(prev)).find((x) => !x.oneoff && x.state !== 'running');
       if (c) {
         r.log(`запуск ${c.name}`);
         await docker.getContainer(c.id).start().catch(() => {});
@@ -914,8 +914,8 @@ export async function runBuild(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
 }
 
 /** Container name of the service of a live build (Shell / Terminal). */
-export async function serviceContainer(buildId: number): Promise<{ id: string; name: string } | null> {
-  const c = (await buildContainers(buildId)).find((x) => !x.oneoff);
+export async function serviceContainer(b: { projectId: string; id: number }): Promise<{ id: string; name: string } | null> {
+  const c = (await buildContainers(b)).find((x) => !x.oneoff);
   return c ? { id: c.id, name: c.name } : null;
 }
 

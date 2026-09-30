@@ -117,7 +117,7 @@ async function removeDbAndFiles(ctx: Ctx, cfg: ProjectConfig, db: string, log: (
 
 /** Stops the build's service container for `fn` (open connections block TEMPLATE / RENAME) and starts it again. */
 async function withStopped<T>(ctx: Ctx, cfg: ProjectConfig, b: BuildRow, log: (l: string) => void, fn: () => Promise<T>): Promise<T> {
-  const c = (await buildContainers(b.id)).find((x) => !x.oneoff && x.state === 'running');
+  const c = (await buildContainers(b)).find((x) => !x.oneoff && x.state === 'running');
   if (c) {
     assertOwned(cfg, { kind: 'container', name: c.name, labels: c.labels }, ownedRegistry(ctx, cfg.id));
     log(`stop ${c.name}`);
