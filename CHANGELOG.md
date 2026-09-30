@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.13.13] — 2026-09-30
+
 ### Исправлено
 - Импорт большого бэкапа `.zip` (Rebuild Production из бэкапа) падал на шаге database с
   `OSError: [Errno 12] Cannot allocate memory`: Docker Desktop не справлялся с чтением архива из папки Windows. Теперь
