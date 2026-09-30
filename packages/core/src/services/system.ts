@@ -5,6 +5,7 @@ import type { Ctx } from '../context';
 import { runtimeState } from '../state';
 import { listeningPorts } from '../util/ports';
 import { pgPing } from '../pg';
+import { ensureManagedPostgres } from '../docker/postgres';
 import { summaries } from './projects';
 import { outdatedSkills } from './agents';
 import { bus } from '../events';
@@ -72,6 +73,9 @@ async function gitStatus(): Promise<{ ok: boolean; text: string }> {
   return s;
 }
 
+const HEAL_PAUSE_MS = 5 * 60_000;
+const lastHeal = new Map<string, number>();
+
 export async function systemStatus(ctx: Ctx, refresh: boolean): Promise<SystemStatus> {
   if (refresh && runtimeState.docker.ok && Date.now() - lastReconcile > 5000) {
     lastReconcile = Date.now();
@@ -85,6 +89,18 @@ export async function systemStatus(ctx: Ctx, refresh: boolean): Promise<SystemSt
         runtimeState.postgres.set(p.id, { ok: true, text: `${p.config.postgres.host}:${p.config.postgres.port}, PostgreSQL ${v}` });
       } catch (err) {
         runtimeState.postgres.set(p.id, { ok: false, text: (err as Error).message });
+        // The app's own Postgres heals itself (container stopped, port unpublished or reserved by Windows, D62); the
+        // result lands in runtimeState and a moved port reaches the UI through config.changed.
+        // Status polls every 10 s: one attempt per project in HEAL_PAUSE_MS, so a failing heal does not recreate the
+        // container over and over.
+        const id = p.id;
+        if (p.config.postgres.mode === 'managed' && p.config.enabled && Date.now() - (lastHeal.get(id) ?? 0) > HEAL_PAUSE_MS) {
+          lastHeal.set(id, Date.now());
+          void ensureManagedPostgres(ctx, p.config).then(
+            () => bus.emit({ type: 'system.changed' }),
+            (e) => runtimeState.postgres.set(id, { ok: false, text: (e as Error).message }),
+          );
+        }
       }
     }
   }

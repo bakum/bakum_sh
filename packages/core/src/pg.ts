@@ -13,6 +13,17 @@ function assertLocal(cfg: PgCfg): void {
   }
 }
 
+/**
+ * `localhost` resolves to ::1 and 127.0.0.1: when both refuse, Node throws an AggregateError with an empty message
+ * (the status page showed «()»), so the codes of the inner errors are used instead.
+ */
+function connectErrorText(err: unknown): string {
+  const e = err as Error & { code?: string; errors?: Array<Error & { code?: string; address?: string; port?: number }> };
+  if (e.message) return e.message;
+  const inner = (e.errors ?? []).map((x) => x.message || [x.code, x.address && `${x.address}:${x.port}`].filter(Boolean).join(' '));
+  return inner.filter(Boolean).join('; ') || e.code || String(err);
+}
+
 export async function withPg<T>(cfg: PgCfg, database: string, fn: (c: pg.Client) => Promise<T>): Promise<T> {
   assertLocal(cfg);
   if (!cfg.password) {
@@ -32,7 +43,7 @@ export async function withPg<T>(cfg: PgCfg, database: string, fn: (c: pg.Client)
   } catch (err) {
     throw new BmError(
       'PG_CONNECT',
-      `Нет подключения к Postgres ${cfg.host}:${cfg.port} (${(err as Error).message}). Проверьте, что контейнер Postgres проекта запущен и порт опубликован.`,
+      `Нет подключения к Postgres ${cfg.host}:${cfg.port} (${connectErrorText(err)}). Проверьте, что контейнер Postgres проекта запущен и порт опубликован.`,
     );
   }
   client.on('error', () => {});

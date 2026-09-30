@@ -7,8 +7,10 @@ import { docker, dockerCli, imageExists, networkExists } from './client';
 import { ensureTraefik, TRAEFIK_PROJECT } from './traefik';
 import { pgPing } from '../pg';
 import { runtimeState } from '../state';
-import { listeningPorts } from '../util/ports';
+import { excludedPortRanges, inPortRanges, listeningPorts } from '../util/ports';
 import { log } from '../util/logger';
+import { onProjectConfigChanged } from '../services/projects';
+import { audit } from '../services/audit';
 
 /**
  * `postgres.mode: managed` (docs/decisions.md D30): the app runs one Postgres container per project, `bm-<project>-db`,
@@ -19,8 +21,9 @@ import { log } from '../util/logger';
 export const managedPgName = (projectId: string): string => `bm-${projectId}-db`;
 export const managedPgVolume = (projectId: string): string => `bm-${projectId}-pgdata`;
 
-const PORT_FROM = 55432;
-const PORT_TO = 55531;
+// Below the Windows dynamic range 49152–65535, where Hyper-V / WSL reserve port blocks after a reboot (D62).
+const PORT_FROM = 15432;
+const PORT_TO = 15531;
 
 export function managedPgCompose(cfg: ProjectConfig): string {
   const name = managedPgName(cfg.id);
@@ -52,11 +55,12 @@ export function managedPgCompose(cfg: ProjectConfig): string {
 
 const composeFile = (ctx: Ctx, projectId: string): string => path.join(ctx.dataDir, 'postgres', projectId, 'compose.yml');
 
-/** A free host port for a new managed Postgres: not listening and not taken by another project. */
+/** A free host port for a new managed Postgres: not listening, not reserved by Windows, not taken by another project. */
 export async function allocatePgPort(ctx: Ctx): Promise<number> {
   const busy = await listeningPorts().catch(() => new Set<number>());
+  const reserved = await excludedPortRanges().catch(() => []);
   const taken = new Set(ctx.store.list().map((e) => e.config?.postgres.port));
-  for (let p = PORT_FROM; p <= PORT_TO; p++) if (!busy.has(p) && !taken.has(p)) return p;
+  for (let p = PORT_FROM; p <= PORT_TO; p++) if (!busy.has(p) && !taken.has(p) && !inPortRanges(p, reserved)) return p;
   throw new BmError('NO_PORT', `Нет свободного порта для Postgres в диапазоне ${PORT_FROM}–${PORT_TO}`);
 }
 
@@ -99,15 +103,42 @@ export function ensureManagedPostgres(ctx: Ctx, cfg: ProjectConfig, say: (l: str
   return p;
 }
 
+/**
+ * The configured host port fell into a range Windows reserved (D62): the container runs, but Docker could not publish
+ * the port, and Core, which works with databases from the host, loses Postgres. Branch containers connect by the
+ * network alias and do not use this port, so the app moves it to a free one and saves it into the project settings.
+ */
+async function movePgPort(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void): Promise<ProjectConfig> {
+  const e = ctx.store.get(cfg.id);
+  const saved = e?.config?.postgres;
+  // A config that is not the saved one (migration to managed checks its target port itself) is not rewritten.
+  if (!e || saved?.mode !== 'managed' || saved.port !== cfg.postgres.port) {
+    throw new BmError('PORT_RESERVED', `Порт ${cfg.postgres.port} для Postgres зарезервирован Windows (netsh interface ipv4 show excludedportrange protocol=tcp). Укажите другой postgres.port в настройках проекта.`);
+  }
+  const port = await allocatePgPort(ctx);
+  say(`Порт ${cfg.postgres.port} зарезервирован Windows (Hyper-V / WSL), Docker не может его опубликовать: Postgres переезжает на 127.0.0.1:${port}`);
+  const doc = YAML.parseDocument(e.text);
+  doc.setIn(['postgres', 'port'], port);
+  const next = ctx.store.putProject(doc.toString(), { expectId: cfg.id });
+  onProjectConfigChanged(ctx, e.config, next);
+  audit(ctx, { projectId: cfg.id, action: 'postgres.port', target: managedPgName(cfg.id), params: { from: cfg.postgres.port, to: port }, result: 'reserved by Windows' });
+  log().warn({ project: cfg.id, from: cfg.postgres.port, to: port }, 'managed postgres port reserved by Windows, moved');
+  return next;
+}
+
 async function doEnsure(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void): Promise<void> {
-  const pg = cfg.postgres;
-  if (!pg.password) throw new BmError('PG_NO_PASSWORD', 'У managed Postgres нет пароля (postgres.password в настройках проекта).');
+  if (!cfg.postgres.password) throw new BmError('PG_NO_PASSWORD', 'У managed Postgres нет пароля (postgres.password в настройках проекта).');
   if (!runtimeState.docker.ok) throw new BmError('DOCKER_DOWN', 'Docker недоступен: запустите Docker Desktop');
+  const reserved = await excludedPortRanges().catch(() => []);
+  if (inPortRanges(cfg.postgres.port, reserved)) cfg = await movePgPort(ctx, cfg, say);
+  const pg = cfg.postgres;
   const name = managedPgName(cfg.id);
   const created = await ensureNetwork(cfg, say);
   const existing = await docker.getContainer(name).inspect().catch(() => null);
   const bound = existing?.HostConfig.PortBindings?.['5432/tcp']?.[0]?.HostPort;
-  const upToDate = existing?.State.Running && bound === String(pg.port) && existing.Config.Image === pg.image;
+  // Configured is not enough: Docker Desktop starts the container even when it could not publish the port.
+  const published = !!existing?.NetworkSettings.Ports?.['5432/tcp']?.some((b) => b.HostPort === String(pg.port));
+  const upToDate = existing?.State.Running && bound === String(pg.port) && published && existing.Config.Image === pg.image;
   if (!upToDate) {
     if (bound !== String(pg.port)) {
       const busy = await listeningPorts().catch(() => new Set<number>());
@@ -118,7 +149,9 @@ async function doEnsure(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void):
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, managedPgCompose(cfg), 'utf8');
     say(`docker compose -p ${name} up -d`);
-    const r = await dockerCli(['compose', '-p', name, '-f', file, 'up', '-d', '--remove-orphans'], { timeoutMs: 180_000, onLine: say });
+    // Same compose config with an unpublished port: compose would keep the container as it is.
+    const recreate = existing?.State.Running && bound === String(pg.port) && !published ? ['--force-recreate'] : [];
+    const r = await dockerCli(['compose', '-p', name, '-f', file, 'up', '-d', '--remove-orphans', ...recreate], { timeoutMs: 180_000, onLine: say });
     if (r.exitCode !== 0) throw new BmError('DOCKER', `Postgres не запустился: ${(r.stderr || r.stdout).trim()}`);
   }
   // Ready = accepts connections from the host (the first start initialises the data directory).
