@@ -81,6 +81,17 @@ describe('assistant skill (D52)', () => {
     expect(fm.description).toContain('DEMZ Odoo 19');
   });
 
+  it('sends the assistant to the build of its branch, not to Production or the user’s stand', () => {
+    const text = renderSkill(input(demz));
+    expect(text.indexOf('## Какая сборка твоя')).toBeLessThan(text.indexOf('## Как устроено'));
+    expect(text).toContain('`git branch --show-current` в папке кода (`E:/demz-odoo-19/repositories/demz-odoo`)');
+    expect(text).toContain('Production `19.0` (`http://prod.localhost:8080`) — только если');
+    expect(text).toContain('ни стендом пользователя (контейнер `odoo19`, контейнер `odoo19-db`, база `o19_test`).');
+    expect(text).not.toMatch(/стендом пользователя \([^)]*база `postgres`/);
+    const fm = YAML.parse(/^---\n([\s\S]*?)\n---\n/.exec(text)![1]!);
+    expect(fm.description).toContain('Работай в сборке своей ветки, а не в Production.');
+  });
+
   it('never contains the Postgres password', () => {
     expect(skillFile(input(demz))).not.toContain('secret-pw');
     expect(skillFile(input({ ...shop, postgres: { ...shop.postgres, password: 'shop-pw-9' } }))).not.toContain('shop-pw-9');

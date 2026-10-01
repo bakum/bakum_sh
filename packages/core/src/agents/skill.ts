@@ -81,6 +81,10 @@ export function renderSkill(i: SkillInput): string {
   const protectedOthers = [...new Set(i.protectedBranches)].filter((b) => b !== cfg.production.branch);
   // The app's own Postgres is listed separately (psql is allowed there).
   const protectedContainers = pg.protectedContainers.filter((c) => c !== pgName);
+  const devDb = cfg.stages.development?.database ?? 'fresh';
+  const prodUrl = prodHost ? buildUrl(prodHost, i.proxyPort) : null;
+  // The user's own Odoo stack and databases: assistants reach for them (or for Production) instead of the branch build.
+  const notBuilds = [...protectedContainers.map((c) => `контейнер ${code(c)}`), ...pg.protectedDbs.filter((d) => !/^(postgres|template[01])$/.test(d)).map((d) => `база ${code(d)}`)];
 
   const pgRow = managed
     ? `контейнер ${code(pgName)} (приложения), ${code(`${pg.host}:${pg.port}`)} на хосте, пользователь ${code(pg.user)}`
@@ -99,7 +103,7 @@ export function renderSkill(i: SkillInput): string {
     `  Локальные сборки веток проекта «${cfg.name}» в Odoo Branch Manager (локальный odoo.sh): найти сборку ветки,`,
     '  её URL, базу и порт debugpy; обновить модули (-u / -i) и запустить тесты в Development-сборке; логи, psql,',
     '  odoo shell; что можно делать только через приложение. Используй, когда нужно проверить изменения модулей Odoo',
-    '  в сборке ветки или разобраться с её ошибкой.',
+    '  в сборке ветки или разобраться с её ошибкой. Работай в сборке своей ветки, а не в Production.',
     '---',
     '',
     `# ${cfg.name} — сборки веток в Odoo Branch Manager`,
@@ -109,6 +113,24 @@ export function renderSkill(i: SkillInput): string {
     '',
     `Каждая ветка ${repo ? code(repo) : 'репозитория'} собирается отдельно: свой контейнер Odoo, своя база, свой код.`,
     'Сборками управляет пользователь в приложении; ассистенту доступны команды ниже.',
+    '',
+    '## Какая сборка твоя',
+    '',
+    'Проверяй, отлаживай, смотри логи и данные в сборке **той ветки, над которой работаешь**, — не в Production:',
+    '',
+    `1. Ветка — та, что назвал пользователь, иначе ${code('git branch --show-current')} в папке кода${local ? ` (${code(local)})` : ''}.`,
+    `2. Её сборка — ${i.cli ? `${code('bm status')} или ` : ''}label ${code('bm.branch.name=<ветка>')} (раздел «Найти сборку»). База — только label`,
+    `   ${code('bm.db')} этой сборки, адрес — ${code('bm.url')}.`,
+    `3. Production ${code(cfg.production.branch)}${prodUrl ? ` (${code(prodUrl)})` : ''} — только если пользователь прямо попросил`,
+    '   или ты работаешь в самой ветке Production; и тогда — только чтение.',
+    ...(devDb === 'copy:production'
+      ? ['   База Development-сборки — копия базы Production на момент сборки: «проверить на реальных данных» — это в ней.']
+      : devDb.startsWith('copy:')
+        ? [`   База Development-сборки — копия базы сборки ${code(devDb.slice(5))} на момент сборки.`]
+        : []),
+    `4. Не подменяй сборку ветки другой: ни Production, ни сборкой соседней ветки, ни базой из ${code('odoo.conf')}${notBuilds.length ? ',' : '.'}`,
+    ...(notBuilds.length ? [`   ни стендом пользователя (${notBuilds.join(', ')}).`] : []),
+    '   Сборки ветки нет, она остановлена или упала — скажи пользователю: Rebuild или Start ветки в приложении.',
     '',
     '## Как устроено',
     '',
