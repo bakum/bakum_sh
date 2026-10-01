@@ -141,7 +141,9 @@ export type BranchBadgeKind =
   | 'no-build'
   | 'discrepancy'
   /** Another branch is open in the user's folder: the build is blocked (D59). */
-  | 'folder-wrong-branch';
+  | 'folder-wrong-branch'
+  /** The worktree the container runs is not on the live build's commit (D64). */
+  | 'worktree-off-build';
 
 /** Code lag of a branch behind the build its database is copied from (D47). */
 export interface CodeLag {

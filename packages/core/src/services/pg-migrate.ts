@@ -208,7 +208,7 @@ export async function pgMigrateExecutor(ctx: Ctx, job: JobRow, jc: JobContext): 
   const failed: string[] = [];
   for (const x of live) {
     try {
-      const hash = writeLiveCompose(ctx, x);
+      const hash = await writeLiveCompose(ctx, x, jc.log);
       const start = running.includes(x);
       jc.log(`${x.composeProject}: пересоздание в сети ${network}${start ? '' : ' (без запуска)'}`);
       await compose(ctx, x, start ? ['up', '-d', '--remove-orphans'] : ['up', '--no-start', '--remove-orphans'], jc);

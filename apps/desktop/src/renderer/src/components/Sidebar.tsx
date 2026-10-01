@@ -238,7 +238,7 @@ function BranchRowItem({ b, selected, onSelect, onContext }: { b: BranchView; se
                 </Badge>
               </Tooltip>
             ) : (
-              b.badges.some((x) => x.kind === 'unbuilt-commits' || x.kind === 'config-changed' || x.kind === 'stage-changed' || x.kind === 'mirror-newer') && (
+              b.badges.some((x) => x.kind === 'unbuilt-commits' || x.kind === 'config-changed' || x.kind === 'stage-changed' || x.kind === 'mirror-newer' || x.kind === 'worktree-off-build') && (
                 <Tooltip label={b.badges.map((x) => x.text).join('\n')}>
                   <Box className={classes.flag} />
                 </Tooltip>

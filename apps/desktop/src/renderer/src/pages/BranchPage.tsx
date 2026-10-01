@@ -138,7 +138,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
                 <Alert
                   key={x.kind}
                   // D47: a lag is only a warning when the missing commits change modules; otherwise Rebuild is safe.
-                  color={x.kind === 'discrepancy' || x.kind === 'folder-wrong-branch' ? 'red' : x.kind === 'behind-source' || x.kind === 'merged-behind' ? (b.codeLag?.modules.length ? 'yellow' : 'gray') : 'orange'}
+                  color={x.kind === 'discrepancy' || x.kind === 'folder-wrong-branch' || x.kind === 'worktree-off-build' ? 'red' : x.kind === 'behind-source' || x.kind === 'merged-behind' ? (b.codeLag?.modules.length ? 'yellow' : 'gray') : 'orange'}
                   variant="light"
                   py={4}
                   data-testid={`badge-${x.kind}`}
@@ -148,12 +148,12 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
                       {x.text}
                     </Text>
                     {!off && (x.kind === 'stage-changed' || x.kind === 'unbuilt-commits' || x.kind === 'mirror-newer' || x.kind === 'force-push' || x.kind === 'dirty-worktree') && (
-                      <Button size="compact-xs" onClick={() => rebuild(b, x.kind === 'stage-changed' ? 'stage_change' : 'rebuild')}>
+                      <Button size="compact-xs" style={{ flexShrink: 0 }} onClick={() => rebuild(b, x.kind === 'stage-changed' ? 'stage_change' : 'rebuild')}>
                         Rebuild
                       </Button>
                     )}
-                    {x.kind === 'config-changed' && live && !off && (
-                      <Button size="compact-xs" onClick={() => void call('builds.action', { buildId: live.id, action: 'apply-config' }).catch((e) => notifications.show({ color: 'red', message: errorText(e) }))}>
+                    {(x.kind === 'config-changed' || x.kind === 'worktree-off-build') && live && !off && (
+                      <Button size="compact-xs" style={{ flexShrink: 0 }} onClick={() => void call('builds.action', { buildId: live.id, action: 'apply-config' }).catch((e) => notifications.show({ color: 'red', message: errorText(e) }))}>
                         Применить
                       </Button>
                     )}

@@ -122,6 +122,53 @@ export async function ensureWorktree(ctx: Ctx, cfg: ProjectConfig, b: BranchRow)
   return target;
 }
 
+/**
+ * Puts the worktree of a branch on the commit of its build (D64) before a job runs that build's code from the mirror
+ * (start, restart, «Применить», modules, tests, retry of a build). The worktree is the container's code, but only the
+ * code step moves it: a build from the user's folder leaves it where it was, a failed rollback or an interrupted build
+ * leaves it on another commit. Recreates a missing worktree; refuses (nothing is overwritten) when the worktree has
+ * edits or the commit never reached the mirror (unpushed commits of the folder).
+ */
+export async function syncWorktreeTo(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, sha: string, log: (l: string) => void): Promise<string> {
+  const wt = await ensureWorktree(ctx, cfg, b);
+  const head = await git.headSha(wt);
+  if (head === sha) return wt;
+  const short = sha.slice(0, 7);
+  if (!(await git.revParse(repoDir(cfg), sha))) {
+    throw new BmError(
+      'NO_BUILD_COMMIT',
+      `Коммита сборки ${short} нет в копии репозитория (${cfg.repo.remote}): сборка шла из вашей папки, а коммит не ` +
+        'отправлен. Отправьте его (git push) и нажмите «Обновить» или нажмите Rebuild — сборка возьмёт код ветки с GitHub.',
+    );
+  }
+  const dirty = await git.worktreeChanges(wt);
+  if (dirty.length) {
+    throw new BmError(
+      'WORKTREE_DIRTY',
+      `В worktree ${wt} есть незакоммиченные изменения, а он должен стоять на коммите сборки ${short}. Ничего не ` +
+        `затирается: перенесите или отмените изменения (правьте код в своей папке, см. Editor → «Код из моей папки»).\n${dirty.join('\n')}`,
+    );
+  }
+  log(`worktree на ${head ? head.slice(0, 7) : '?'}, а сборка — на ${short}: git checkout --detach ${short}`);
+  await git.checkoutDetach(wt, sha);
+  return wt;
+}
+
+/**
+ * HEAD commit of a detached worktree read from its files, without git (the branch list is built synchronously):
+ * `<wt>/.git` names the git dir, its `HEAD` holds the SHA. Null when unreadable or HEAD is a symbolic ref.
+ */
+export function worktreeHeadSync(wt: string): string | null {
+  try {
+    const m = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(path.join(wt, '.git'), 'utf8'));
+    if (!m) return null;
+    const head = fs.readFileSync(path.resolve(wt, m[1]!.trim(), 'HEAD'), 'utf8').trim();
+    return /^[0-9a-f]{40,64}$/.test(head) ? head : null;
+  } catch {
+    return null;
+  }
+}
+
 function setWorktree(ctx: Ctx, branchId: number, p: string): void {
   ctx.db.update(branches).set({ worktreePath: p, worktreeTracking: 'remote' }).where(eq(branches.id, branchId)).run();
 }

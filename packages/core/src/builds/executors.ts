@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
-import { BmError } from '@bm/shared';
+import { BmError, isLegacyProject } from '@bm/shared';
 import { branchDir, type Ctx } from '../context';
 import { builds, type BuildRow, type JobRow } from '../db/schema';
 import type { JobContext, JobQueue } from '../jobs/queue';
@@ -12,7 +12,7 @@ import { ensurePostgres } from '../docker/postgres';
 import { ensureImage } from '../docker/image';
 import { refreshContainers } from '../docker/watch';
 import { resolveBranchScope } from '../config/effective';
-import { assertBranchFolder, codeSource } from '../git/worktrees';
+import { assertBranchFolder, codeSource, syncWorktreeTo } from '../git/worktrees';
 import { branchRow } from '../services/branch-rows';
 import { publishTray } from '../services/tray';
 import { audit } from '../services/audit';
@@ -72,8 +72,27 @@ const done = (ctx: Ctx, b: BuildRow, action: string): void => {
   publishTray(ctx);
 };
 
-/** Rewrites compose.yml of a live build from the current configuration; returns the new config hash. */
-export function writeLiveCompose(ctx: Ctx, b: BuildRow): string {
+/** Code from the mirror: puts the branch worktree on the commit of the build before the build runs it (D64). */
+async function syncLiveWorktree(ctx: Ctx, b: BuildRow, log: (l: string) => void): Promise<void> {
+  const br = branchRow(ctx, b.branchId);
+  const cfg = ctx.store.require(b.projectId);
+  if (!br || !b.commitSha || isLegacyProject(cfg)) return;
+  if (resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope.folder) return;
+  await syncWorktreeTo(ctx, cfg, br, b.commitSha, log);
+}
+
+/** Jobs that run the live build's code: the folder has this branch open (D59), the worktree is on its commit (D64). */
+async function assertBuildCode(ctx: Ctx, b: BuildRow, log: (l: string) => void): Promise<void> {
+  await assertBranchFolder(ctx, b.branchId);
+  await syncLiveWorktree(ctx, b, log);
+}
+
+/**
+ * Rewrites compose.yml of a live build from the current configuration (the worktree put on the build's commit first,
+ * D64: after switching from the user's folder it still holds older code); returns the new config hash.
+ */
+export async function writeLiveCompose(ctx: Ctx, b: BuildRow, log: (l: string) => void): Promise<string> {
+  await syncLiveWorktree(ctx, b, log);
   const br = branchRow(ctx, b.branchId);
   if (!br) throw new BmError('NO_BRANCH', 'Ветка сборки удалена');
   const cfg = ctx.store.require(b.projectId);
@@ -107,7 +126,7 @@ async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void>
   // A changed Dockerfile (runtime.build, D46) is what «Применить» is about: the image is rebuilt first.
   const br = branchRow(ctx, b.branchId);
   if (br) await ensureImage(cfg, resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope.image, jc.log, jc.signal);
-  const hash = writeLiveCompose(ctx, b);
+  const hash = await writeLiveCompose(ctx, b, jc.log);
   jc.log('docker compose up -d (пересоздание контейнера, БД не трогается)');
   await compose(ctx, b, ['up', '-d', '--remove-orphans'], jc);
   await waitHealthy(b, cfg.runtime.healthcheck.timeoutSec, jc);
@@ -118,7 +137,7 @@ async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void>
 /** Manual -i / -u from the Tools tab: stop → odoo -i/-u → start. */
 async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const b = mustBuild(ctx, job.buildId);
-  await assertBranchFolder(ctx, b.branchId);
+  await assertBuildCode(ctx, b, jc.log);
   const cfg = ctx.store.require(b.projectId);
   const p = job.params as { install?: string[]; update?: string[] };
   const file = liveCompose(ctx, b);
@@ -145,7 +164,7 @@ async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> 
  */
 async function testsJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const b = mustBuild(ctx, job.buildId);
-  await assertBranchFolder(ctx, b.branchId);
+  await assertBuildCode(ctx, b, jc.log);
   const cfg = ctx.store.require(b.projectId);
   const br = branchRow(ctx, b.branchId);
   if (!br) throw new BmError('NO_BRANCH', 'Ветка сборки удалена');
@@ -233,7 +252,7 @@ export function registerBuildExecutors(q: JobQueue): void {
   });
   q.register('start', async (ctx, job, jc) => {
     const b = mustBuild(ctx, job.buildId);
-    await assertBranchFolder(ctx, b.branchId);
+    await assertBuildCode(ctx, b, jc.log);
     await ensurePostgres(ctx, ctx.store.require(b.projectId), jc.log);
     await compose(ctx, b, ['up', '-d', '--remove-orphans'], jc);
     done(ctx, b, 'start');
@@ -245,7 +264,7 @@ export function registerBuildExecutors(q: JobQueue): void {
   });
   q.register('restart', async (ctx, job, jc) => {
     const b = mustBuild(ctx, job.buildId);
-    await assertBranchFolder(ctx, b.branchId);
+    await assertBuildCode(ctx, b, jc.log);
     await ensurePostgres(ctx, ctx.store.require(b.projectId), jc.log);
     await compose(ctx, b, ['restart'], jc);
     done(ctx, b, 'restart');

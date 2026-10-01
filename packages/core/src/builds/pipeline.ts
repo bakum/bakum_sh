@@ -7,7 +7,7 @@ import { branches, builds, type BranchRow, type BuildRow, type JobRow } from '..
 import type { JobContext } from '../jobs/queue';
 import { resolveBranchScope } from '../config/effective';
 import * as git from '../git';
-import { assertFolderOnBranch, codeSource, ensureWorktree, noRemoteBranch, type CodeSource } from '../git/worktrees';
+import { assertFolderOnBranch, codeSource, ensureWorktree, noRemoteBranch, syncWorktreeTo, type CodeSource } from '../git/worktrees';
 import { docker, dockerCli } from '../docker/client';
 import { ODOO_SERVICE, dataDirOf, generateCompose } from '../docker/compose';
 import { ensureTraefik } from '../docker/traefik';
@@ -914,6 +914,13 @@ export async function runBuild(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
     await ensurePostgres(ctx, cfg, log);
     // The Odoo image: built from runtime.build (D46), pulled for «Odoo in Docker», or already there.
     await ensureImage(cfg, scope.image, log, jc.signal);
+    // A retry past the code step: a failed build's rollback put the worktree back on the live build's commit (D64).
+    const code = src(r);
+    if (startIdx > 0 && code.kind === 'mirror' && r.build.commitSha) {
+      current = from;
+      await syncWorktreeTo(ctx, cfg, r.branch, r.build.commitSha, log);
+      r.branch = branchRow(ctx, r.branch.id)!;
+    }
     // A compose file is needed by one-off runs from the database step on (image, mounts, network).
     for (let i = startIdx; i < BUILD_STEPS.length; i++) {
       const name = BUILD_STEPS[i]!;

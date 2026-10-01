@@ -22,7 +22,7 @@ import { audit } from './audit';
 import { branchByName, branchRow, branchRows, ensureBranchRow, setAutoAddSkip } from './branch-rows';
 import { branchBuilds, buildUrl, configHash, liveBuild, toBuildView } from '../builds/view';
 import { requestBuildChecked } from '../builds/request';
-import { repoDir } from '../git/worktrees';
+import { repoDir, worktreeHeadSync } from '../git/worktrees';
 import { assertNotLegacy } from '../config/legacy';
 import { onProjectConfigChanged } from './projects';
 import { nowIso } from '../util/time';
@@ -80,6 +80,15 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
     badges.push({ kind: 'stage-changed', text: 'Настройки стадии изменились — Rebuild' });
   }
   if (live && live.configHash && live.configHash !== hash) badges.push({ kind: 'config-changed', text: 'Конфигурация изменилась' });
+  // D64: the container mounts the worktree (same config), but it is on another commit — e.g. after building from the
+  // user's folder. A changed config already asks for «Применить», which puts the worktree back itself.
+  const wtHead = !r.scope.folder && live?.commitSha && b.worktreePath && !active && live.configHash === hash ? worktreeHeadSync(b.worktreePath) : null;
+  if (wtHead && wtHead !== live!.commitSha) {
+    badges.push({
+      kind: 'worktree-off-build',
+      text: `Код в worktree (${wtHead.slice(0, 7)}) не совпадает с кодом сборки #${live!.number} (${live!.commitSha!.slice(0, 7)}): Odoo работает не на том коде. «Применить» вернёт worktree к коду сборки и пересоздаст контейнер, база не трогается.`,
+    });
+  }
   if (b.pausedReason === 'dirty-worktree') badges.push({ kind: 'dirty-worktree', text: 'Авто-сборки приостановлены: в worktree есть изменения' });
   if (b.pausedReason === 'force-push') badges.push({ kind: 'force-push', text: 'Force-push в ветку: авто-сборки приостановлены' });
   // D47: a branch behind the code of its copy source gets the lag badge instead of «mirror newer» — a Rebuild from the
