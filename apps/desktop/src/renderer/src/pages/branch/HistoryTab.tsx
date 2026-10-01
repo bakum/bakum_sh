@@ -21,7 +21,7 @@ import { Spinner } from '../../components/Spinner';
 import { TestsBadge } from '../../components/TestsBadge';
 import { notifications } from '@mantine/notifications';
 import type { BranchView, BuildView } from '@bm/shared';
-import { useBm } from '../../lib/query';
+import { DOCKER_DOWN_HINT, useBm, useDockerOk } from '../../lib/query';
 import { call, errorText } from '../../lib/bm';
 import { fmtDate, fmtDuration, shortSha, TRIGGER_LABELS } from '../../lib/format';
 import { shellOpen } from '../BranchPage';
@@ -94,7 +94,8 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
   const commits = more ? b.commits : b.commits.slice(0, 3);
   const building = b.status === 'building' || b.status === 'queued';
   const failedStep = b.steps.find((s) => s.status === 'failed')?.name ?? null;
-  const blocked = folderBlockHint(branch);
+  const dockerOk = useDockerOk();
+  const blocked = folderBlockHint(branch) ?? (dockerOk ? null : DOCKER_DOWN_HINT);
   return (
     <Card withBorder padding="sm" data-testid={`build-${b.number}`}>
       <Group justify="space-between" wrap="nowrap" align="flex-start">
@@ -252,7 +253,8 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
 
 /** `blocked` — why actions on the build are disabled (D59); only Stop stays. */
 export function ConnectButton({ b, blocked = null }: { b: BuildView; blocked?: string | null }) {
-  const running = b.status === 'running' && (b.containerState === null || b.containerState === 'running');
+  // D63: without Docker the registry status is stale — the container may well be gone.
+  const running = useDockerOk() && b.status === 'running' && (b.containerState === null || b.containerState === 'running');
   return (
     <Group gap={0} wrap="nowrap">
       <Button

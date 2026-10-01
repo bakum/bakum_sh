@@ -29,3 +29,11 @@ export function useBmMutation<K extends MethodName>(method: K, opts: { success?:
     },
   });
 }
+
+export const DOCKER_DOWN_HINT = 'Docker Desktop не запущен: запустите его кнопкой «Запустить» вверху окна.';
+
+/** Docker state from system.status (the same query as the header indicator); true until the first answer. */
+export function useDockerOk(): boolean {
+  const s = useBm('system.status', {}, { refetchInterval: 15000 });
+  return s.data?.docker.ok ?? true;
+}

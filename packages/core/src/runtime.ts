@@ -7,6 +7,7 @@ import { nowIso } from './util/time';
 
 type Hook = (ctx: Ctx) => void | Promise<void>;
 const onDockerUp: Hook[] = [];
+const onDockerDown: Hook[] = [];
 const onStart: Hook[] = [];
 const onStop: ((ctx: Ctx, cancel: boolean) => Promise<void>)[] = [];
 const hookHandlers = new Map<string, (ctx: Ctx, args: string[]) => Promise<void>>();
@@ -14,6 +15,7 @@ const hookHandlers = new Map<string, (ctx: Ctx, args: string[]) => Promise<void>
 /** Background services register here (fetch scheduler, queue, watchers, reconcile). */
 export const runtime = {
   onDockerUp: (h: Hook) => onDockerUp.push(h),
+  onDockerDown: (h: Hook) => onDockerDown.push(h),
   onStart: (h: Hook) => onStart.push(h),
   onStop: (h: (ctx: Ctx, cancel: boolean) => Promise<void>) => onStop.push(h),
   onHook: (name: string, h: (ctx: Ctx, args: string[]) => Promise<void>) => hookHandlers.set(name, h),
@@ -28,13 +30,11 @@ async function pollDocker(ctx: Ctx): Promise<void> {
   if (r.ok !== was) {
     log().info({ ok: r.ok }, 'docker state changed');
     bus.emit({ type: 'system.changed' });
-    if (r.ok) {
-      for (const h of onDockerUp) {
-        try {
-          await h(ctx);
-        } catch (err) {
-          log().error({ err }, 'docker-up hook failed');
-        }
+    for (const h of r.ok ? onDockerUp : onDockerDown) {
+      try {
+        await h(ctx);
+      } catch (err) {
+        log().error({ err, ok: r.ok }, 'docker state hook failed');
       }
     }
   }

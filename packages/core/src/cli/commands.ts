@@ -8,6 +8,7 @@ import { resolveBranchScope } from '../config/effective';
 import { branchProtected, buildUrl } from '../docker/compose';
 import { liveBuild } from '../builds/view';
 import { getQueue } from '../jobs/queue';
+import { runtimeState } from '../state';
 import { assertBranchFolder } from '../git/worktrees';
 import { isInside, samePath, toPosix } from '../util/paths';
 
@@ -176,6 +177,7 @@ const TERMINAL = new Set(['success', 'failed', 'cancelled', 'interrupted']);
 async function waitJob(ctx: Ctx, jobId: number, io: CliIo): Promise<number> {
   let offset = 0;
   let rest = '';
+  let toldDocker = false;
   const flush = (file: string): void => {
     if (!fs.existsSync(file)) return;
     const size = fs.statSync(file).size;
@@ -194,6 +196,11 @@ async function waitJob(ctx: Ctx, jobId: number, io: CliIo): Promise<number> {
     if (!j) throw new BmError('NO_JOB', `Задача #${jobId} пропала`);
     const file = path.join(ctx.logsDir, 'jobs', `${j.id}-${j.type}.log`);
     flush(file);
+    // D63: the job waits in the queue until Docker is up.
+    if (j.status === 'queued' && !runtimeState.docker.ok && !toldDocker) {
+      toldDocker = true;
+      io.out('Docker Desktop не запущен: задача ждёт в очереди и начнётся, когда он запустится.');
+    }
     if (TERMINAL.has(j.status)) {
       flush(file);
       if (rest) io.out(rest);

@@ -90,7 +90,8 @@ export interface ProjectSummary {
   lastFetchError: string | null;
 }
 
-export type LiveIndicator = 'none' | 'building' | 'ok' | 'warning' | 'failed' | 'stopped';
+/** `unknown` — there is a live build, but Docker is down, so whether it runs is not known (D63). */
+export type LiveIndicator = 'none' | 'building' | 'ok' | 'warning' | 'failed' | 'stopped' | 'unknown';
 
 export interface BranchView {
   id: number;

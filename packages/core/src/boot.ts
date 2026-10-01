@@ -13,7 +13,7 @@ import { cloneExecutor } from './services/repo';
 import { buildImageExecutor, ensureAllManagedPostgres, setupProjectExecutor } from './services/project-setup';
 import { pgMigrateExecutor } from './services/pg-migrate';
 import { ensureTraefik } from './docker/traefik';
-import { startDockerWatch, stopDockerWatch } from './docker/watch';
+import { forgetContainers, startDockerWatch, stopDockerWatch } from './docker/watch';
 import { failInterruptedBuilds, reconcile } from './reconcile';
 import { subscribeBuildLog, subscribeContainerLog, subscribeStats } from './services/logs';
 import { publishTray } from './services/tray';
@@ -74,7 +74,10 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
     activity.start();
     await ensureAllManagedPostgres(ctx);
     await reconcile(ctx);
+    // Jobs that waited for Docker (D63).
+    void queue.pump();
   });
+  runtime.onDockerDown(() => forgetContainers());
   runtime.onStop(async (_c, cancel) => {
     stopFetches();
     stopDockerWatch();

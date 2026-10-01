@@ -25,6 +25,7 @@ import { bus } from '../events';
 import { clearPause } from '../builds/triggers';
 import { toPosix } from '../util/paths';
 import { log } from '../util/logger';
+import { runtimeState } from '../state';
 
 function mustBuild(ctx: Ctx, id: number) {
   const b = buildRow(ctx, id);
@@ -188,6 +189,9 @@ async function openTerminal(ctx: Ctx, title: string, argv: string[], env: Record
   return pref === 'wt' ? 'Windows Terminal не найден — открыт cmd' : undefined;
 }
 
+/** shell.open targets served by the build's containers / Traefik (D63). */
+const DOCKER_TARGETS: ReadonlySet<string> = new Set(['browser', 'browser-debug', 'terminal', 'bash', 'odoo-shell', 'psql']);
+
 async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; target: string }): Promise<{ ok: true; detail?: string }> {
   const b = p.buildId ? mustBuild(ctx, p.buildId) : null;
   const br = p.branchId ? mustBranch(ctx, p.branchId) : b ? branchRow(ctx, b.branchId) : null;
@@ -198,6 +202,9 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
     if (!b) throw new BmError('NO_BUILD', 'Нет сборки');
     return b;
   };
+  if (DOCKER_TARGETS.has(p.target) && !runtimeState.docker.ok) {
+    throw new BmError('DOCKER_DOWN', 'Docker Desktop не запущен: запустите его (кнопка «Запустить» вверху окна) и повторите');
+  }
   switch (p.target) {
     case 'browser':
       ctx.toMain({ kind: 'openExternal', url: buildUrl(needBuild().host, port) });

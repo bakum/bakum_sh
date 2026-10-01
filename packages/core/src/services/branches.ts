@@ -28,6 +28,7 @@ import { onProjectConfigChanged } from './projects';
 import { nowIso } from '../util/time';
 import { codeLagOf, lagBadge } from './code-lag';
 import { localWatcher } from './watch-local';
+import { runtimeState } from '../state';
 
 /** Branch names known to git per project, refreshed by fetch. */
 const gitCache = new Map<string, GitBranchInfo[]>();
@@ -45,6 +46,7 @@ function indicator(live: BuildRow | undefined, latest: BuildRow | undefined, act
   if (active) return 'building';
   if (latest?.status === 'failed') return 'failed';
   if (!live) return 'none';
+  if (!runtimeState.docker.ok) return 'unknown';
   if (live.status === 'stopped') return 'stopped';
   if (live.tests && (live.tests.failed || live.tests.errors)) return 'failed';
   if (live.tests && live.tests.warnings) return 'warning';

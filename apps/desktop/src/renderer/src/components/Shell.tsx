@@ -150,7 +150,7 @@ export function Shell() {
         <Alert color="red" radius={0} py={6} title={null}>
           <Group justify="space-between">
             <Text size="sm">
-              Docker Desktop не запущен — сборки, логи и статусы недоступны. После запуска приложение продолжит работу само.
+              Docker Desktop не запущен — сборки не работают, их состояние неизвестно. Rebuild и другие задачи сборок ждут в очереди и начнутся сами, когда Docker запустится.
             </Text>
             <Button color="red" loading={startDocker.isPending} onClick={() => startDocker.mutate({})}>
               Запустить

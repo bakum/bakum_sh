@@ -13,7 +13,7 @@ import {
   IconTrash,
 } from '@tabler/icons-react';
 import type { BranchView } from '@bm/shared';
-import { useBm } from '../lib/query';
+import { DOCKER_DOWN_HINT, useBm, useDockerOk } from '../lib/query';
 import { call, errorText } from '../lib/bm';
 import { notifications } from '@mantine/notifications';
 import { StatusDot } from '../components/StatusDot';
@@ -51,6 +51,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
   const [fork, setFork] = useState(false);
   const [del, setDel] = useState(false);
   const rebuild = useRebuild();
+  const dockerOk = useDockerOk();
   const b = q.data;
   if (!b) return null;
   const active = tab ?? 'history';
@@ -59,6 +60,8 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
   const repoUrl = cfgUrl ? cfgUrl.replace(/^(https:\/\/)[^@/]+@/, '$1') : github ? `https://github.com/${github}.git` : null;
   const live = b.liveBuild;
   const blocked = folderBlockHint(b);
+  // D63: without Docker, build actions wait; the folder block comes first, it needs the user's attention.
+  const off = blocked ?? (dockerOk ? null : DOCKER_DOWN_HINT);
   const setTab = (t: string | null) => nav(`/projects/${projectId}/branches/${branchId}/${t ?? 'history'}`);
 
   return (
@@ -116,10 +119,10 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
             <Button variant="default" leftSection={<IconGitMerge size={14} />} onClick={() => onMerge(b)}>
               Merge
             </Button>
-            <Button variant="default" leftSection={<IconTerminal2 size={14} />} disabled={!live} onClick={() => void shellOpen({ buildId: live!.id, target: 'bash' })}>
+            <Button variant="default" leftSection={<IconTerminal2 size={14} />} disabled={!live || !dockerOk} onClick={() => void shellOpen({ buildId: live!.id, target: 'bash' })}>
               Terminal
             </Button>
-            <Button variant="default" leftSection={<IconDatabase size={14} />} disabled={!live} onClick={() => void shellOpen({ buildId: live!.id, target: 'psql' })}>
+            <Button variant="default" leftSection={<IconDatabase size={14} />} disabled={!live || !dockerOk} onClick={() => void shellOpen({ buildId: live!.id, target: 'psql' })}>
               SQL
             </Button>
             <Button variant="default" color="red" leftSection={<IconTrash size={14} />} disabled={b.stage === 'production'} onClick={() => setDel(true)}>
@@ -144,12 +147,12 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
                     <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
                       {x.text}
                     </Text>
-                    {!blocked && (x.kind === 'stage-changed' || x.kind === 'unbuilt-commits' || x.kind === 'mirror-newer' || x.kind === 'force-push' || x.kind === 'dirty-worktree') && (
+                    {!off && (x.kind === 'stage-changed' || x.kind === 'unbuilt-commits' || x.kind === 'mirror-newer' || x.kind === 'force-push' || x.kind === 'dirty-worktree') && (
                       <Button size="compact-xs" onClick={() => rebuild(b, x.kind === 'stage-changed' ? 'stage_change' : 'rebuild')}>
                         Rebuild
                       </Button>
                     )}
-                    {x.kind === 'config-changed' && live && !blocked && (
+                    {x.kind === 'config-changed' && live && !off && (
                       <Button size="compact-xs" onClick={() => void call('builds.action', { buildId: live.id, action: 'apply-config' }).catch((e) => notifications.show({ color: 'red', message: errorText(e) }))}>
                         Применить
                       </Button>
@@ -174,13 +177,13 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
             <Tabs.Tab value="settings">Settings</Tabs.Tab>
           </Tabs.List>
           <Group gap={6} wrap="nowrap">
-            <Tooltip label={blocked} disabled={!blocked} multiline w={320}>
+            <Tooltip label={off} disabled={!off} multiline w={320}>
               <Button
                 leftSection={<IconRefresh size={14} />}
                 loading={!!b.activeBuild}
-                data-disabled={blocked ? true : undefined}
+                data-disabled={off ? true : undefined}
                 data-testid="rebuild"
-                onClick={() => !blocked && rebuild(b, 'rebuild')}
+                onClick={() => !off && rebuild(b, 'rebuild')}
               >
                 Rebuild
               </Button>

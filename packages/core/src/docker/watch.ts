@@ -62,6 +62,15 @@ export async function refreshContainers(ctx: Ctx): Promise<void> {
   }
 }
 
+/** Docker went down: the last polled states are stale, so container state becomes unknown until Docker is back. */
+export function forgetContainers(): void {
+  stopDockerWatch();
+  containerPoll.loaded = false;
+  containerStates.clear();
+  runtimeState.runningBuilds = 0;
+  bus.emit({ type: 'branch.changed' });
+}
+
 export function startDockerWatch(ctx: Ctx): void {
   stopDockerWatch();
   const loop = async (): Promise<void> => {

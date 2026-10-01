@@ -3,7 +3,7 @@ import { Alert, Badge, Button, Card, Code, Group, SimpleGrid, Stack, TagsInput, 
 import { notifications } from '@mantine/notifications';
 import { IconBug, IconCopy, IconDatabase, IconKey } from '@tabler/icons-react';
 import type { BranchView } from '@bm/shared';
-import { useBm, useBmMutation } from '../../lib/query';
+import { DOCKER_DOWN_HINT, useBm, useBmMutation, useDockerOk } from '../../lib/query';
 import { call, errorText } from '../../lib/bm';
 import { shellOpen } from '../BranchPage';
 import { folderBlockHint } from '../../lib/folder-block';
@@ -19,7 +19,10 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
   const [update, setUpdate] = useState<string[]>([]);
   const tests = useBmMutation('builds.testsAction', { success: 'Тесты поставлены в очередь' });
   const [testMods, setTestMods] = useState<string[]>([]);
+  const dockerOk = useDockerOk();
   const blocked = folderBlockHint(branch);
+  // D63: module and test jobs need Docker.
+  const off = blocked ?? (dockerOk ? null : DOCKER_DOWN_HINT);
   if (!live) return <Alert color="gray">У ветки нет живой сборки.</Alert>;
 
   return (
@@ -140,16 +143,16 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
       <Card withBorder>
         <Stack>
           <Title order={5}>Модули вручную</Title>
-          {blocked && (
+          {off && (
             <Alert color="red" variant="light" py={6} data-testid="tools-blocked">
-              <Text size="sm">{blocked}</Text>
+              <Text size="sm">{off}</Text>
             </Alert>
           )}
           <TagsInput label="Установить (-i)" value={install} onChange={setInstall} placeholder="имя_модуля" />
           <TagsInput label="Обновить (-u)" value={update} onChange={setUpdate} placeholder="имя_модуля" />
           <Group justify="flex-end">
             <Button
-              disabled={!!blocked || (!install.length && !update.length)}
+              disabled={!!off || (!install.length && !update.length)}
               loading={mods.isPending}
               onClick={() => mods.mutate({ buildId: live.id, install, update }, { onSuccess: () => { setInstall([]); setUpdate([]); } })}
             >
@@ -166,7 +169,7 @@ export function ToolsTab({ branch }: { branch: BranchView }) {
           <Group justify="flex-end">
             <Button
               variant="default"
-              disabled={!!blocked || !testMods.length}
+              disabled={!!off || !testMods.length}
               loading={tests.isPending}
               onClick={() => tests.mutate({ buildId: live.id, modules: testMods })}
             >

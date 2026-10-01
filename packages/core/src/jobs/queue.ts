@@ -23,6 +23,9 @@ const HEAVY: ReadonlySet<string> = new Set(['build', 'import_backup', 'build_ima
 /** Project-wide jobs: start when nothing else of the project runs; later jobs of the project wait for them. */
 const EXCLUSIVE: ReadonlySet<string> = new Set(['migrate_postgres']);
 
+/** Git-only jobs. The rest wait in the queue while Docker is down and start once it is up (D63). */
+const NO_DOCKER: ReadonlySet<string> = new Set(['fetch', 'clone']);
+
 /**
  * Persistent job queue (spec 8.3 «Очередь»): one active job per branch, maxParallelBuilds heavy jobs
  * over all projects, one fetch per project. State lives in SQLite so a Core restart can mark
@@ -118,6 +121,7 @@ export class JobQueue {
       const max = this.ctx.store.app.limits.maxParallelBuilds;
       for (const j of all) {
         if (j.status !== 'queued') continue;
+        if (!runtimeState.docker.ok && !NO_DOCKER.has(j.type)) continue;
         if (j.projectId && lockedProjects.has(j.projectId)) continue;
         if (EXCLUSIVE.has(j.type)) {
           lockedProjects.add(j.projectId);

@@ -8,6 +8,7 @@ const TEXT: Record<LiveIndicator, string> = {
   stopped: 'Сборка остановлена',
   none: 'Сборки нет',
   building: 'Идёт сборка',
+  unknown: 'Состояние неизвестно: Docker Desktop не запущен',
 };
 
 const COLOR: Record<LiveIndicator, string> = {
@@ -17,9 +18,10 @@ const COLOR: Record<LiveIndicator, string> = {
   stopped: '#adb5bd',
   none: 'transparent',
   building: '',
+  unknown: 'transparent',
 };
 
-/** Live build indicator (spec 6): green / orange / red / grey / empty / spinner. */
+/** Live build indicator (spec 6): green / orange / red / grey / empty / dashed (Docker down) / spinner. */
 export function StatusDot({ indicator, size = 10 }: { indicator: LiveIndicator; size?: number }) {
   return (
     <Tooltip label={TEXT[indicator]} openDelay={400}>
@@ -34,7 +36,7 @@ export function StatusDot({ indicator, size = 10 }: { indicator: LiveIndicator; 
             flex: `0 0 ${size}px`,
             borderRadius: '50%',
             background: COLOR[indicator],
-            border: indicator === 'none' ? '1.5px solid var(--mantine-color-gray-5)' : 'none',
+            border: indicator === 'none' ? '1.5px solid var(--mantine-color-gray-5)' : indicator === 'unknown' ? '1.5px dashed var(--mantine-color-gray-5)' : 'none',
           }}
         />
       )}
