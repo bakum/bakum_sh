@@ -1,0 +1,64 @@
+# A look at the released macOS app (D67) without a Mac: installs the .dmg of a release the way a user would, starts
+# it, saves screenshots and logs as an artifact. The runner has no Docker, so builds cannot be checked here.
+# Actions → macOS screenshots → Run workflow, or: gh workflow run mac-screenshots.yml -f tag=vX.Y.Z
+name: macOS screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (vX.Y.Z)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  shots:
+    runs-on: macos-14
+    env:
+      SHOTS_DIR: ${{ runner.temp }}/shots
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the app from the release disk image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release download "$TAG" -p '*-mac-arm64.dmg' -D "$RUNNER_TEMP"
+          mnt=$(hdiutil attach -nobrowse -readonly "$RUNNER_TEMP"/*-mac-arm64.dmg | tail -1 | awk -F'\t' '{print $NF}')
+          ls "$mnt"
+          cp -R "$mnt/Odoo Branch Manager.app" /Applications/
+          hdiutil detach "$mnt"
+          xattr -cr "/Applications/Odoo Branch Manager.app"
+          codesign -dv "/Applications/Odoo Branch Manager.app" 2>&1 | head -5
+          spctl --assess -vv "/Applications/Odoo Branch Manager.app" 2>&1 || true
+
+      - name: Playwright
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw"
+          npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+          cp .github/scripts/mac-screenshots.mjs "$RUNNER_TEMP/pw/"
+
+      - name: Start the app and take screenshots
+        run: node "$RUNNER_TEMP/pw/mac-screenshots.mjs"
+
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p "$SHOTS_DIR/logs"
+          cp -R "$HOME/.local/share/Odoo Branch Manager/logs/." "$SHOTS_DIR/logs/" 2>/dev/null || true
+          cp "$HOME/Library/Application Support/Odoo Branch Manager/app.yaml" "$SHOTS_DIR/logs/" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-screenshots-${{ inputs.tag }}
+          path: ${{ runner.temp }}/shots
