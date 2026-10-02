@@ -16,8 +16,6 @@ permissions:
 jobs:
   shots:
     runs-on: macos-14
-    env:
-      SHOTS_DIR: ${{ runner.temp }}/shots
     steps:
       - uses: actions/checkout@v4
 
@@ -48,14 +46,16 @@ jobs:
           cp .github/scripts/mac-screenshots.mjs "$RUNNER_TEMP/pw/"
 
       - name: Start the app and take screenshots
+        env:
+          SHOTS_DIR: ${{ runner.temp }}/shots
         run: node "$RUNNER_TEMP/pw/mac-screenshots.mjs"
 
       - name: Collect logs
         if: always()
         run: |
-          mkdir -p "$SHOTS_DIR/logs"
-          cp -R "$HOME/.local/share/Odoo Branch Manager/logs/." "$SHOTS_DIR/logs/" 2>/dev/null || true
-          cp "$HOME/Library/Application Support/Odoo Branch Manager/app.yaml" "$SHOTS_DIR/logs/" 2>/dev/null || true
+          mkdir -p "$RUNNER_TEMP/shots/logs"
+          cp -R "$HOME/.local/share/Odoo Branch Manager/logs/." "$RUNNER_TEMP/shots/logs/" 2>/dev/null || true
+          cp "$HOME/Library/Application Support/Odoo Branch Manager/app.yaml" "$RUNNER_TEMP/shots/logs/" 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         if: always()
