@@ -3,7 +3,7 @@ import { MantineProvider, localStorageColorSchemeManager } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { theme } from './theme';
+import { cssVariablesResolver, theme } from './theme';
 import { EventsProvider } from './lib/events';
 import { useBm } from './lib/query';
 import { Shell } from './components/Shell';
@@ -24,7 +24,7 @@ const colorSchemeManager = localStorageColorSchemeManager({ key: 'bm-color-schem
 
 export function App() {
   return (
-    <MantineProvider theme={theme} defaultColorScheme="auto" colorSchemeManager={colorSchemeManager}>
+    <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver} defaultColorScheme="auto" colorSchemeManager={colorSchemeManager}>
       <Notifications position="bottom-right" limit={5} />
       <QueryClientProvider client={queryClient}>
         <EventsProvider>

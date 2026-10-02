@@ -24,7 +24,7 @@ export function YamlEditor(props: {
       language="yaml"
       path={props.schema ? `${props.path}/${props.schema}.yaml` : `${props.path}.yaml`}
       value={props.value}
-      theme={scheme === 'dark' ? 'vs-dark' : 'light'}
+      theme={scheme === 'dark' ? 'vs-dark' : 'bm-light'}
       onChange={(v) => props.onChange?.(v ?? '')}
       options={{
         readOnly: props.readOnly,

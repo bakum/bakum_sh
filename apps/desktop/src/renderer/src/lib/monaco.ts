@@ -4,6 +4,7 @@ import { loader } from '@monaco-editor/react';
 import { configureMonacoYaml, type MonacoYaml } from 'monaco-yaml';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import YamlWorker from 'monaco-yaml/yaml.worker?worker';
+import { LIGHT_SURFACE } from '../theme';
 
 declare global {
   interface Window {
@@ -18,6 +19,14 @@ window.MonacoEnvironment = {
 };
 
 loader.config({ monaco });
+
+// The light editor on the app's off-white surface instead of pure white.
+monaco.editor.defineTheme('bm-light', {
+  base: 'vs',
+  inherit: true,
+  rules: [],
+  colors: { 'editor.background': LIGHT_SURFACE, 'editorGutter.background': LIGHT_SURFACE },
+});
 
 let yaml: MonacoYaml | null = null;
 const schemas = new Map<string, unknown>();

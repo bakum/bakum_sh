@@ -9,6 +9,7 @@ import '@xterm/xterm/css/xterm.css';
 import { useComputedColorScheme } from '@mantine/core';
 import type { BranchView, LogChunk } from '@bm/shared';
 import { useBm } from '../../lib/query';
+import { LIGHT_SURFACE } from '../../theme';
 
 const LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
 const MAX_LINES = 20000;
@@ -72,7 +73,7 @@ export function LogsTab({ branch }: { branch: BranchView }) {
       fontSize: 12,
       fontFamily: 'Cascadia Mono, Consolas, monospace',
       scrollback: MAX_LINES,
-      theme: scheme === 'dark' ? { background: '#1a1b1e' } : { background: '#ffffff', foreground: '#222222', selectionBackground: '#b3d7ff' },
+      theme: scheme === 'dark' ? { background: '#1a1b1e' } : { background: LIGHT_SURFACE, foreground: '#222222', selectionBackground: '#b3d7ff' },
     });
     const f = new FitAddon();
     const s = new SearchAddon();

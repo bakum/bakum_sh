@@ -1,0 +1,11 @@
+/* Light scheme surfaces (see LIGHT_SURFACE in theme.ts): Mantine paints these pure white or with the page color. */
+:root[data-mantine-color-scheme='light'] .mantine-Paper-root,
+:root[data-mantine-color-scheme='light'] .mantine-Card-root,
+:root[data-mantine-color-scheme='light'] .mantine-Popover-dropdown,
+:root[data-mantine-color-scheme='light'] .mantine-Menu-dropdown,
+:root[data-mantine-color-scheme='light'] .mantine-Combobox-dropdown {
+  background-color: var(--bm-surface);
+}
+:root[data-mantine-color-scheme='light'] .mantine-Input-wrapper[data-variant='default'] {
+  --input-bg: var(--bm-surface);
+}
