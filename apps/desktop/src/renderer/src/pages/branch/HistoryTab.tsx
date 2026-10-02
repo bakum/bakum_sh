@@ -27,6 +27,7 @@ import { fmtDate, fmtDuration, shortSha, TRIGGER_LABELS } from '../../lib/format
 import { githubAvatarUrl } from '../../lib/avatar';
 import { shellOpen } from '../BranchPage';
 import { folderBlockHint } from '../../lib/folder-block';
+import { ConnectAsDialog } from '../../components/dialogs/ConnectAsDialog';
 
 const PAGE = 5;
 
@@ -263,8 +264,10 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
 export function ConnectButton({ b, blocked = null }: { b: BuildView; blocked?: string | null }) {
   // D63: without Docker the registry status is stale — the container may well be gone.
   const running = useDockerOk() && b.status === 'running' && (b.containerState === null || b.containerState === 'running');
+  const [connectAs, setConnectAs] = useState(false);
   return (
     <Group gap={0} wrap="nowrap">
+      {connectAs && <ConnectAsDialog build={b} opened onClose={() => setConnectAs(false)} />}
       <Button
         color="teal"
         disabled={!running || !b.url}
@@ -286,6 +289,9 @@ export function ConnectButton({ b, blocked = null }: { b: BuildView; blocked?: s
           </Menu.Item>
           <Menu.Item disabled={!running} onClick={() => void shellOpen({ buildId: b.id, target: 'browser-debug' })}>
             Открыть в режиме отладки (?debug=1)
+          </Menu.Item>
+          <Menu.Item disabled={!running} onClick={() => setConnectAs(true)} data-testid="connect-as">
+            Войти как…
           </Menu.Item>
           <Menu.Item
             onClick={async () => {

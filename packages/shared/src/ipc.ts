@@ -247,6 +247,10 @@ export const methods = {
   ),
   'builds.connectionString': m<{ value: string }>()(z.object({ buildId: id }).strict()),
   'builds.resetAdminPassword': m<{ ok: true }>()(z.object({ buildId: id }).strict()),
+  /** Internal (non-share) active users of the build's database, for «Войти как» (D66). */
+  'builds.users': m<{ items: { id: number; login: string; name: string }[] }>()(z.object({ buildId: id }).strict()),
+  /** Opens the build in the browser logged in as `login`, without its password (D66). */
+  'builds.connectAs': m<{ ok: true }>()(z.object({ buildId: id, login: z.string().trim().min(1).max(256) }).strict()),
   'builds.modulesAction': m<JobRef>()(
     z
       .object({ buildId: id, install: z.array(z.string().regex(/^[a-z0-9_]+$/)), update: z.array(z.string().regex(/^[a-z0-9_]+$/)) })

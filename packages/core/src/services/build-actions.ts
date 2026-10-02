@@ -21,6 +21,7 @@ import { changedModules, modulesFromTree, parseModuleList, splitInstallUpdate } 
 import { branchByName, branchRow } from './branch-rows';
 import { mustBranch } from './branches';
 import { audit } from './audit';
+import { buildUsers, connectAs } from './connect-as';
 import { bus } from '../events';
 import { clearPause } from '../builds/triggers';
 import { toPosix } from '../util/paths';
@@ -315,6 +316,16 @@ export function registerBuildHandlers(ctx: Ctx): void {
       await pg.query(cfg.postgres, b.dbName, "UPDATE res_users SET password = $1 WHERE id = (SELECT res_id FROM ir_model_data WHERE module = 'base' AND name = 'user_admin')", [pw]);
       audit(ctx, { projectId: b.projectId, action: 'build.resetAdminPassword', target: `${b.composeProject}#${b.number}` });
       return { ok: true as const };
+    },
+    'builds.users': async (p) => {
+      const b = mustBuild(ctx, p.buildId);
+      return { items: await buildUsers(ctx.store.require(b.projectId), b) };
+    },
+    'builds.connectAs': (p) => {
+      const b = mustBuild(ctx, p.buildId);
+      if (!runtimeState.docker.ok) throw new BmError('DOCKER_DOWN', 'Docker Desktop не запущен: запустите его (кнопка «Запустить» вверху окна) и повторите');
+      const br = branchRow(ctx, b.branchId);
+      return connectAs(ctx, ctx.store.require(b.projectId), b, p.login, br ? codeDir(ctx, br) : null);
     },
     'builds.modulesAction': (p) => enqueueFor('modules', p.buildId, { install: p.install, update: p.update }),
     'builds.testsAction': (p) => {
