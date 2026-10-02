@@ -298,7 +298,7 @@ export function SettingsPage() {
                   {k === 'postgres' && !project.data.summary.legacy && (
                     <MigratePostgresCard projectId={pid!} external={project.data.config.postgres.mode === 'external'} />
                   )}
-                  <YamlForm text={project.data.yaml} groups={t.groups} onSave={saveProject} saving={update.isPending} />
+                  <YamlForm text={project.data.yaml} groups={t.groups} onSave={saveProject} saving={update.isPending} defaults={project.data.config} />
                 </Card>
               </Tabs.Panel>
             ))}
@@ -375,7 +375,7 @@ export function SettingsPage() {
           )}
 
           <Tabs.Panel value="app" pt="md">
-            {appCfg.data && <AppSettings text={appCfg.data.yaml} onSave={(t) => putApp.mutateAsync({ level: 'app', yaml: t })} saving={putApp.isPending} />}
+            {appCfg.data && <AppSettings text={appCfg.data.yaml} defaults={appCfg.data.value} onSave={(t) => putApp.mutateAsync({ level: 'app', yaml: t })} saving={putApp.isPending} />}
           </Tabs.Panel>
         </Tabs>
       </Stack>
@@ -597,7 +597,7 @@ function AgentSkillCard({ projectId }: { projectId: string }) {
   );
 }
 
-function AppSettings({ text, onSave, saving }: { text: string; onSave: (t: string) => Promise<unknown>; saving: boolean }) {
+function AppSettings({ text, defaults, onSave, saving }: { text: string; defaults: unknown; onSave: (t: string) => Promise<unknown>; saving: boolean }) {
   const [yaml, setYaml] = useState(text);
   useEffect(() => setYaml(text), [text]);
   const groups: FieldGroup[] = [
@@ -655,7 +655,7 @@ function AppSettings({ text, onSave, saving }: { text: string; onSave: (t: strin
     <Stack>
       <UpdatesCard />
       <Card withBorder>
-        <YamlForm text={text} groups={groups} onSave={onSave} saving={saving} />
+        <YamlForm text={text} groups={groups} onSave={onSave} saving={saving} defaults={defaults} />
       </Card>
       <Card withBorder>
         <Stack>

@@ -47,6 +47,19 @@ const valueAt = (doc: YAML.Document, p: (string | number)[]): unknown => {
   return YAML.isNode(v) ? v.toJS(doc) : v;
 };
 
+const pick = (obj: unknown, p: (string | number)[]): unknown =>
+  p.reduce<unknown>((o, k) => (o && typeof o === 'object' ? (o as Record<string | number, unknown>)[k] : undefined), obj);
+
+/**
+ * Value shown for a field: the file's own, otherwise the effective one (schema defaults), so a key the file omits is
+ * not shown empty or off. Fields that inherit from an upper level stay empty — empty means «take it from there».
+ * A default is written to the file only when the user changes the field.
+ */
+const shownValue = (doc: YAML.Document, f: FieldDef, defaults: unknown): unknown => {
+  const v = valueAt(doc, f.path);
+  return v === undefined && f.inherit === undefined ? pick(defaults, f.path) : v;
+};
+
 function toInput(v: unknown, f: FieldDef): unknown {
   if (f.type === 'keyvalue') return v && typeof v === 'object' ? Object.entries(v as Record<string, string>).map(([k, x]) => `${k}=${x}`) : [];
   if (f.type === 'tags') return Array.isArray(v) ? v.map(String) : [];
@@ -59,10 +72,19 @@ function toInput(v: unknown, f: FieldDef): unknown {
  * Form over a YAML document: edits are applied with setIn/deleteIn so comments and layout
  * of the file survive (spec 9.1 — the same file is edited by forms, Monaco and by hand).
  */
-export function YamlForm(props: { text: string; groups: FieldGroup[]; onSave: (text: string) => Promise<unknown>; saving?: boolean }) {
+export function YamlForm(props: {
+  text: string;
+  groups: FieldGroup[];
+  onSave: (text: string) => Promise<unknown>;
+  saving?: boolean;
+  /** Parsed configuration with defaults applied, for keys the file omits. */
+  defaults?: unknown;
+}) {
   const doc = useMemo(() => YAML.parseDocument(props.text), [props.text]);
   const fields = props.groups.flatMap((g) => g.fields);
-  const initial = useMemo(() => Object.fromEntries(fields.map((f) => [key(f.path), toInput(valueAt(doc, f.path), f)])), [doc]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Refetches bring a new defaults object with the same content: keyed by content, unsaved edits survive them.
+  const defaultsKey = JSON.stringify(props.defaults ?? null);
+  const initial = useMemo(() => Object.fromEntries(fields.map((f) => [key(f.path), toInput(shownValue(doc, f, props.defaults), f)])), [doc, defaultsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [values, setValues] = useState<Record<string, unknown>>(initial);
   useEffect(() => setValues(initial), [initial]);
   const dirty = fields.filter((f) => JSON.stringify(values[key(f.path)]) !== JSON.stringify(initial[key(f.path)]));
