@@ -2,14 +2,15 @@ import { useState } from 'react';
 import { Badge, Button, Card, Group, Stack, Text, Title } from '@mantine/core';
 import { checkForUpdates, installUpdate, ReleaseNotes, useUpdateState } from './UpdateBanner';
 import { fmtDate } from '../lib/format';
+import { isMac } from '../lib/bm';
 
 const STATUS: Record<string, string> = {
   idle: 'не проверялось',
   checking: 'проверка…',
   none: 'установлена последняя версия',
   available: 'доступно обновление',
-  downloading: 'загрузка установщика…',
-  ready: 'установщик скачан',
+  downloading: isMac ? 'загрузка образа…' : 'загрузка установщика…',
+  ready: isMac ? 'образ скачан' : 'установщик скачан',
   installing: 'установка…',
   error: 'ошибка проверки',
 };
@@ -78,9 +79,11 @@ export function UpdatesCard() {
           )}
         </Group>
         <Text size="xs" c="dimmed">
-          Приложение сверяется с релизами GitHub-репозитория из настройки updates.repository. При обновлении установщик
-          скачивается и проверяется, затем приложение полностью закрывается и запускает его. Контейнеры сборок, базы и
-          настройки не затрагиваются.
+          Приложение сверяется с релизами GitHub-репозитория из настройки updates.repository.{' '}
+          {isMac
+            ? 'При обновлении образ .dmg скачивается и проверяется, затем приложение полностью закрывается и открывает его: перетащите приложение в «Программы» с заменой.'
+            : 'При обновлении установщик скачивается и проверяется, затем приложение полностью закрывается и запускает его.'}{' '}
+          Контейнеры сборок, базы и настройки не затрагиваются.
         </Text>
       </Stack>
       <ReleaseNotes state={s} opened={notes} onClose={() => setNotes(false)} />

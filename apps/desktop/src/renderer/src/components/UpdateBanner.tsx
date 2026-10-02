@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Anchor, Button, Group, Modal, Progress, ScrollArea, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import type { UpdateState } from '@bm/shared';
+import { isMac } from '../lib/bm';
 
 /** Update state from main, kept in sync by push events (docs/decisions.md D29). */
 export function useUpdateState(): UpdateState | null {
@@ -59,8 +60,8 @@ export function UpdateBanner() {
       <Group justify="space-between" wrap="nowrap">
         <Text size="sm">
           Доступна новая версия <b>{s.latest}</b> (у вас {s.current}).{' '}
-          {s.status === 'downloading' && `Загрузка установщика: ${Math.round((s.progress ?? 0) * 100)}%`}
-          {s.status === 'installing' && 'Приложение закрывается, запускается установщик…'}
+          {s.status === 'downloading' && `Загрузка ${isMac ? 'образа' : 'установщика'}: ${Math.round((s.progress ?? 0) * 100)}%`}
+          {s.status === 'installing' && (isMac ? 'Приложение закрывается, открывается образ…' : 'Приложение закрывается, запускается установщик…')}
         </Text>
         <Group gap={6} wrap="nowrap">
           {s.status === 'downloading' && <Progress value={(s.progress ?? 0) * 100} w={160} />}

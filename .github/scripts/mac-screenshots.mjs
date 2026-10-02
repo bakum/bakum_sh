@@ -57,6 +57,10 @@ try {
   check('Core answers', !!state, state ? `dataDir ${state.dataDir}` : 'no answer in 60 s');
   const menu = await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.map((i) => i.label) ?? []);
   check('macOS app menu', menu.length >= 3, menu.join(' | '));
+  // The menu bar icon (Tray): System Events lists the status items of the app process (needs accessibility rights,
+  // which the runner may not have — then it is only logged).
+  const items = spawnSync('osascript', ['-e', 'tell application "System Events" to get description of every menu bar item of menu bar 2 of (first process whose name contains "Odoo Branch")'], { encoding: 'utf8' });
+  console.log('menu bar items:', (items.stdout || items.stderr).trim());
 
   await shot('01-welcome');
   desktop('02-desktop-welcome');
@@ -89,8 +93,9 @@ try {
   }
 } finally {
   // Cmd+Q path: before-quit → requestQuit → app.exit; do not wait forever if it hangs.
+  const proc = app.process();
   await Promise.race([app.close(), pause(15_000)]).catch(() => {});
-  app.process()?.kill();
+  if (proc.exitCode === null) proc.kill();
 }
 console.log(`Итого: ${results.filter(Boolean).length} из ${results.length}`);
 process.exit(results.every(Boolean) ? 0 : 1);
