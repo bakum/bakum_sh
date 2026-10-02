@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.13.20] — 2026-10-02
+
 ### Добавлено
 - Версия для macOS на Apple Silicon: образ `Odoo-Branch-Manager-X.Y.Z-mac-arm64.dmg` в релизе на GitHub. Нужны
   Docker Desktop for Mac и git. Shell открывает Терминал, Editor — VS Code или Cursor, в «Обновить» скачивается образ.
