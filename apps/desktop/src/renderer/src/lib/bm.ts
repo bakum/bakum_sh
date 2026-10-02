@@ -14,3 +14,6 @@ export async function call<K extends MethodName>(method: K, params: MethodParams
 
 export const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 export const errorCode = (e: unknown): string | undefined => (e as BmCallError | null)?.code;
+
+/** macOS host (D67): Finder, Terminal.app, Keychain instead of Explorer, Windows Terminal, Credential Manager. */
+export const isMac = window.bm.platform === 'darwin';

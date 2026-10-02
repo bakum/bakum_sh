@@ -21,6 +21,7 @@ import { CoreHost } from './core-host';
 import { drawIcon, trayImage, type TrayState } from './icons';
 import { isAllowedExternal } from './security';
 import { resolveDirs } from './migrate-dirs';
+import { dirRoots } from './platform-dirs';
 import { Updater } from './updater';
 import { cliPipeName, installCliLaunchers } from './cli-install';
 
@@ -29,12 +30,14 @@ const PRODUCT = 'Odoo Branch Manager';
 const profile = process.env.BM_PROFILE?.replace(/[^a-z0-9-]/gi, '') || '';
 const suffix = profile ? ` (${profile})` : '';
 const dirName = `${PRODUCT}${suffix}`;
-const dirs = resolveDirs(process.env.APPDATA ?? app.getPath('appData'), process.env.LOCALAPPDATA ?? app.getPath('appData'), PRODUCT, suffix);
+const isMac = process.platform === 'darwin';
+const roots = dirRoots(app.getPath('appData'));
+const dirs = resolveDirs(roots.configRoot, roots.localRoot, PRODUCT, suffix);
 const configDir = dirs.configDir;
 const localDir = dirs.localDir;
 
 app.setName(dirName);
-app.setAppUserModelId(profile ? `ua.bakum.odoo-branch-manager.${profile}` : 'ua.bakum.odoo-branch-manager');
+if (process.platform === 'win32') app.setAppUserModelId(profile ? `ua.bakum.odoo-branch-manager.${profile}` : 'ua.bakum.odoo-branch-manager');
 app.setPath('userData', path.join(localDir, 'electron'));
 
 const isHook = process.argv.includes('--hook');
@@ -141,7 +144,8 @@ function createWindow(show: boolean): void {
       spellcheck: false,
     },
   });
-  Menu.setApplicationMenu(null);
+  // macOS needs the app / Edit menus: without them Cmd+Q and Cmd+C/V/X/A/Z (inputs, Monaco) do nothing (D67).
+  Menu.setApplicationMenu(isMac ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]) : null);
   if (st.maximized) win.maximize();
 
   const devUrl = process.env.ELECTRON_RENDERER_URL;
@@ -284,7 +288,10 @@ function launchInstaller(file: string): void {
     return;
   }
   // The app is already shut down (Core stopped, tray gone); main exits right after this call.
-  spawn(file, [], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+  // macOS (D67): an unsigned app cannot replace itself reliably — Finder mounts the disk image and the user drags the
+  // app over the old one in Applications (the dialog said so).
+  if (isMac) spawn('open', [file], { detached: true, stdio: 'ignore' }).unref();
+  else spawn(file, [], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
   log.info({ file }, 'update: installer started, exiting');
 }
 
@@ -309,8 +316,12 @@ async function installUpdate(): Promise<{ ok: boolean; message?: string }> {
     title: PRODUCT,
     message: `Установить Odoo Branch Manager ${s.latest}?`,
     detail:
-      `Текущая версия ${s.current}. Установщик будет скачан (${Math.round(s.asset.size / 1e6)} МБ) и проверен, затем приложение ` +
-      'полностью закроется и запустится установщик. Контейнеры сборок, базы и настройки не затрагиваются.' +
+      (isMac
+        ? `Текущая версия ${s.current}. Образ диска будет скачан (${Math.round(s.asset.size / 1e6)} МБ) и проверен, затем приложение ` +
+          'полностью закроется и откроется образ: перетащите Odoo Branch Manager в «Программы» с заменой и запустите его снова. '
+        : `Текущая версия ${s.current}. Установщик будет скачан (${Math.round(s.asset.size / 1e6)} МБ) и проверен, затем приложение ` +
+          'полностью закроется и запустится установщик. ') +
+      'Контейнеры сборок, базы и настройки не затрагиваются.' +
       (jobs > 0 ? `\n\nСейчас выполняется задач: ${jobs}. Прерванные сборки получат статус failed, их можно повторить после обновления.` : ''),
     buttons,
     defaultId: 0,
@@ -415,6 +426,7 @@ function onCoreMessage(msg: CoreToMain): void {
 
 function applyAutostart(): void {
   if (!appConfig || !app.isPackaged) return;
+  // `args` is Windows-only; on macOS the start at login is recognised by wasOpenedAtLogin (see boot).
   app.setLoginItemSettings({ openAtLogin: appConfig.desktop.autostart, args: ['--minimized'] });
 }
 
@@ -525,6 +537,8 @@ async function boot(): Promise<void> {
     // SemVer build metadata: 0.1.1+abc1234 (docs/decisions.md D27).
     appVersion: `${__BM_VERSION__}+${__BM_COMMIT__}`,
     resourcesPath: process.resourcesPath,
+    // %APPDATA% / %LOCALAPPDATA% in app.yaml resolve to the same roots on macOS (D67).
+    env: isMac ? { APPDATA: roots.configRoot, LOCALAPPDATA: roots.localRoot } : {},
     log,
   });
   core.on('message', onCoreMessage);
@@ -539,14 +553,22 @@ async function boot(): Promise<void> {
   tray.on('click', () => showWindow());
   rebuildTrayMenu();
 
-  const minimized = process.argv.includes('--minimized');
+  const minimized = process.argv.includes('--minimized') || (isMac && app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin);
   createWindow(!minimized);
+  // macOS: a click on the Dock icon brings back the window hidden to the menu bar.
+  app.on('activate', () => showWindow());
   win?.once('ready-to-show', () => log.info({ ms: Date.now() - t0 }, 'window ready'));
 }
 
 app.on('window-all-closed', () => {
   // Stays in the tray.
 });
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
+  // macOS: Cmd+Q, the Dock and logout call app.quit() — take the same path as «Выход» (active jobs dialog, Core stop).
+  if (isMac && !quitting) {
+    e.preventDefault();
+    void requestQuit();
+    return;
+  }
   quitting = true;
 });

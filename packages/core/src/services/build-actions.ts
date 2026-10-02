@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
@@ -10,6 +11,7 @@ import { getQueue } from '../jobs/queue';
 import { buildRow, buildUrl, listBuilds, liveBuild, toBuildView } from '../builds/view';
 import { requestBuildChecked } from '../builds/request';
 import { listBackups } from '../builds/backups';
+import { dockerRunWithEnvFile, isMac, shQuote } from '../util/platform';
 import { serviceContainer } from '../builds/pipeline';
 import { codeVars, serverBaseArgs } from '../builds/odoo-cli';
 import { resolveBranchScope } from '../config/effective';
@@ -170,8 +172,33 @@ async function credentials(ctx: Ctx, buildId: number) {
   return { login, password, url: buildUrl(b.host, ctx.proxyPort ?? ctx.store.app.proxyPort) };
 }
 
+/**
+ * macOS (D67): a new Terminal.app window. The command line goes to AppleScript as a run argument, not inside the
+ * script text, so nothing in it is evaluated by AppleScript. The Terminal shell does not inherit our environment:
+ * variables go through a 0600 `--env-file` that is removed a minute later (a `-e NAME=value` would show in `ps`).
+ */
+function openMacTerminal(argv: string[], env: Record<string, string>): void {
+  let args = argv;
+  const names = Object.keys(env);
+  if (names.length) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bm-term-'));
+    const file = path.join(dir, 'env');
+    fs.writeFileSync(file, names.map((n) => `${n}=${env[n]}\n`).join(''), { mode: 0o600 });
+    setTimeout(() => fs.rmSync(dir, { recursive: true, force: true }), 60_000).unref();
+    args = dockerRunWithEnvFile(argv, names, file);
+  }
+  const script = ['on run argv', 'tell application "Terminal"', 'activate', 'do script (item 1 of argv)', 'end tell', 'end run'];
+  const sub = execa('osascript', [...script.flatMap((l) => ['-e', l]), args.map(shQuote).join(' ')], { detached: true, stdio: 'ignore', reject: false });
+  sub.unref();
+  void sub.catch(() => {});
+}
+
 /** Terminal command (spec 8.9 Shell): Windows Terminal if present, otherwise cmd — argument arrays only. */
 async function openTerminal(ctx: Ctx, title: string, argv: string[], env: Record<string, string> = {}): Promise<string | undefined> {
+  if (isMac) {
+    openMacTerminal(argv, env);
+    return undefined;
+  }
   const pref = ctx.store.app.desktop.terminal;
   const wtOk = pref === 'wt' && (await execa('where', ['wt'], { reject: false, windowsHide: true })).exitCode === 0;
   const opts = { detached: true, stdio: 'ignore' as const, reject: false, windowsHide: false, env };
@@ -237,7 +264,10 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
       }
       const exe = p.target === 'editor-cursor' ? 'cursor' : ctx.store.app.desktop.editor;
       const target = path.resolve(dir);
-      const r = await execa(exe, [target], { reject: false, windowsHide: true, detached: true, stdio: 'ignore' });
+      let r = await execa(exe, [target], { reject: false, windowsHide: true, detached: true, stdio: 'ignore' });
+      // macOS (D67): without «Install 'code' command in PATH» the editor is still reachable as an app bundle.
+      const macApp = ({ code: 'Visual Studio Code', cursor: 'Cursor' } as Record<string, string>)[exe];
+      if (isMac && r.failed && macApp) r = await execa('open', ['-a', macApp, target], { reject: false, stdio: 'ignore' });
       log().info({ exe, target, exitCode: r.exitCode }, 'editor opened');
       if (r.failed && r.exitCode !== 0) throw new BmError('NO_EDITOR', `Не удалось запустить «${exe}». Укажите путь к CLI редактора в Settings → Приложение → Редактор.`);
       return { ok: true };

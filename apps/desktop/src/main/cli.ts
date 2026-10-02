@@ -1,7 +1,8 @@
 /**
  * Client of the app's command line `bm` (D53). Runs as plain Node: the app's own exe with ELECTRON_RUN_AS_NODE=1,
  * started by bin/bm.cmd or bin/bm, which main writes on every start. Only Node built-ins here — the file is copied
- * next to bm.cmd and must work on its own. All commands are parsed and executed by Core behind the named pipe.
+ * next to the launchers and must work on its own. All commands are parsed and executed by Core behind the named pipe
+ * (a unix socket on macOS, D67).
  */
 import net from 'node:net';
 
@@ -31,7 +32,8 @@ sock.on('data', (chunk: string) => {
 });
 sock.on('error', (err: NodeJS.ErrnoException) => {
   process.stderr.write(
-    err.code === 'ENOENT'
+    // ECONNREFUSED: the socket file of a Core that has exited (macOS).
+    err.code === 'ENOENT' || err.code === 'ECONNREFUSED'
       ? 'Odoo Branch Manager не запущен: запустите приложение и повторите команду\n'
       : `Нет связи с Odoo Branch Manager: ${err.message}\n`,
   );

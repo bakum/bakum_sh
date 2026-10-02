@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -15,12 +16,34 @@ export function expandPath(p: string, env: NodeJS.ProcessEnv = process.env): str
 /** Forward-slash form used in YAML and docker bind mounts. */
 export const toPosix = (p: string): string => p.replace(/\\/g, '/');
 
-/** Case-insensitive (Windows) containment check: is `child` strictly inside `parent`? */
+/**
+ * Absolute path for comparisons. On macOS symlinks are resolved (git and Docker report /private/var/… for /var/…,
+ * D67); a path that does not exist yet keeps its missing tail under the resolved existing ancestor. Windows keeps the
+ * plain resolve: junctions and 8.3 names were never expanded there and the safety checks rely on that.
+ */
+function canonical(p: string): string {
+  const abs = path.resolve(p);
+  if (process.platform === 'win32') return abs;
+  let head = abs;
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync.native(head), ...tail);
+    } catch {
+      const parent = path.dirname(head);
+      if (parent === head) return abs;
+      tail.unshift(path.basename(head));
+      head = parent;
+    }
+  }
+}
+
+/** Case-insensitive (Windows, default APFS) containment check: is `child` strictly inside `parent`? */
 export function isInside(parent: string, child: string): boolean {
-  const rel = path.relative(path.resolve(parent).toLowerCase(), path.resolve(child).toLowerCase());
+  const rel = path.relative(canonical(parent).toLowerCase(), canonical(child).toLowerCase());
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
 export function samePath(a: string, b: string): boolean {
-  return path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+  return canonical(a).toLowerCase() === canonical(b).toLowerCase();
 }

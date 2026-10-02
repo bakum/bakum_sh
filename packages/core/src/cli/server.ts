@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import net from 'node:net';
 import type { Ctx } from '../context';
 import { log } from '../util/logger';
@@ -5,7 +6,8 @@ import { runCli, type CliRequest } from './commands';
 
 /**
  * Named pipe of the command line (D53). No TCP port: the pipe is local, and its default Windows ACL lets only the
- * current user (and administrators) write to it. Protocol — JSON lines: the client sends one request
+ * current user (and administrators) write to it. On macOS it is a unix socket in the per-user temp folder, chmod 600
+ * (D67). Protocol — JSON lines: the client sends one request
  * `{argv, cwd}`, Core answers with `{o: line}` / `{e: line}` and ends with `{x: exitCode}`.
  */
 export function startCliServer(ctx: Ctx, pipe: string): void {
@@ -45,10 +47,37 @@ export function startCliServer(ctx: Ctx, pipe: string): void {
   server.on('error', (err: NodeJS.ErrnoException) => {
     // The pipe of a Core that is still shutting down (restart): try again shortly.
     if (err.code === 'EADDRINUSE' && attempts++ < 10) {
-      setTimeout(() => server.listen(pipe), 1000);
+      if (process.platform === 'win32') setTimeout(() => server.listen(pipe), 1000);
+      else void removeStaleSocket(pipe).then((removed) => setTimeout(() => server.listen(pipe), removed ? 0 : 1000));
       return;
     }
     log().error({ err, pipe }, 'cli server failed');
   });
-  server.listen(pipe, () => log().info({ pipe }, 'cli server listening'));
+  server.listen(pipe, () => {
+    if (process.platform !== 'win32') fs.chmodSync(pipe, 0o600);
+    log().info({ pipe }, 'cli server listening');
+  });
+}
+
+/**
+ * A unix socket file outlives a Core that crashed. It is removed only when nothing answers on it (ECONNREFUSED); a
+ * Core that is still alive keeps it.
+ */
+function removeStaleSocket(file: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = net.connect(file);
+    probe.on('connect', () => {
+      probe.destroy();
+      resolve(false);
+    });
+    probe.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code !== 'ECONNREFUSED') return resolve(false);
+      try {
+        if (fs.lstatSync(file).isSocket()) fs.unlinkSync(file);
+        resolve(true);
+      } catch {
+        resolve(false);
+      }
+    });
+  });
 }

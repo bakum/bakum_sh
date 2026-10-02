@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import { execa } from 'execa';
 import { BmError, type AppStateView, type SystemStatus } from '@bm/shared';
 import type { Ctx } from '../context';
@@ -12,6 +13,7 @@ import { bus } from '../events';
 import { audit } from './audit';
 import { reconcile } from '../reconcile';
 import * as git from '../git';
+import { isMac } from '../util/platform';
 
 let lastReconcile = 0;
 
@@ -134,17 +136,20 @@ export async function systemStatus(ctx: Ctx, refresh: boolean): Promise<SystemSt
 export function dockerDesktopExe(ctx: Ctx): string {
   const c = ctx.store.app.desktop.dockerDesktopExe;
   if (c !== 'auto') return c;
-  const candidates = [
-    `${process.env.ProgramFiles ?? 'C:/Program Files'}/Docker/Docker/Docker Desktop.exe`,
-    `${process.env.LOCALAPPDATA ?? ''}/Programs/Docker/Docker/Docker Desktop.exe`,
-  ];
+  const candidates = isMac
+    ? ['/Applications/Docker.app', `${os.homedir()}/Applications/Docker.app`]
+    : [
+        `${process.env.ProgramFiles ?? 'C:/Program Files'}/Docker/Docker/Docker Desktop.exe`,
+        `${process.env.LOCALAPPDATA ?? ''}/Programs/Docker/Docker/Docker Desktop.exe`,
+      ];
   return candidates.find((p) => fs.existsSync(p)) ?? candidates[0]!;
 }
 
 export async function startDockerDesktop(ctx: Ctx): Promise<{ ok: true }> {
   const exe = dockerDesktopExe(ctx);
   if (!fs.existsSync(exe)) throw new BmError('NO_DOCKER_DESKTOP', `Docker Desktop не найден (${exe}). Укажите путь в app.yaml → desktop.dockerDesktopExe.`);
-  const sub = execa(exe, [], { detached: true, stdio: 'ignore', windowsHide: false, reject: false });
+  // macOS: an .app bundle is started through LaunchServices (D67).
+  const sub = isMac ? execa('open', [exe], { detached: true, stdio: 'ignore', reject: false }) : execa(exe, [], { detached: true, stdio: 'ignore', windowsHide: false, reject: false });
   sub.unref();
   void sub.catch(() => {});
   audit(ctx, { action: 'docker.start', target: exe });

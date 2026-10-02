@@ -17,7 +17,13 @@ export function drawIcon(size: number, state: TrayState): NativeImage {
 }
 
 export function trayImage(state: TrayState): NativeImage {
-  const img = drawIcon(16, state);
-  img.addRepresentation({ scaleFactor: 2, width: 32, height: 32, buffer: drawIcon(32, state).toBitmap() });
+  // macOS menu bar (D67): the idle mark is a template image (black, recoloured by the system for light / dark menu
+  // bars); the other states keep their colour, it is the status signal.
+  const template = process.platform === 'darwin' && state === 'idle';
+  const draw = (size: number): NativeImage =>
+    template ? nativeImage.createFromBitmap(Buffer.from(markPixels(size, [0, 0, 0])), { width: size, height: size }) : drawIcon(size, state);
+  const img = draw(16);
+  img.addRepresentation({ scaleFactor: 2, width: 32, height: 32, buffer: draw(32).toBitmap() });
+  if (template) img.setTemplateImage(true);
   return img;
 }

@@ -3,9 +3,11 @@ import { _electron as electron } from 'playwright';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 export const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const electronExe = path.resolve(appDir, '../../node_modules/electron/dist/electron.exe');
+// The electron package exports the path of its binary (electron.exe, Electron.app/Contents/MacOS/Electron on macOS).
+export const electronExe = createRequire(import.meta.url)('electron');
 export const shotsDir = path.resolve(appDir, '../../tmp/shots');
 fs.mkdirSync(shotsDir, { recursive: true });
 

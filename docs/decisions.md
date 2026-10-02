@@ -1023,3 +1023,47 @@
   Временный пароль пользователю — меняет данные БД, и пароль всё равно надо ввести. Отдельное окно Electron
   с cookie — работает без Traefik, но это не браузер пользователя (нет его расширений, вкладок, DevTools).
   Сервер в Core для выдачи cookie — нарушает правило «без HTTP-порта» и потребовал бы маршрута из Docker на хост.
+
+## D67. macOS (Apple Silicon) — вторая платформа, без подписи Apple
+
+- **Контекст.** ТЗ описывает приложение для Windows, но тем же стеком (Docker Desktop, git, Odoo в контейнерах)
+  пользуются и на Mac. В коде платформа была зашита: named pipe Docker и `bm`, `%LOCALAPPDATA%` в `dataDir`, `netstat`
+  Windows, `wt` / `cmd.exe`, `Docker Desktop.exe`, только NSIS / portable. Apple Developer ID (99 $ в год) нет, Mac
+  для сборки — только в CI.
+- **Решение.** Платформенные различия — в `core/src/util/platform.ts` и `desktop/src/main/platform-dirs.ts`;
+  поведение на Windows не меняется.
+  - Папки: настройки — `~/Library/Application Support/<продукт>`, данные — `$XDG_DATA_HOME` или `~/.local/share/<продукт>`.
+    Корни разные, чтобы `projects/<id>.yaml` и `projects/<id>/branches/` не оказались в одной папке. Core получает
+    их как `APPDATA` / `LOCALAPPDATA`, поэтому `%LOCALAPPDATA%` в `app.yaml` (значение по умолчанию схемы) работает без
+    смены `.default()`.
+  - PATH: приложение, запущенное из Finder, видит только `/usr/bin:/bin:/usr/sbin:/sbin`. Core в начале добавляет
+    `/opt/homebrew/bin`, `/usr/local/bin`, `Docker.app/Contents/Resources/bin`, `~/.docker/bin`.
+  - Docker: `DOCKER_HOST` (unix://) → `~/.docker/run/docker.sock` → `/var/run/docker.sock`.
+  - `bm`: unix-сокет в `os.tmpdir()` (у пользователя свой, путь короче 104 байт и без пробелов), `chmod 600`.
+    Оставшийся после падения Core сокет удаляется, только если на нём никто не отвечает (`ECONNREFUSED`). `bm.cmd` не
+    пишется.
+  - Порты: `netstat -an -p tcp` (BSD), не `lsof`: тот без root не видит чужие сокеты.
+  - Пути: `samePath` / `isInside` на macOS сравнивают через `realpath` (git и Docker отдают `/private/var/…` вместо
+    `/var/…`); регистр по-прежнему не учитывается (APFS по умолчанию). На Windows — без изменений.
+  - Shell: новое окно Terminal.app через `osascript`. Команда передаётся аргументом `on run argv`, а не текстом
+    скрипта, аргументы экранируются для sh. Окружение в новое окно не переходит, поэтому `PGPASSWORD` для psql
+    передаётся через `docker run --env-file` (файл 0600 во временной папке удаляется через минуту): в `-e NAME=value`
+    пароль виден в `ps`. Настройка `desktop.terminal` на Mac не используется (схема не менялась).
+  - Editor: без команды `code` / `cursor` в PATH — `open -a "Visual Studio Code"` / `open -a Cursor`. Docker Desktop
+    запускается через `open /Applications/Docker.app`.
+  - Окно: меню appMenu / Edit / Window (без него не работают Cmd+Q и Cmd+C/V). Cmd+Q и выход из Dock идут через тот же
+    диалог активных задач, что «Выход» в трее. Щелчок по Dock показывает окно. Значок в строке меню без сборок —
+    template-изображение; цветные состояния остаются цветными, цвет и есть статус. Автозапуск свёрнутым определяется
+    по `wasOpenedAtLogin`.
+  - Сборка: `pnpm package:mac` → `Odoo-Branch-Manager-X.Y.Z-mac-arm64.dmg`, ad-hoc подпись (`identity: "-"`,
+    `hardenedRuntime: false`). Без подписи Apple Silicon не запустит изменённый бандл. Workflow
+    `.github/workflows/mac-release.yml` на `macos-14` собирает образ при публикации релиза (после typecheck и test) и
+    прикрепляет его к релизу. Windows-установщики по-прежнему собираются локально.
+  - Обновление (D29): ассет выбирается по платформе. На Mac скачанный и проверенный (размер, SHA-256) `.dmg`
+    открывается после выхода приложения, заменить приложение в «Программах» нужно вручную.
+  - Skill для ассистентов: на Mac — без Git Bash, PowerShell и `MSYS_NO_PATHCONV`. Платформа — параметр `renderSkill`,
+    поэтому оба варианта проверяются снапшотами на любой ОС.
+- **Альтернатива.** Подпись Developer ID и нотаризация. Дают запуск без `xattr -cr` и замену приложения на месте
+  (Squirrel.Mac / electron-updater), но стоят денег и требуют сертификатов в секретах CI; при необходимости их можно
+  добавить позже, не меняя остального. Universal-сборка (arm64 + x64) — две сборки better-sqlite3 и вдвое больший
+  образ ради Intel-Mac, которых в работе нет. Терминал на выбор (iTerm) — позже, если понадобится.

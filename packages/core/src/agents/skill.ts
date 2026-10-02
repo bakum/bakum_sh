@@ -22,7 +22,9 @@ export interface SkillInput {
   /** GitHub repository of the app (`updates.repository`), for issues. */
   appRepository: string;
   /** Launchers of the app's command line `bm` (D53); null — the skill only describes docker commands. */
-  cli: { cmd: string; sh: string } | null;
+  cli: { cmd: string | null; sh: string } | null;
+  /** Windows host: Git Bash and PowerShell notes; otherwise (macOS, D67) plain zsh / bash. */
+  windows: boolean;
 }
 
 export const skillName = (projectId: string): string => `branch-manager-${projectId}`;
@@ -172,15 +174,14 @@ export function renderSkill(i: SkillInput): string {
           '(History, Audit Logs), итог тестов попадает в бейдж Test сборки. Production и защищённые ветки bm не меняет.',
           '',
           '```bash',
-          `BM="${i.cli.sh}"   # Git Bash`,
+          `BM="${i.cli.sh}"   # ${i.windows ? 'Git Bash' : 'zsh / bash'}`,
           '"$BM" status                        # ветки, сборки, URL, базы, итог тестов; --json — для разбора',
           '"$BM" modules <ветка> -u <модуль>   # -i <модуль> — установить; контейнер на время останавливается',
           '"$BM" test <ветка> <модуль>         # тесты на временной копии базы сборки',
           '"$BM" restart <ветка>',
           '```',
           '',
-          `PowerShell / cmd: ${code(`& "${i.cli.cmd}" status`)} и так далее.`,
-          '',
+          ...(i.cli.cmd ? [`PowerShell / cmd: ${code(`& "${i.cli.cmd}" status`)} и так далее.`, ''] : []),
           `- Ветка — имя или slug. Проект — по текущей папке, иначе ${code(`-p ${id}`)}.`,
           '- Код выхода: 0 — готово; 1 — ошибка или упавшие тесты (текст в stderr); 2 — приложение не запущено: попроси',
           '  пользователя запустить его или используй docker-команды ниже.',
@@ -215,30 +216,38 @@ export function renderSkill(i: SkillInput): string {
     '```bash',
     `docker inspect -f '{{index .Config.Labels "bm.stage"}} protected={{index .Config.Labels "bm.protected"}}' $C  # production или protected=true — стоп`,
     `ARGS=$(docker inspect -f '{{index .Config.Labels "bm.odoo.args"}}' $C)`,
-    `bmodoo() { MSYS_NO_PATHCONV=1 docker exec -i "$C" sh -c 'PGPASSWORD=$PASSWORD; export PGPASSWORD; exec odoo "$@"' odoo "$@" $ARGS -d "$DB"; }`,
+    `bmodoo() { ${i.windows ? 'MSYS_NO_PATHCONV=1 ' : ''}docker exec -i "$C" sh -c 'PGPASSWORD=$PASSWORD; export PGPASSWORD; exec odoo "$@"' odoo "$@" $ARGS -d "$DB"; }`,
     'bmodoo -u <модуль> --stop-after-init --no-http',
     'docker restart $C',
     '```',
     '',
-    'PowerShell:',
-    '',
-    '```powershell',
-    `$C = docker ps -q ${filter} --filter label=bm.branch.name=<ветка>`,
-    `$L = (docker inspect $C | ConvertFrom-Json)[0].Config.Labels`,
-    `"$($L.'bm.stage') protected=$($L.'bm.protected')"  # production или protected=true — стоп`,
-    `$DB = $L.'bm.db'`,
-    `$OdooArgs = $L.'bm.odoo.args' -split ' '`,
-    `function bmodoo { docker exec -i $C sh -c 'PGPASSWORD=$PASSWORD; export PGPASSWORD; exec odoo $@' odoo @args @OdooArgs -d $DB }`,
-    'bmodoo -u <модуль> --stop-after-init --no-http',
-    'docker restart $C',
-    '```',
-    '',
+    ...(i.windows
+      ? [
+          'PowerShell:',
+          '',
+          '```powershell',
+          `$C = docker ps -q ${filter} --filter label=bm.branch.name=<ветка>`,
+          `$L = (docker inspect $C | ConvertFrom-Json)[0].Config.Labels`,
+          `"$($L.'bm.stage') protected=$($L.'bm.protected')"  # production или protected=true — стоп`,
+          `$DB = $L.'bm.db'`,
+          `$OdooArgs = $L.'bm.odoo.args' -split ' '`,
+          `function bmodoo { docker exec -i $C sh -c 'PGPASSWORD=$PASSWORD; export PGPASSWORD; exec odoo $@' odoo @args @OdooArgs -d $DB }`,
+          'bmodoo -u <модуль> --stop-after-init --no-http',
+          'docker restart $C',
+          '```',
+          '',
+        ]
+      : []),
     `- ${code('bmodoo')} запускает Odoo внутри контейнера сборки с её опциями. Пароль БД берётся из переменной контейнера`,
     `  ${code('PASSWORD')} (${code('docker exec')} обходит entrypoint образа, который обычно его передаёт) и не проходит через твою команду.`,
     `- Новый модуль — ${code('-i')} вместо ${code('-u')}.`,
-    `- ${code('MSYS_NO_PATHCONV=1')} нужен в Git Bash: иначе пути ${code('/etc/…')} в опциях превратятся в пути Windows.`,
-    `- В PowerShell labels читай через ${code('ConvertFrom-Json')}, как выше: Windows PowerShell 5.1 выкидывает двойные кавычки`,
-    `  из аргументов ${code(`docker inspect -f '{{index .Config.Labels "…"}}'`)}.`,
+    ...(i.windows
+      ? [
+          `- ${code('MSYS_NO_PATHCONV=1')} нужен в Git Bash: иначе пути ${code('/etc/…')} в опциях превратятся в пути Windows.`,
+          `- В PowerShell labels читай через ${code('ConvertFrom-Json')}, как выше: Windows PowerShell 5.1 выкидывает двойные кавычки`,
+          `  из аргументов ${code(`docker inspect -f '{{index .Config.Labels "…"}}'`)}.`,
+        ]
+      : []),
     `- Label ${code('bm.odoo.args')} пуст — сборка создана старой версией приложения. Попроси пользователя нажать`,
     `  «Применить» на странице ветки (плашка «конфигурация изменилась»: контейнер пересоздаётся, база остаётся); до этого задай ${code(`ARGS='${staticArgs}'`)}${usesAddonsPath ? ` и добавь к нему ${code('--addons-path=…')} из ${code(`docker inspect -f '{{json .Config.Cmd}}' $C`)}` : ''}.`,
     '',

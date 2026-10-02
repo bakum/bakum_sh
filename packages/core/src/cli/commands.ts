@@ -248,7 +248,8 @@ export async function runCli(ctx: Ctx, req: CliRequest, io: CliIo): Promise<numb
   }
 }
 
-export const cliCommandPaths = (binDir: string): { cmd: string; sh: string } => ({
-  cmd: toPosix(path.join(binDir, 'bm.cmd')),
+/** `cmd` is null on macOS: only the sh launcher is written there (D67). */
+export const cliCommandPaths = (binDir: string, platform: NodeJS.Platform = process.platform): { cmd: string | null; sh: string } => ({
+  cmd: platform === 'win32' ? toPosix(path.join(binDir, 'bm.cmd')) : null,
   sh: toPosix(path.join(binDir, 'bm')),
 });

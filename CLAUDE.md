@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Odoo Branch Manager — a Windows desktop app (Electron) that acts as a local odoo.sh: git branches of an Odoo modules
+Odoo Branch Manager — a Windows desktop app (Electron; also macOS on Apple Silicon, D67) that acts as a local odoo.sh: git branches of an Odoo modules
 repository are laid out into Production / Staging / Development stages, and each branch gets an isolated build
 (Odoo container + own database + own worktree) served through a shared Traefik at `http://<slug>.localhost[:8080]`.
 
@@ -27,11 +27,13 @@ pnpm test             # Vitest for packages/core, run inside Electron's Node (EL
 pnpm --filter @bm/core test test/safety.test.ts   # one test file
 pnpm --filter @bm/core test -t "part of a test name"
 pnpm package          # NSIS installer + portable exe → apps/desktop/dist
+pnpm package:mac      # arm64 .dmg (macOS only; CI does it: .github/workflows/mac-release.yml on release published)
 pnpm release patch    # bump all package.json, turn [Unreleased] into [X.Y.Z] — date, commit «Release vX.Y.Z», tag; never pushes
 ```
 
 A GitHub release (tag `vX.Y.Z`, assets `Odoo-Branch-Manager-Setup-X.Y.Z.exe` and `…-Portable-X.Y.Z.exe`) is what
-installed copies auto-update from; the updater checks size and SHA-256 of the asset.
+installed copies auto-update from; the updater checks size and SHA-256 of the asset. The macOS image
+`…-X.Y.Z-mac-arm64.dmg` is attached to the same release by GitHub Actions.
 
 There is no linter; `pnpm typecheck` and `pnpm test` are the gates.
 
@@ -127,6 +129,8 @@ and orphans (Status page); nothing is deleted without the user.
   code, comments and commit messages in English (commit messages explain why).
 - Line endings are mixed (many files are CRLF, `CHANGELOG.md` has both); preserve each file's existing endings when
   editing.
+- OS differences live in `core/src/util/platform.ts` and `desktop/src/main/platform-dirs.ts` (D67); keep Windows
+  behaviour unchanged when adding macOS branches.
 - Windows host: Docker Desktop via the named pipe; in Git Bash run `docker exec` with container paths under
   `MSYS_NO_PATHCONV=1`. A terminal launched from VS Code may carry `ELECTRON_RUN_AS_NODE=1`; the app scripts clear it.
 - `apps/desktop/tsconfig.json` only references `tsconfig.node.json` / `tsconfig.web.json` for the editor; the

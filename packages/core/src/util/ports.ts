@@ -5,15 +5,34 @@ import { execa } from 'execa';
  * (criterion 15: no listening ports of its own).
  */
 export async function listeningPorts(): Promise<Set<number>> {
-  const r = await execa('netstat', ['-ano', '-p', 'TCP'], { reject: false, windowsHide: true });
+  if (process.platform !== 'win32') {
+    // macOS netstat lists both families with `-p tcp` and, unlike lsof, other users' sockets too (D67).
+    const r = await execa('netstat', ['-an', '-p', 'tcp'], { reject: false });
+    return parseBsdNetstat(String(r.stdout ?? ''));
+  }
   const out = new Set<number>();
-  for (const line of String(r.stdout ?? '').split(/\r?\n/)) {
+  for (const family of ['TCP', 'TCPv6']) {
+    const r = await execa('netstat', ['-ano', '-p', family], { reject: false, windowsHide: true });
+    for (const p of parseWindowsNetstat(String(r.stdout ?? ''))) out.add(p);
+  }
+  return out;
+}
+
+/** `TCP    0.0.0.0:80    0.0.0.0:0    LISTENING    4` */
+export function parseWindowsNetstat(text: string): Set<number> {
+  const out = new Set<number>();
+  for (const line of text.split(/\r?\n/)) {
     const m = /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING/i.exec(line);
     if (m) out.add(Number(m[1]));
   }
-  const r6 = await execa('netstat', ['-ano', '-p', 'TCPv6'], { reject: false, windowsHide: true });
-  for (const line of String(r6.stdout ?? '').split(/\r?\n/)) {
-    const m = /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING/i.exec(line);
+  return out;
+}
+
+/** `tcp46  0  0  *.8080  *.*  LISTEN` / `tcp4  0  0  127.0.0.1.5433  *.*  LISTEN` (macOS) */
+export function parseBsdNetstat(text: string): Set<number> {
+  const out = new Set<number>();
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^\s*tcp\S*\s+\d+\s+\d+\s+\S*\.(\d+)\s+\S+\s+LISTEN\b/i.exec(line);
     if (m) out.add(Number(m[1]));
   }
   return out;

@@ -12,6 +12,7 @@
     "build": "pnpm --filter @bm/desktop build",
     "start": "pnpm --filter @bm/desktop start",
     "package": "pnpm --filter @bm/desktop package",
+    "package:mac": "pnpm --filter @bm/desktop package:mac",
     "typecheck": "node scripts/version.mjs check && pnpm -r typecheck",
     "test": "pnpm --filter @bm/core test",
     "postinstall": "pnpm --filter @bm/desktop rebuild-native",

@@ -4,6 +4,7 @@ import YAML from 'yaml';
 import { Alert, Badge, Box, Button, Card, Code, Container, Group, Stack, Switch, Table, Tabs, Text, TextInput, Title } from '@mantine/core';
 import { EditionBadge, EditionLine } from '../components/EditionBadge';
 import { useBm, useBmMutation } from '../lib/query';
+import { isMac } from '../lib/bm';
 import { YamlEditor } from '../components/YamlEditor';
 import { YamlForm, type FieldDef, type FieldGroup } from '../components/YamlForm';
 import { DeleteProjectButton } from '../components/dialogs/DeleteProject';
@@ -616,10 +617,16 @@ function AppSettings({ text, onSave, saving }: { text: string; onSave: (t: strin
       fields: [
         { path: ['desktop', 'closeToTray'], label: 'Закрытие окна — в трей', type: 'switch' },
         { path: ['desktop', 'startMinimized'], label: 'Запускать свёрнутым (при автозапуске)', type: 'switch' },
-        { path: ['desktop', 'autostart'], label: 'Автозапуск с Windows', type: 'switch', stage: 'этап 3' },
+        { path: ['desktop', 'autostart'], label: isMac ? 'Автозапуск при входе в систему' : 'Автозапуск с Windows', type: 'switch', stage: 'этап 3' },
         { path: ['desktop', 'editor'], label: 'Редактор', type: 'text', description: 'code | cursor | путь к CLI' },
-        { path: ['desktop', 'terminal'], label: 'Терминал', type: 'select', options: ['wt', 'git-bash', 'cmd'] },
-        { path: ['desktop', 'dockerDesktopExe'], label: 'Docker Desktop.exe', type: 'text' },
+        // macOS always opens Terminal.app (D67).
+        ...(isMac ? [] : [{ path: ['desktop', 'terminal'], label: 'Терминал', type: 'select', options: ['wt', 'git-bash', 'cmd'] } satisfies FieldDef]),
+        {
+          path: ['desktop', 'dockerDesktopExe'],
+          label: isMac ? 'Docker Desktop' : 'Docker Desktop.exe',
+          type: 'text',
+          description: isMac ? 'auto или путь к Docker.app' : undefined,
+        },
         { path: ['desktop', 'gh'], label: 'gh CLI', type: 'text' },
       ],
     },
@@ -632,7 +639,7 @@ function AppSettings({ text, onSave, saving }: { text: string; onSave: (t: strin
       ],
     },
     {
-      title: 'Уведомления Windows',
+      title: isMac ? 'Уведомления' : 'Уведомления Windows',
       fields: [
         { path: ['desktop', 'notifications', 'buildReady'], label: 'Сборка готова', type: 'switch' },
         { path: ['desktop', 'notifications', 'buildFailed'], label: 'Сборка упала', type: 'switch' },

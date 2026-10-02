@@ -56,6 +56,7 @@ const input = (cfg: ProjectConfig, extra: Partial<SkillInput> = {}): SkillInput 
   protectedBranches: cfg.repo.protectedBranches,
   appRepository: 'bakum/bakum_sh',
   cli: { cmd: 'C:/Users/u/AppData/Local/Odoo Branch Manager/bin/bm.cmd', sh: 'C:/Users/u/AppData/Local/Odoo Branch Manager/bin/bm' },
+  windows: true,
   ...extra,
 });
 
@@ -70,6 +71,19 @@ describe('assistant skill (D52)', () => {
     expect(text).toContain('BM="C:/Users/u/AppData/Local/Odoo Branch Manager/bin/bm"');
     expect(text.indexOf('## Команды приложения: bm')).toBeLessThan(text.indexOf('## Без приложения: docker'));
     expect(renderSkill(input(demz, { cli: null }))).not.toContain('bm status');
+  });
+
+  it('has no Git Bash / PowerShell notes on macOS (D67)', () => {
+    const mac = input(demz, {
+      windows: false,
+      logsDir: '/Users/u/.local/share/Odoo Branch Manager/logs',
+      configDir: '/Users/u/Library/Application Support/Odoo Branch Manager',
+      cli: { cmd: null, sh: '/Users/u/.local/share/Odoo Branch Manager/bin/bm' },
+    });
+    const text = renderSkill(mac);
+    expect(text).not.toMatch(/PowerShell|MSYS_NO_PATHCONV|Git Bash|bm\.cmd/);
+    expect(text).toContain('BM="/Users/u/.local/share/Odoo Branch Manager/bin/bm"   # zsh / bash');
+    expect(skillFile(mac)).toMatchSnapshot();
   });
 
   it('has a frontmatter name and description Claude Code and Cursor accept', () => {

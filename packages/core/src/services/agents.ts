@@ -31,6 +31,7 @@ function content(ctx: Ctx, cfg: ProjectConfig): string {
     protectedBranches: protectedBranches(ctx, cfg),
     appRepository: ctx.store.app.updates.repository,
     cli: ctx.cli ? cliCommandPaths(ctx.cli.binDir) : null,
+    windows: process.platform === 'win32',
   });
 }
 

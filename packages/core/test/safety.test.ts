@@ -68,7 +68,9 @@ describe('assertOwned', () => {
   });
 
   it('only removes registered worktrees inside worktreesDir, never the main checkout', () => {
-    expect(() => assertOwned(cfg, { kind: 'worktree', path: 'E:\\demz-odoo-19\\worktrees\\demz\\crm' }, reg)).not.toThrow();
+    // Backslashes are separators only on Windows (macOS, D67).
+    const crm = process.platform === 'win32' ? 'E:\\demz-odoo-19\\worktrees\\demz\\crm' : 'E:/demz-odoo-19/worktrees/demz/crm';
+    expect(() => assertOwned(cfg, { kind: 'worktree', path: crm }, reg)).not.toThrow();
     expect(() => assertOwned(cfg, { kind: 'worktree', path: 'E:/demz-odoo-19/repositories/demz-odoo' }, reg)).toThrow(/вне папки/);
     expect(() => assertOwned(cfg, { kind: 'worktree', path: 'E:/demz-odoo-19/worktrees' }, reg)).toThrow(/вне папки/);
     expect(() => assertOwned(cfg, { kind: 'worktree', path: 'E:/demz-odoo-19/worktrees/demz/x' }, reg)).toThrow(/реестре/);

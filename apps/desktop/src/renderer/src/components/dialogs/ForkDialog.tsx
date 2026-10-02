@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Code, CopyButton, Group, List, Modal, Stack, Text, TextInput } from '@mantine/core';
 import type { BranchView } from '@bm/shared';
 import { useBm, useBmMutation } from '../../lib/query';
-import { errorCode, errorText, type BmCallError } from '../../lib/bm';
+import { errorCode, errorText, isMac, type BmCallError } from '../../lib/bm';
 
 /** Fork (spec 8.10, D33): the new branch is created on GitHub from the live build commit (or the branch head) → Development → build. */
 export function ForkDialog({ open, branch, onClose }: { open: boolean; branch: BranchView; onClose: () => void }) {
@@ -98,7 +98,8 @@ function ForkError({ error, busy, onLogin }: { error: Error; busy: boolean; onLo
     <List.Item>
       Проект подключён по токену (пользователь <Code>{d.urlUser}</Code> в адресе репозитория). Токену нужен доступ к этому репозиторию с
       правом Contents — Read and write. Создайте такой токен на GitHub и замените им пароль записи{' '}
-      <Code>git:https://{d.urlUser}@github.com</Code> в «Диспетчере учётных данных Windows» → «Учётные данные Windows».
+      <Code>{isMac ? `github.com (${d.urlUser})` : `git:https://${d.urlUser}@github.com`}</Code>{' '}
+      {isMac ? 'в приложении «Связка ключей» (тип «пароль интернета»).' : 'в «Диспетчере учётных данных Windows» → «Учётные данные Windows».'}
     </List.Item>
   );
   return (

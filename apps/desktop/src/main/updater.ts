@@ -31,6 +31,14 @@ export interface UpdaterOptions {
 }
 
 /**
+ * The release asset this platform installs from (D67): the NSIS Setup exe on Windows, the arm64 disk image on macOS.
+ * Portable exe, blockmaps and the other platform's files never match.
+ */
+export function isInstallerAsset(name: string, platform: NodeJS.Platform = process.platform): boolean {
+  return platform === 'darwin' ? /-mac-arm64\.dmg$/i.test(name) : /setup.*\.exe$/i.test(name);
+}
+
+/**
  * Checks GitHub Releases of the configured repository for a newer version and downloads its Setup installer.
  * Only outgoing HTTPS to api.github.com / github.com release assets; nothing listens.
  */
@@ -106,7 +114,7 @@ export class Updater {
       }
       this.release = best;
       const latest = best.tag_name.replace(/^v/, '');
-      const setup = best.assets.find((a) => /setup.*\.exe$/i.test(a.name)) ?? null;
+      const setup = best.assets.find((a) => isInstallerAsset(a.name)) ?? null;
       this.file = null;
       this.set({
         status: 'available',
@@ -129,12 +137,12 @@ export class Updater {
     }
   }
 
-  /** Downloads the Setup installer to %TEMP% and verifies its size (and SHA-256 when GitHub provides a digest). */
+  /** Downloads the installer to the temp folder and verifies its size (and SHA-256 when GitHub provides a digest). */
   async download(): Promise<string> {
     if (this.file && this.state.status === 'ready') return this.file;
     const rel = this.release;
-    const asset = rel?.assets.find((a) => /setup.*\.exe$/i.test(a.name));
-    if (!rel || !asset) throw new Error('В релизе нет установщика (…Setup….exe)');
+    const asset = rel?.assets.find((a) => isInstallerAsset(a.name));
+    if (!rel || !asset) throw new Error(process.platform === 'darwin' ? 'В релизе нет образа для macOS (…-mac-arm64.dmg)' : 'В релизе нет установщика (…Setup….exe)');
     const dir = path.join(os.tmpdir(), 'odoo-branch-manager-update');
     fs.mkdirSync(dir, { recursive: true });
     const target = path.join(dir, path.basename(asset.name));

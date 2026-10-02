@@ -85,6 +85,7 @@ const api: BmApi = {
     statusListeners.add(cb);
     return () => statusListeners.delete(cb);
   },
+  platform: process.platform,
   desktop: {
     selectDirectory: (title) => ipcRenderer.invoke('bm:selectDirectory', title),
     selectFile: (opts) => ipcRenderer.invoke('bm:selectFile', opts),

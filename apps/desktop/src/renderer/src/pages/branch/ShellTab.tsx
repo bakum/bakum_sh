@@ -2,6 +2,7 @@ import { Alert, Button, Card, Code, Group, Stack, Text } from '@mantine/core';
 import { IconDatabase, IconTerminal2, IconBrandPython } from '@tabler/icons-react';
 import type { BranchView } from '@bm/shared';
 import { useBm } from '../../lib/query';
+import { isMac } from '../../lib/bm';
 import { shellOpen } from '../BranchPage';
 
 /** Shell (spec 8.9): external terminal with docker exec bash, odoo shell, psql. */
@@ -13,7 +14,9 @@ export function ShellTab({ branch }: { branch: BranchView }) {
   return (
     <Stack>
       <Text size="sm" c="dimmed">
-        Терминал: {app.data?.desktop.terminal ?? 'wt'} (Windows Terminal; если он не установлен — cmd). Настройка — Settings → Приложение.
+        {isMac
+          ? 'Команды открываются в новом окне Терминала.'
+          : `Терминал: ${app.data?.desktop.terminal ?? 'wt'} (Windows Terminal; если он не установлен — cmd). Настройка — Settings → Приложение.`}
       </Text>
       <Card withBorder>
         <Stack>

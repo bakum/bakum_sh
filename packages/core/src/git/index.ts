@@ -11,7 +11,10 @@ import { toPosix } from '../util/paths';
  */
 const QUIET_ENV = { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', LC_ALL: 'C' };
 
-export const GIT_MISSING_TEXT = 'Git не найден. Установите Git for Windows (https://git-scm.com/download/win) и перезапустите приложение.';
+export const GIT_MISSING_TEXT =
+  process.platform === 'darwin'
+    ? 'Git не найден. Установите его командой `xcode-select --install` в Терминале (или `brew install git`) и перезапустите приложение.'
+    : 'Git не найден. Установите Git for Windows (https://git-scm.com/download/win) и перезапустите приложение.';
 
 /** execa (reject: false) returns the spawn error as the result: `code: 'ENOENT'` when git.exe is not on PATH. */
 function assertGitFound(r: unknown): void {
@@ -294,6 +297,9 @@ export async function folderRemoteUrl(dir: string): Promise<{ top: string; remot
   if (url && /^([A-Za-z]:[\\/]|\\\\|\/\/)/.test(url)) {
     const p = toPosix(url);
     url = p.startsWith('//') ? `file:${p}` : `file:///${p}`;
+  } else if (url?.startsWith('/')) {
+    // POSIX absolute path (macOS, D67): /Users/x/repo.git → file:///Users/x/repo.git
+    url = `file://${url}`;
   }
   return { top, remote, url };
 }

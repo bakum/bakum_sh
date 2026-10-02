@@ -3,7 +3,7 @@
   "productName": "Odoo Branch Manager",
   "version": "0.13.19",
   "private": true,
-  "description": "Odoo Branch Manager: local odoo.sh for Windows + Docker Desktop",
+  "description": "Odoo Branch Manager: local odoo.sh for Windows / macOS + Docker Desktop",
   "author": "Bakum Viacheslav",
   "main": "out/main/index.js",
   "scripts": {
@@ -11,6 +11,7 @@
     "build": "node scripts/electron-vite.mjs build",
     "start": "node scripts/electron-vite.mjs preview --skipBuild",
     "package": "node scripts/electron-vite.mjs build && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/make-icon.mjs && electron-builder --win --config electron-builder.yml",
+    "package:mac": "node scripts/electron-vite.mjs build && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/make-icon.mjs && electron-builder --mac --arm64 --config electron-builder.yml",
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
     "rebuild-native": "electron-builder install-app-deps"
   },

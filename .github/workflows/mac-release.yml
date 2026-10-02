@@ -1,0 +1,47 @@
+# macOS build of a release (D67): the Windows installers are built and attached locally (`pnpm package`,
+# `gh release create`); when the release is published this job builds the Apple Silicon disk image on a macOS runner
+# and attaches it to the same release. Re-run for an existing tag: Actions → macOS release → Run workflow.
+name: macOS release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (vX.Y.Z)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-14
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # postinstall rebuilds better-sqlite3 for Electron arm64.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - run: pnpm test
+
+      - run: pnpm package:mac
+
+      - name: Attach the disk image to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" apps/desktop/dist/Odoo-Branch-Manager-*-mac-arm64.dmg --clobber

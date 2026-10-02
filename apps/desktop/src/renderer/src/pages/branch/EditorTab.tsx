@@ -3,7 +3,7 @@ import { Alert, Button, Card, Code, Group, SegmentedControl, Stack, Text, TextIn
 import { IconBrandVscode, IconFolder, IconFolderOpen, IconCursorText } from '@tabler/icons-react';
 import type { BranchView } from '@bm/shared';
 import { useBm, useBmMutation } from '../../lib/query';
-import { call } from '../../lib/bm';
+import { call, isMac } from '../../lib/bm';
 import { shellOpen } from '../BranchPage';
 
 type Source = 'github' | 'folder';
@@ -129,7 +129,7 @@ export function EditorTab({ branch }: { branch: BranchView }) {
                 Открыть в Cursor
               </Button>
               <Button variant="default" leftSection={<IconFolderOpen size={14} />} onClick={() => void shellOpen({ branchId: branch.id, target: 'explorer' })}>
-                Открыть в Проводнике
+                {isMac ? 'Открыть в Finder' : 'Открыть в Проводнике'}
               </Button>
             </Group>
           </Stack>

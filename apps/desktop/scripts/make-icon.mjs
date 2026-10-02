@@ -1,9 +1,11 @@
-// Writes resources/icon.ico (exe, installer and shortcut icon) from the same mark the app draws for its window
-// and tray, so packaging never falls back to Electron's default icon. Run by `pnpm package`; needs Node type
-// stripping (--experimental-strip-types before Node 22.18) to load icon-mark.ts.
+// Writes resources/icon.ico (exe, installer and shortcut icon) and resources/icon.png (1024 px, electron-builder makes
+// the macOS .icns from it, D67) from the same mark the app draws for its window and tray, so packaging never falls back
+// to Electron's default icon. Run by `pnpm package` / `package:mac`; needs Node type stripping
+// (--experimental-strip-types before Node 22.18) to load icon-mark.ts.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { crc32, deflateSync } from 'node:zlib';
 import { markPixels } from '../src/main/icon-mark.ts';
 
 const IDLE = [113, 75, 103]; // COLORS.idle in src/main/icons.ts
@@ -42,7 +44,51 @@ images.forEach((img, i) => {
   offset += img.length;
 });
 
-const target = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'resources', 'icon.ico');
-mkdirSync(path.dirname(target), { recursive: true });
+const resources = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'resources');
+const target = path.join(resources, 'icon.ico');
+mkdirSync(resources, { recursive: true });
 writeFileSync(target, Buffer.concat([header, ...images]));
 console.log(`icon: ${path.relative(process.cwd(), target)} (${SIZES.join(', ')} px)`);
+
+/**
+ * macOS app icon: 1024 px RGBA PNG; the mark takes the inner 80 % like other macOS icons. markPixels gives BGRA rows,
+ * PNG wants RGBA with a filter byte (0) in front of each row.
+ */
+function png(size, inner) {
+  const mark = markPixels(inner, IDLE);
+  const pad = (size - inner) / 2;
+  const raw = Buffer.alloc((size * 4 + 1) * size);
+  for (let y = 0; y < inner; y++) {
+    for (let x = 0; x < inner; x++) {
+      const i = (y * inner + x) * 4;
+      const o = (y + pad) * (size * 4 + 1) + 1 + (x + pad) * 4;
+      raw[o] = mark[i + 2];
+      raw[o + 1] = mark[i + 1];
+      raw[o + 2] = mark[i];
+      raw[o + 3] = mark[i + 3];
+    }
+  }
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr.writeUInt8(8, 8); // bit depth
+  ihdr.writeUInt8(6, 9); // RGBA
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+const pngTarget = path.join(resources, 'icon.png');
+writeFileSync(pngTarget, png(1024, 820));
+console.log(`icon: ${path.relative(process.cwd(), pngTarget)} (1024 px)`);

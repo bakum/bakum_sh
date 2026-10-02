@@ -14,6 +14,7 @@ import { startRuntime, stopRuntime, handleHook } from './runtime';
 import { bootServices } from './boot';
 import { audit } from './services/audit';
 import { startCliServer } from './cli/server';
+import { isMac, macExtraPath, withExtraPath } from './util/platform';
 
 export type { CoreHost, PortLike } from './util/port';
 
@@ -23,6 +24,8 @@ export function startCore(host: CoreHost): void {
   const startedAt = nowIso();
   let ctx: Ctx | null = null;
   const pendingPorts: PortLike[] = [];
+  // A macOS app started from Finder has no Homebrew / Docker folders in PATH (D67); every external command runs here.
+  if (isMac) process.env.PATH = withExtraPath(process.env.PATH, macExtraPath());
 
   rpc.registerTopics({
     events: (_p, emit) => bus.on((batch) => emit(batch)),

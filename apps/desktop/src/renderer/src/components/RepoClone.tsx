@@ -3,6 +3,7 @@ import { Alert, Anchor, Button, Code, Group, PasswordInput, ScrollArea, Stack, T
 import { IconCheck, IconFolder, IconLogin, IconKey } from '@tabler/icons-react';
 import type { RepoProbe } from '@bm/shared';
 import { useBm, useBmMutation } from '../lib/query';
+import { isMac } from '../lib/bm';
 
 const DONE = ['success', 'failed', 'cancelled', 'interrupted'];
 
@@ -100,7 +101,7 @@ export function RepoClone(props: {
                     Войти через браузер
                   </Button>
                   <Text size="xs" c="dimmed">
-                    Откроется окно Git Credential Manager; учётные данные сохранит Windows.
+                    Откроется окно Git Credential Manager; учётные данные сохранит {isMac ? 'Связка ключей' : 'Windows'}.
                   </Text>
                 </Group>
                 <Text size="sm" fw={600} mt={4}>
@@ -111,7 +112,7 @@ export function RepoClone(props: {
                   <Anchor size="xs" onClick={() => void window.bm.desktop.openExternal('https://github.com/settings/personal-access-tokens/new')}>
                     Создать токен
                   </Anchor>
-                  . Токен передаётся в Git (хранилище учётных данных Windows), приложение его не сохраняет.
+                  . Токен передаётся в Git ({isMac ? 'Связка ключей macOS' : 'хранилище учётных данных Windows'}), приложение его не сохраняет.
                 </Text>
                 <Group align="flex-end" gap="xs">
                   <PasswordInput style={{ flex: 1 }} size="xs" label="Токен" value={token} onChange={(e) => setToken(e.currentTarget.value)} />

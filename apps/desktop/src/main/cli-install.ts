@@ -5,11 +5,14 @@ import path from 'node:path';
 /**
  * The app's command line (D53): the named pipe Core listens on and the launchers in `<localDir>/bin`, rewritten on
  * every start so they point at the running exe (an installed copy moves on update, a portable one runs from a temp
- * folder). `bm.cmd` — cmd / PowerShell, `bm` — Git Bash; both run cli.js with the exe as plain Node.
+ * folder). `bm.cmd` — cmd / PowerShell, `bm` — Git Bash (Windows) or any POSIX shell (macOS); both run cli.js with the
+ * exe as plain Node.
  */
 export function cliPipeName(profile: string): string {
   const user = (os.userInfo().username || 'user').replace(/[^A-Za-z0-9_.-]/g, '_');
-  return `\\\\.\\pipe\\odoo-branch-manager-${user}${profile ? `-${profile}` : ''}`;
+  const name = `odoo-branch-manager-${user}${profile ? `-${profile}` : ''}`;
+  // macOS (D67): a unix socket in the per-user temp folder — short (sun_path is 104 bytes) and without spaces.
+  return process.platform === 'win32' ? `\\\\.\\pipe\\${name}` : path.join(os.tmpdir(), `${name}.sock`);
 }
 
 const msysPath = (p: string): string => p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d: string) => `/${d.toLowerCase()}`);
@@ -33,6 +36,6 @@ export function installCliLaunchers(o: { binDir: string; pipe: string; exe: stri
     `ELECTRON_RUN_AS_NODE=1 BM_PIPE='${o.pipe}' exec "${msysPath(o.exe)}" "$(dirname "$0")/cli.js" "$@"`,
     '',
   ].join('\n');
-  fs.writeFileSync(path.join(o.binDir, 'bm.cmd'), cmd, 'utf8');
+  if (process.platform === 'win32') fs.writeFileSync(path.join(o.binDir, 'bm.cmd'), cmd, 'utf8');
   fs.writeFileSync(path.join(o.binDir, 'bm'), sh, { encoding: 'utf8', mode: 0o755 });
 }

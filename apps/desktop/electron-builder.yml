@@ -1,4 +1,4 @@
-# Packaging (spec 4): NSIS per-user installer and portable exe, no signing, no auto-update.
+# Packaging (spec 4): NSIS per-user installer and portable exe; macOS (D67): arm64 disk image, ad-hoc signed only.
 # build/ in the repo root belongs to the 1C publication — resources and output live elsewhere.
 appId: ua.bakum.odoo-branch-manager
 productName: Odoo Branch Manager
@@ -23,5 +23,20 @@ nsis:
   artifactName: Odoo-Branch-Manager-Setup-${version}.${ext}
 portable:
   artifactName: Odoo-Branch-Manager-Portable-${version}.${ext}
+mac:
+  icon: resources/icon.png  # 1024 px, made by scripts/make-icon.mjs; electron-builder converts it to .icns
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: arm64
+  # No Apple Developer ID: ad-hoc signature, without it Apple Silicon refuses the modified bundle. Gatekeeper still
+  # blocks a downloaded copy until the quarantine attribute is removed (README → macOS).
+  identity: "-"
+  hardenedRuntime: false
+  notarize: false
+  darkModeSupport: true
+  artifactName: Odoo-Branch-Manager-${version}-mac-arm64.${ext}
+dmg:
+  artifactName: Odoo-Branch-Manager-${version}-mac-arm64.${ext}
 npmRebuild: false
 publish: null

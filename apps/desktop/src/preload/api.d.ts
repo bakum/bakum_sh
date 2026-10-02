@@ -34,6 +34,8 @@ export interface BmApi {
   subscribe(topic: Topic, params: Record<string, unknown>, handler: (data: unknown) => void): () => void;
   onCoreStatus(cb: (s: CoreStatus) => void): () => void;
   desktop: BmDesktop;
+  /** Host OS (`process.platform`): macOS gets its own texts and settings (D67). */
+  platform: string;
 }
 
 declare global {

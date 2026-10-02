@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Alert, Anchor, Button, Card, Center, Code, Group, List, Stack, Stepper, Text, Title } from '@mantine/core';
 import { IconGitBranch } from '@tabler/icons-react';
 import { useBm, useBmMutation } from '../lib/query';
+import { isMac } from '../lib/bm';
 import { COPYRIGHT_HOLDER, useBuildInfo } from '../components/AppFooter';
 
 /** First-run wizard (spec 7): explains what the app does, writes app.yaml, then goes to "add project". */
@@ -46,11 +47,20 @@ export function Welcome() {
           </List>
           {status.data && !status.data.git.ok && (
             <Alert color="red" variant="light" title="Нужен Git">
-              Приложение работает с репозиторием через Git for Windows.{' '}
-              <Anchor size="sm" onClick={() => void window.bm.desktop.openExternal('https://git-scm.com/download/win')}>
-                Скачать Git for Windows
-              </Anchor>
-              , установите с настройками по умолчанию (вместе с Git Credential Manager) и перезапустите приложение.
+              {isMac ? (
+                <>
+                  Приложение работает с репозиторием через git. Установите его командой <Code>xcode-select --install</Code> в Терминале
+                  (или <Code>brew install git</Code>) и перезапустите приложение.
+                </>
+              ) : (
+                <>
+                  Приложение работает с репозиторием через Git for Windows.{' '}
+                  <Anchor size="sm" onClick={() => void window.bm.desktop.openExternal('https://git-scm.com/download/win')}>
+                    Скачать Git for Windows
+                  </Anchor>
+                  , установите с настройками по умолчанию (вместе с Git Credential Manager) и перезапустите приложение.
+                </>
+              )}
             </Alert>
           )}
           {status.data && !status.data.docker.ok && (
@@ -59,7 +69,7 @@ export function Welcome() {
               <Anchor size="sm" onClick={() => void window.bm.desktop.openExternal('https://www.docker.com/products/docker-desktop/')}>
                 Установите Docker Desktop
               </Anchor>{' '}
-              (WSL2) или запустите его, если он уже установлен.
+              {isMac ? '(Apple Silicon)' : '(WSL2)'} или запустите его, если он уже установлен.
             </Alert>
           )}
           <Alert color="blue" variant="light">

@@ -29,7 +29,9 @@ export async function probeRepo(url: string, interactive = false): Promise<RepoP
       problem: 'no-helper',
       message:
         'В Git не настроено хранилище учётных данных (credential.helper), поэтому войти в приватный репозиторий нельзя. ' +
-        'Установите Git for Windows с Git Credential Manager или выполните `git config --global credential.helper manager`.',
+        (process.platform === 'darwin'
+          ? 'Выполните `git config --global credential.helper osxkeychain` (Связка ключей macOS) или установите Git Credential Manager.'
+          : 'Установите Git for Windows с Git Credential Manager или выполните `git config --global credential.helper manager`.'),
       branches: [],
       defaultBranch: null,
     };

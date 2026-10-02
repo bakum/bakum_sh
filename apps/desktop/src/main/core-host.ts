@@ -11,6 +11,8 @@ export interface CoreHostOptions {
   resourcesPath: string;
   /** Command line bm (D53): pipe and launcher folder, null when the launchers could not be written. */
   cli: { pipe: string; binDir: string } | null;
+  /** Extra environment of the Core process. */
+  env: Record<string, string>;
   log: Logger;
 }
 
@@ -38,7 +40,7 @@ export class CoreHost extends EventEmitter {
     const proc = utilityProcess.fork(entry, [], {
       serviceName: 'Odoo Branch Manager Core',
       stdio: 'pipe',
-      env: { ...process.env },
+      env: { ...process.env, ...this.opts.env },
     });
     this.proc = proc;
     proc.stdout?.on('data', (d: Buffer) => this.opts.log.info({ src: 'core-stdout' }, d.toString().trimEnd()));

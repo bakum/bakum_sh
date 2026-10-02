@@ -2,10 +2,10 @@ import Docker from 'dockerode';
 import type { Writable } from 'node:stream';
 import { execa } from 'execa';
 import { BmError } from '@bm/shared';
+import { dockerSocketPath } from '../util/platform';
 
-/** Local Docker Desktop engine only (named pipe). */
-// BM_DOCKER_PIPE exists only for the Docker-outage check without stopping Docker Desktop (docs/acceptance.md, 14).
-export const docker = new Docker({ socketPath: process.env.BM_DOCKER_PIPE ?? '//./pipe/docker_engine' });
+/** Local Docker Desktop engine only: named pipe on Windows, unix socket on macOS (D67). */
+export const docker = new Docker({ socketPath: dockerSocketPath() });
 
 export async function dockerAlive(): Promise<{ ok: boolean; version: string | null; error: string | null }> {
   try {

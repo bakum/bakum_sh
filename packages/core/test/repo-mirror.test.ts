@@ -78,7 +78,9 @@ describe('safety of the mirror and the user folder', () => {
   const reg = { dbNames: new Set<string>(), composeProjects: new Set<string>(), worktrees: new Set(['C:/bm/worktrees/shop/main', 'D:/work/shop/x']) };
 
   it('removes only the project mirror inside <dataDir>/repos', () => {
-    expect(() => assertOwned(cfg, { kind: 'mirror', path: 'C:\\bm\\repos\\shop.git', reposRoot: 'C:/bm/repos' }, reg)).not.toThrow();
+    // Backslashes are separators only on Windows (macOS, D67).
+    const mirror = process.platform === 'win32' ? 'C:\\bm\\repos\\shop.git' : 'C:/bm/repos/shop.git';
+    expect(() => assertOwned(cfg, { kind: 'mirror', path: mirror, reposRoot: 'C:/bm/repos' }, reg)).not.toThrow();
     expect(() => assertOwned(cfg, { kind: 'mirror', path: 'C:/bm/repos/other.git', reposRoot: 'C:/bm/repos' }, reg)).toThrow(/не является копией/);
     expect(() => assertOwned(cfg, { kind: 'mirror', path: 'C:/bm/repos/shop.git', reposRoot: 'C:/elsewhere' }, reg)).toThrow(/вне папки приложения/);
   });

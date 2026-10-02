@@ -1,6 +1,6 @@
 # Odoo Branch Manager — локальный odoo.sh
 
-Десктопное приложение для Windows 10 и Docker Desktop. Ветки git-репозитория с модулями Odoo раскладываются по стадиям
+Десктопное приложение для Windows 10/11 и macOS (Apple Silicon) с Docker Desktop. Ветки git-репозитория с модулями Odoo раскладываются по стадиям
 Production (одна ветка) и Development (все остальные). На каждую ветку собирается изолированная сборка: контейнер Odoo, своя БД и свой код
 (worktree). Сборка открывается во внешнем браузере по адресу `http://<ветка>.localhost` (при занятом 80-м порту —
 `http://<ветка>.localhost:8080`).
@@ -13,6 +13,8 @@ Production (одна ветка) и Development (все остальные). Н�
 ## Требования
 
 - Windows 10/11 x64, Docker Desktop (WSL2), Git for Windows.
+- Или macOS на Apple Silicon (M1 и новее), Docker Desktop for Mac, git (`xcode-select --install` или Homebrew) —
+  см. раздел [macOS](#macos).
 - Node.js 22 LTS и pnpm 10 — только для сборки из исходников.
 - Необязательно: Windows Terminal (`wt`) для вкладки Shell (без него открывается `cmd`), VS Code или Cursor для Editor.
 - Права администратора не нужны. Приложение не открывает сетевых портов. Сборки доступны через общий Traefik
@@ -26,6 +28,7 @@ pnpm dev         # режим разработки (electron-vite, HMR)
 pnpm build       # сборка main / preload / renderer в apps/desktop/out
 pnpm start       # запуск собранного приложения
 pnpm package     # установщик NSIS и portable в apps/desktop/dist (без подписи)
+pnpm package:mac # образ .dmg для Apple Silicon (только на Mac; ad-hoc подпись)
 pnpm typecheck   # TypeScript strict во всех пакетах
 pnpm test        # unit-тесты Core (Vitest под ELECTRON_RUN_AS_NODE=1)
 ```
@@ -52,6 +55,33 @@ pnpm test        # unit-тесты Core (Vitest под ELECTRON_RUN_AS_NODE=1)
 | filestore сборок | `<runtime.filestore.hostDir>\<БД>` (DEMZ: `E:\demz-odoo-19\data\filestore\o19_br_*`) |
 
 Папку логов открывает кнопка «Открыть папку логов» на странице Status.
+
+## macOS
+
+Сборка для Apple Silicon — образ `Odoo-Branch-Manager-X.Y.Z-mac-arm64.dmg` в том же релизе GitHub, что и установщик
+Windows. Его собирает GitHub Actions (`.github/workflows/mac-release.yml`) после публикации релиза; из исходников на
+Mac — `pnpm package:mac`. Отличия от Windows — в [docs/decisions.md](docs/decisions.md), D67.
+
+- **Установка.** Откройте `.dmg` и перетащите приложение в «Программы». У приложения нет подписи Apple, поэтому
+  скачанную копию macOS не запустит («повреждено» или «не удаётся проверить разработчика»). Один раз выполните в
+  Терминале `xattr -cr "/Applications/Odoo Branch Manager.app"` и запустите приложение снова.
+- **Docker Desktop for Mac** должен быть запущен. Приложение подключается к `DOCKER_HOST`, затем к
+  `~/.docker/run/docker.sock`, затем к `/var/run/docker.sock`. Папки сборок (`~/.local/share/…`, папки проектов в
+  `/Users`) Docker Desktop по умолчанию видит.
+- **Папки.** Настройки — `~/Library/Application Support/Odoo Branch Manager/` (`app.yaml`, `projects/<id>.yaml`).
+  Данные, реестр, логи, копии репозиториев и compose-файлы — `~/.local/share/Odoo Branch Manager/`. В `app.yaml`
+  `%LOCALAPPDATA%` означает `~/.local/share`, так что значение по умолчанию одинаково на обеих системах.
+- **Shell** открывает новое окно Терминала. Настройка «Терминал» на Mac не показывается.
+- **Editor**: если команда `code` / `cursor` не установлена в PATH, приложение открывает VS Code / Cursor как
+  программу.
+- **Командная строка `bm`** — `~/.local/share/Odoo Branch Manager/bin/bm`, связь с приложением через сокет во
+  временной папке пользователя. Для вызова по имени: `ln -s ~/.local/share/Odoo\ Branch\ Manager/bin/bm ~/.local/bin/bm`.
+- **Вход в GitHub** — через хранилище учётных данных git (`credential.helper osxkeychain` или Git Credential Manager).
+- **Обновление**: «Обновить» скачивает и проверяет `.dmg`, закрывает приложение и открывает образ. Перетащите
+  приложение в «Программы» с заменой и запустите снова.
+- **Меню и трей.** Есть обычное меню macOS (Cmd+Q, Cmd+C/V). Cmd+Q работает так же, как «Выход» в трее: если идут
+  задачи, приложение спросит, что с ними делать. Значок в строке меню чёрно-белый, пока сборок нет; цветной — когда
+  есть статус. Окно, скрытое в строку меню, возвращает щелчок по значку в Dock.
 
 ## Как добавить проект
 
@@ -252,7 +282,8 @@ SQLite мигрирует сама (`PRAGMA user_version`). История из�
 - Предварительные версии (pre-release) предлагаются, только если включено `updates.includePrerelease`.
 
 Чтобы выпустить версию, которую получат установленные копии: `pnpm release …`, `pnpm package`, затем релиз на GitHub
-с тегом `vX.Y.Z` и файлом `Odoo-Branch-Manager-Setup-X.Y.Z.exe`.
+с тегом `vX.Y.Z` и файлом `Odoo-Branch-Manager-Setup-X.Y.Z.exe`. Образ для macOS
+(`Odoo-Branch-Manager-X.Y.Z-mac-arm64.dmg`) добавляет к релизу GitHub Actions через несколько минут после публикации.
 
 ## Устройство
 
