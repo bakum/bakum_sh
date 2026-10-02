@@ -16,7 +16,8 @@ function cspPlugin(): Plugin {
         "default-src 'self'",
         "script-src 'self'",
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob:",
+        // Commit authors' avatars in History (D65).
+        "img-src 'self' data: blob: https://avatars.githubusercontent.com",
         "font-src 'self' data:",
         "worker-src 'self' blob:",
         "connect-src 'self'",

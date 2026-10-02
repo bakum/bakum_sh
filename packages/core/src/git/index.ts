@@ -492,15 +492,26 @@ const REC = '\x1e';
 /** Commits in (from, to]; with no `from` — the last `limit` commits of `to`. */
 export async function commitsBetween(repo: string, from: string | null, to: string, limit = 50): Promise<CommitInfo[]> {
   const range = from ? `${from}..${to}` : to;
-  const out = await git(repo, ['log', `-n${limit}`, `--format=%H${SEP}%an${SEP}%aI${SEP}%s${REC}`, range], { allowFail: true });
+  const out = await git(repo, ['log', `-n${limit}`, `--format=%H${SEP}%an${SEP}%ae${SEP}%aI${SEP}%s${REC}`, range], { allowFail: true });
   return out
     .split(REC)
     .map((r) => r.trim())
     .filter(Boolean)
     .map((r) => {
-      const [sha, author, date, message] = r.split(SEP);
-      return { sha: sha!, author: author ?? '', date: date ?? '', message: message ?? '' };
+      const [sha, author, email, date, message] = r.split(SEP);
+      return { sha: sha!, author: author ?? '', email: email ?? '', date: date ?? '', message: message ?? '' };
     });
+}
+
+/** Author emails of the given commits; commits the repository does not have are left out. */
+export async function authorEmails(repo: string, shas: string[]): Promise<Map<string, string>> {
+  const res = new Map<string, string>();
+  for (const sha of shas) {
+    const out = (await git(repo, ['show', '-s', `--format=%H${SEP}%ae`, sha], { allowFail: true })).trim();
+    const [full, email] = out.split(SEP);
+    if (full === sha && email !== undefined) res.set(sha, email);
+  }
+  return res;
 }
 
 export async function showFile(repo: string, sha: string, file: string): Promise<string | null> {

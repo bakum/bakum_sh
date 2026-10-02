@@ -24,6 +24,7 @@ import type { BranchView, BuildView } from '@bm/shared';
 import { DOCKER_DOWN_HINT, useBm, useDockerOk } from '../../lib/query';
 import { call, errorText } from '../../lib/bm';
 import { fmtDate, fmtDuration, shortSha, TRIGGER_LABELS } from '../../lib/format';
+import { githubAvatarUrl } from '../../lib/avatar';
 import { shellOpen } from '../BranchPage';
 import { folderBlockHint } from '../../lib/folder-block';
 
@@ -72,7 +73,14 @@ export function HistoryTab({ branch }: { branch: BranchView }) {
       </Group>
       <Timeline bulletSize={30} lineWidth={2}>
         {items.map((b) => (
-          <Timeline.Item key={b.id} bullet={<Avatar size={28} radius="xl" color="plum">{(b.commits[0]?.author ?? '?').slice(0, 1).toUpperCase()}</Avatar>}>
+          <Timeline.Item
+            key={b.id}
+            bullet={
+              <Avatar size={28} radius="xl" color="plum" src={githubAvatarUrl(b.commits[0]?.email, 56)} alt={b.commits[0]?.author}>
+                {(b.commits[0]?.author ?? '?').slice(0, 1).toUpperCase()}
+              </Avatar>
+            }
+          >
             <BuildCard b={b} branch={branch} />
           </Timeline.Item>
         ))}

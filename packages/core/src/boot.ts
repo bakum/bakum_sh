@@ -19,6 +19,7 @@ import { subscribeBuildLog, subscribeContainerLog, subscribeStats } from './serv
 import { publishTray } from './services/tray';
 import { bus } from './events';
 import { registerBuildExecutors } from './builds/executors';
+import { backfillCommitEmails } from './builds/commit-emails';
 import { registerSnapshotExecutors } from './services/snapshots';
 import { runtime } from './runtime';
 import { log } from './util/logger';
@@ -67,6 +68,8 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
     publishTray(ctx);
     // First fetch right after start (criterion 3: the sidebar matches odoo.sh after the first fetch).
     requestFetch(ctx);
+    // Avatars in History for builds recorded before D65.
+    void backfillCommitEmails(ctx).catch((err) => log().warn({ err }, 'commit emails backfill failed'));
   });
   runtime.onDockerUp(async () => {
     startDockerWatch(ctx);

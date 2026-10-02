@@ -52,6 +52,8 @@ export interface BuildStep {
 export interface CommitInfo {
   sha: string;
   author: string;
+  /** Author email: the avatar in History (D65). Absent in builds recorded before 0.13.18 until backfilled. */
+  email?: string;
   date: string;
   message: string;
 }
