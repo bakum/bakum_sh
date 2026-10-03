@@ -5,7 +5,7 @@ import type { Ctx } from './context';
 import { jobs } from './db/schema';
 import { detectProject } from './detect';
 import * as git from './git';
-import { configEffective, configGet, configPut, jsonSchemas, setBranchOverrides } from './services/config';
+import { configEffective, configGet, configPut, jsonSchemas, setBranchOverrides, setLanguage } from './services/config';
 import { checkPostgres, createProject, getProject, setEnabled, summaries, updateProject } from './services/projects';
 import { deletePreset, exportProject, listPresets, readPreset, savePreset } from './services/presets';
 import { completeFirstRun, appState, systemStatus, startDockerDesktop } from './services/system';
@@ -101,6 +101,7 @@ export function registerHandlers(ctx: Ctx): void {
     'config.effective': (p) => configEffective(ctx, p.branchId),
     'config.jsonSchema': () => jsonSchemas(),
     'config.app': () => ctx.store.app,
+    'config.setLanguage': (p) => setLanguage(ctx, p.language),
 
     'branches.list': (p) => listBranches(ctx, p.projectId),
     'branches.get': (p) => getBranchView(ctx, p.branchId),

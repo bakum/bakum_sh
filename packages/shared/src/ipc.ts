@@ -189,6 +189,8 @@ export const methods = {
   'config.effective': m<EffectiveConfig>()(z.object({ branchId: id }).strict()),
   'config.jsonSchema': m<{ project: unknown; app: unknown; branch: unknown }>()(empty),
   'config.app': m<AppConfig>()(empty),
+  /** Interface language from the header switch: only `language` of app.yaml is changed (D69). */
+  'config.setLanguage': m<{ ok: true }>()(z.object({ language: z.enum(LANGS) }).strict()),
 
   'branches.list': m<BranchesList>()(z.object({ projectId }).strict()),
   'branches.get': m<BranchView>()(z.object({ branchId: id }).strict()),

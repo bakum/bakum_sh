@@ -48,3 +48,13 @@
   overflow: auto;
   background: var(--mantine-color-body);
 }
+.lang {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: var(--mantine-radius-sm);
+}
+.lang:hover {
+  background: rgba(255, 255, 255, 0.12);
+}

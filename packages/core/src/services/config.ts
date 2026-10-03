@@ -1,6 +1,6 @@
 import YAML from 'yaml';
 import { z } from 'zod';
-import { appConfigSchema, BmError, branchScopeSchema, projectConfigSchema, type EffectiveConfig, type Level } from '@bm/shared';
+import { appConfigSchema, BmError, branchScopeSchema, projectConfigSchema, type EffectiveConfig, type Lang, type Level } from '@bm/shared';
 import { eq } from 'drizzle-orm';
 import type { Ctx } from '../context';
 import { branches } from '../db/schema';
@@ -38,6 +38,17 @@ export function configGet(ctx: Ctx, p: { projectId?: string; level: Level; branc
       return { yaml: Object.keys(ov).length ? YAML.stringify(ov) : '{}\n', value: ov };
     }
   }
+}
+
+/** The header's language switch (D69): only `language` of app.yaml changes, the rest of the file and its comments stay. */
+export function setLanguage(ctx: Ctx, language: Lang): { ok: true } {
+  const prev = ctx.store.app.language;
+  if (prev === language) return { ok: true };
+  const next = ctx.store.updateApp((doc) => doc.set('language', language));
+  audit(ctx, { action: 'settings.update', target: 'app.yaml', diff: `- language: ${prev}\n+ language: ${language}` });
+  ctx.toMain({ kind: 'appConfig', config: next });
+  bus.emit({ type: 'config.changed' });
+  return { ok: true };
 }
 
 export function configPut(ctx: Ctx, p: { projectId?: string; level: Level; branchId?: number; yaml: string }): { ok: true } {

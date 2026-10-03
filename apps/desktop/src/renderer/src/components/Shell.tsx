@@ -8,6 +8,7 @@ import {
   Button,
   Group,
   Indicator,
+  Menu,
   Popover,
   Select,
   Stack,
@@ -19,7 +20,8 @@ import {
 } from '@mantine/core';
 import { useHotkeys } from '@mantine/hooks';
 import { useQueryClient } from '@tanstack/react-query';
-import { IconBell, IconBrandDocker, IconGitBranch, IconMoon, IconSun } from '@tabler/icons-react';
+import { IconBell, IconBrandDocker, IconCheck, IconGitBranch, IconLanguage, IconMoon, IconSun } from '@tabler/icons-react';
+import { LANG_NAMES, LANGS, type Lang } from '@bm/shared';
 import { useBm, useBmMutation } from '../lib/query';
 import { BRANCH_FILTER_ID } from './Sidebar';
 import { EditionBadge } from './EditionBadge';
@@ -30,7 +32,7 @@ import classes from './Shell.module.css';
 import { AppFooter } from './AppFooter';
 import { UpdateBanner } from './UpdateBanner';
 import { ErrorBoundary } from './ErrorBoundary';
-import { t } from '../i18n';
+import { t, useLang } from '../i18n';
 
 
 export function Shell() {
@@ -44,6 +46,14 @@ export function Shell() {
   const [dismissed, setDismissed] = useState<string | null>(null);
   const startDocker = useBmMutation('system.startDocker', { success: t('shell.dockerStarting') });
   const { setColorScheme } = useMantineColorScheme();
+  // Language switch (D69): the window changes at once, Core writes `language` into app.yaml.
+  const { lang, setLang } = useLang();
+  const setLanguage = useBmMutation('config.setLanguage');
+  const chooseLang = (l: Lang) => {
+    if (l === lang) return;
+    setLang(l);
+    setLanguage.mutate({ language: l });
+  };
   const scheme = useComputedColorScheme('light');
 
   const current = pid ?? projects.data?.[0]?.id;
@@ -151,6 +161,25 @@ export function Shell() {
               <Box className={classes.dot} style={{ background: dockerOk ? '#40c057' : '#fa5252' }} />
             </Group>
           </Tooltip>
+          <Menu position="bottom-end" withinPortal shadow="md">
+            <Menu.Target>
+              <Tooltip label={t('shell.language')}>
+                <UnstyledButton c="white" className={classes.lang} aria-label={t('shell.language')} data-testid="header-language">
+                  <IconLanguage size={18} />
+                  <Text span size="xs" fw={600} c="white">
+                    {lang.toUpperCase()}
+                  </Text>
+                </UnstyledButton>
+              </Tooltip>
+            </Menu.Target>
+            <Menu.Dropdown>
+              {LANGS.map((l) => (
+                <Menu.Item key={l} onClick={() => chooseLang(l)} rightSection={l === lang ? <IconCheck size={14} /> : null}>
+                  {LANG_NAMES[l]}
+                </Menu.Item>
+              ))}
+            </Menu.Dropdown>
+          </Menu>
           <ActionIcon c="white" onClick={() => setColorScheme(scheme === 'dark' ? 'light' : 'dark')} aria-label={t('shell.theme')}>
             {scheme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
           </ActionIcon>
