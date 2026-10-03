@@ -6,13 +6,15 @@ import {
   IDENTITY_PATHS,
   MACHINE_PATHS,
   SECRET_PATHS,
+  projectConfigSchema,
   type PresetId,
   type PresetInfo,
   type PresetOverlay,
 } from '@bm/shared';
 import type { Ctx } from '../context';
 import { nowIso } from '../util/time';
-import { audit } from './audit';
+import { audit, lineDiff } from './audit';
+import { maskedYaml } from './projects';
 import { coreMessages, t } from '../i18n';
 
 /**
@@ -185,4 +187,50 @@ export function deletePreset(ctx: Ctx, file: string): void {
   const full = presetPath(ctx, file);
   fs.rmSync(full, { force: true });
   audit(ctx, { action: 'preset.delete', target: file });
+}
+
+const isPlainMap = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** Lays `over` into the YAML document key by key: maps merge (comments of untouched keys stay), the rest is replaced. */
+function overlayDoc(doc: YAML.Document, over: Record<string, unknown>, at: string[] = []): void {
+  for (const [k, v] of Object.entries(over)) {
+    const p = [...at, k];
+    if (isPlainMap(v) && YAML.isMap(doc.getIn(p, true))) overlayDoc(doc, v, p);
+    else doc.setIn(p, doc.createNode(v));
+  }
+}
+
+/** Removes the paths from a plain object (a parsed preset). */
+function dropPaths(obj: Record<string, unknown>, paths: string[][]): void {
+  for (const p of paths) {
+    const parent = p.slice(0, -1).reduce<unknown>((o, k) => (isPlainMap(o) ? o[k] : undefined), obj);
+    if (isPlainMap(parent)) delete parent[p[p.length - 1]!];
+  }
+}
+
+/**
+ * The project YAML with a preset laid over it (presets.applyPreview, D73). The project keeps what makes it this project
+ * on this machine: id, repository, names, paths, passwords — those paths of the preset (or of an exported project) are
+ * dropped first. The result is validated; the renderer saves it with projects.update after showing the diff.
+ */
+export function applyPresetText(projectText: string, overlay: PresetOverlay): string {
+  const over = structuredClone(overlay.config);
+  dropPaths(over, [...SECRET_PATHS, ...MACHINE_PATHS, ...IDENTITY_PATHS]);
+  const doc = YAML.parseDocument(projectText);
+  overlayDoc(doc, over);
+  return doc.toString({ lineWidth: 120 });
+}
+
+export function applyPresetPreview(ctx: Ctx, p: { projectId: string; file?: string; path?: string }): { name: string; yaml: string; diff: string } {
+  const e = ctx.store.get(p.projectId);
+  if (!e?.config) throw new BmError('NO_PROJECT', t('projects.notFoundOrBroken', { id: p.projectId }));
+  const overlay = readPreset(ctx, p);
+  const before = maskedYaml(e.text);
+  const after = maskedYaml(applyPresetText(e.text, overlay));
+  const parsed = projectConfigSchema.safeParse(YAML.parse(applyPresetText(e.text, overlay)));
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new BmError('PRESET_INVALID', t('presets.applyInvalid', { name: overlay.name, error: `${issue?.path.join('.') ?? ''}: ${issue?.message ?? ''}` }));
+  }
+  return { name: overlay.name, yaml: after, diff: before === after ? '' : lineDiff(before, after) };
 }

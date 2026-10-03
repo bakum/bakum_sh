@@ -163,6 +163,13 @@ export const methods = {
       .refine((p) => !!p.file !== !!p.path),
   ),
   'presets.delete': m<{ ok: true }>()(z.object({ file: z.string().min(1) }).strict()),
+  /** Project YAML with a preset laid over it, and its diff — saved by projects.update after the user's confirmation (D73). */
+  'presets.applyPreview': m<{ name: string; yaml: string; diff: string }>()(
+    z
+      .object({ projectId, file: z.string().min(1).optional(), path: z.string().min(1).optional() })
+      .strict()
+      .refine((p) => !!p.file !== !!p.path),
+  ),
   'projects.deletePreview': m<ProjectDeletePreview>()(
     z.object({ projectId }).strict(),
   ),

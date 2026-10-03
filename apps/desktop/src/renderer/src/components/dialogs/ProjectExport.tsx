@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Button, Checkbox, Group, Menu, Modal, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Checkbox, Group, Menu, Modal, ScrollArea, Select, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconChevronDown, IconFileExport, IconTemplate } from '@tabler/icons-react';
+import { IconChevronDown, IconFileExport, IconFileImport, IconTemplate } from '@tabler/icons-react';
 import type { PresetId } from '@bm/shared';
-import { useBmMutation } from '../../lib/query';
+import { useBm, useBmMutation } from '../../lib/query';
+import { Diff } from '../Diff';
 import { call, errorText } from '../../lib/bm';
 import { t } from '../../i18n';
 
@@ -14,7 +15,13 @@ const BASES: PresetId[] = ['odoo', 'generic', 'demz'];
  * into either file; paths of this machine go into an export only on request.
  */
 export function ProjectExportMenu({ projectId, projectName }: { projectId: string; projectName: string }) {
-  const [dialog, setDialog] = useState<'export' | 'preset' | null>(null);
+  const [dialog, setDialog] = useState<'export' | 'preset' | 'apply' | null>(null);
+  // «Застосувати пресет…»: the chosen preset or file, the YAML with it and the diff (nothing is saved before «Застосувати»).
+  const [source, setSource] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ name: string; yaml: string; diff: string } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const presets = useBm('presets.list', {}, { enabled: dialog === 'apply' });
+  const update = useBmMutation('projects.update');
   const [keepPaths, setKeepPaths] = useState(false);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState(projectName);
@@ -35,6 +42,36 @@ export function ProjectExportMenu({ projectId, projectName }: { projectId: strin
       setBusy(false);
     }
   };
+
+  const choose = async (key: string) => {
+    setPreview(null);
+    try {
+      let params: { projectId: string; file?: string; path?: string } = { projectId };
+      if (key === 'file') {
+        const path = await window.bm.desktop.selectFile({ title: t('ap.ovPick'), extensions: ['yaml', 'yml'] });
+        if (!path) return;
+        params = { projectId, path };
+      } else params = { projectId, file: key.slice(2) };
+      setSource(key);
+      setPreviewing(true);
+      setPreview(await call('presets.applyPreview', params));
+    } catch (e) {
+      notifications.show({ color: 'red', title: t('common.error'), message: errorText(e), autoClose: 12000 });
+    } finally {
+      setPreviewing(false);
+    }
+  };
+  const doApply = () =>
+    preview &&
+    update.mutate(
+      { projectId, yaml: preview.yaml },
+      {
+        onSuccess: () => {
+          notifications.show({ color: 'green', message: t('exp.applied', { name: preview.name }) });
+          setDialog(null);
+        },
+      },
+    );
 
   const doPreset = () =>
     save.mutate(
@@ -68,6 +105,16 @@ export function ProjectExportMenu({ projectId, projectName }: { projectId: strin
           >
             {t('exp.asPreset')}
           </Menu.Item>
+          <Menu.Item
+            leftSection={<IconFileImport size={14} />}
+            onClick={() => {
+              setSource(null);
+              setPreview(null);
+              setDialog('apply');
+            }}
+          >
+            {t('exp.apply')}
+          </Menu.Item>
         </Menu.Dropdown>
       </Menu>
 
@@ -81,6 +128,46 @@ export function ProjectExportMenu({ projectId, projectName }: { projectId: strin
             </Button>
             <Button loading={busy} onClick={() => void doExport()}>
               {t('exp.saveFile')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal opened={dialog === 'apply'} onClose={() => setDialog(null)} title={t('exp.applyTitle', { id: projectId })} size="xl">
+        <Stack>
+          <Text size="sm">{t('exp.applyText')}</Text>
+          <Select
+            label={t('exp.applySource')}
+            placeholder={t('exp.applyPick')}
+            value={source}
+            onChange={(v) => v && void choose(v)}
+            allowDeselect={false}
+            data={[
+              ...(presets.data ?? []).map((p) => ({ value: `p:${p.file}`, label: p.name })),
+              { value: 'file', label: t('ap.ovFile') },
+            ]}
+            data-testid="apply-preset-source"
+          />
+          {preview && !preview.diff && <Alert color="gray">{t('exp.applyNoChanges', { name: preview.name })}</Alert>}
+          {preview && !!preview.diff && (
+            <>
+              <Text size="sm" fw={600}>
+                {t('exp.applyDiff', { n: preview.diff.split('\n').length })}
+              </Text>
+              <ScrollArea.Autosize mah={360}>
+                <Diff text={preview.diff} />
+              </ScrollArea.Autosize>
+              <Text size="xs" c="dimmed">
+                {t('exp.applyAfter')}
+              </Text>
+            </>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDialog(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button loading={previewing || update.isPending} disabled={!preview?.diff} onClick={doApply}>
+              {t('exp.applyButton')}
             </Button>
           </Group>
         </Stack>

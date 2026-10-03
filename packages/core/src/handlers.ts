@@ -7,7 +7,7 @@ import { detectProject } from './detect';
 import * as git from './git';
 import { configEffective, configGet, configPut, jsonSchemas, setBranchOverrides, setLanguage } from './services/config';
 import { checkPostgres, createProject, getProject, setEnabled, summaries, updateProject } from './services/projects';
-import { deletePreset, exportProject, listPresets, readPreset, savePreset } from './services/presets';
+import { applyPresetPreview, deletePreset, exportProject, listPresets, readPreset, savePreset } from './services/presets';
 import { completeFirstRun, appState, systemStatus, startDockerDesktop } from './services/system';
 import { jobLog, jobView, listJobs } from './services/jobs-view';
 import { defaultCloneDir, loginProject, probeRepo, requestClone, saveToken } from './services/repo';
@@ -87,6 +87,7 @@ export function registerHandlers(ctx: Ctx): void {
     'presets.list': () => listPresets(ctx),
     'presets.save': (p) => savePreset(ctx, p),
     'presets.read': (p) => readPreset(ctx, p),
+    'presets.applyPreview': (p) => applyPresetPreview(ctx, p),
     'presets.delete': (p) => {
       deletePreset(ctx, p.file);
       return { ok: true as const };

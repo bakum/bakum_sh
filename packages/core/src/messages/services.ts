@@ -346,6 +346,11 @@ export default {
     ru: 'Файл {file} слишком большой для настроек (больше 1 МБ). Выберите файл пресета или экспорта.',
     en: 'File {file} is too big for settings (over 1 MB). Pick a preset or export file.',
   },
+  'presets.applyInvalid': {
+    uk: 'Після пресета «{name}» налаштування проєкту не проходять перевірку ({error}). Проєкт не змінено; виправте пресет або налаштування.',
+    ru: 'После пресета «{name}» настройки проекта не проходят проверку ({error}). Проект не изменён; исправьте пресет или настройки.',
+    en: 'With preset «{name}» the project settings do not pass validation ({error}). The project was not changed; fix the preset or the settings.',
+  },
   'presets.badName': {
     uk: 'Недопустима назва файла пресета: {file}',
     ru: 'Недопустимое имя файла пресета: {file}',

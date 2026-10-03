@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import YAML from 'yaml';
 import { overlayConfig, projectConfigSchema, type ProjectConfig } from '@bm/shared';
 import { demzPreset, odooPreset } from '../src/config/presets';
-import { exportProjectText, guessBase, parsePresetFile, presetFileName, presetText } from '../src/services/presets';
+import { applyPresetText, exportProjectText, guessBase, parsePresetFile, presetFileName, presetText } from '../src/services/presets';
 
 const demz = projectConfigSchema.parse(
   demzPreset({
@@ -134,5 +134,30 @@ describe('presets (D73)', () => {
     expect(guessBase({ id: 'x', runtime: { image: 'my-odoo' } })).toBe('generic');
     expect(presetFileName('DEMZ без тестов!')).toBe('demz.yaml');
     expect(presetFileName('Мой')).toMatch(/^preset-\d+\.yaml$/);
+  });
+});
+
+describe('applying a preset to a project (D73)', () => {
+  it('changes the settings, keeps the project, its paths, passwords and comments', () => {
+    const other = { ...withSecrets, id: 'other', name: 'Other', repo: { ...withSecrets.repo, url: 'https://example.com/o.git', worktreesDir: 'D:/elsewhere' }, autoAddBranches: 'rules', branchRules: [{ match: 'x/*', stage: 'development' }] };
+    const preset = parsePresetFile(presetText(YAML.stringify(other), { name: 'p', base: 'demz', from: 'other' }), 'p.yaml');
+    const text = applyPresetText(projectFile, preset);
+    const cfg = projectConfigSchema.parse(YAML.parse(text));
+    expect(cfg.autoAddBranches).toBe('rules');
+    expect(cfg.branchRules).toEqual([{ match: 'x/*', stage: 'development' }]);
+    expect(cfg.id).toBe('demz');
+    expect(cfg.repo.url).toBe(demz.repo.url);
+    expect(cfg.repo.worktreesDir).toBe(demz.repo.worktreesDir);
+    expect(cfg.postgres.password).toBe('secret-pw');
+    expect(text).toContain('Правка файла подхватывается');
+  });
+
+  it('takes an exported project as a preset: its id, paths and names do not move in', () => {
+    const exported = parsePresetFile(exportProjectText(YAML.stringify({ ...demz, id: 'shop', name: 'Shop', autoAddBranches: 'none' }), { keepPaths: true, projectId: 'shop' }), 'shop.yaml');
+    const cfg = projectConfigSchema.parse(YAML.parse(applyPresetText(projectFile, exported)));
+    expect(cfg.id).toBe('demz');
+    expect(cfg.name).toBe('DEMZ Odoo 19');
+    expect(cfg.autoAddBranches).toBe('none');
+    expect(cfg.runtime.mounts).toEqual(demz.runtime.mounts);
   });
 });

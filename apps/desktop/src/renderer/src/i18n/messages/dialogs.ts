@@ -218,5 +218,27 @@ export default {
     en: 'Its detected values fill what the preset leaves out (paths, network, Postgres).',
   },
   'exp.baseAuto': { uk: 'Визначити автоматично', ru: 'Определить автоматически', en: 'Detect automatically' },
+  'exp.apply': { uk: 'Застосувати пресет…', ru: 'Применить пресет…', en: 'Apply a preset…' },
+  'exp.applyTitle': { uk: 'Застосувати пресет до проєкту {id}', ru: 'Применить пресет к проекту {id}', en: 'Apply a preset to project {id}' },
+  'exp.applyText': {
+    uk: 'Налаштування пресета лягають поверх налаштувань проєкту. Не змінюються: id і назва, репозиторій, гілка Production, імена БД і хостів, шляхи цього комп’ютера і паролі. Перед збереженням видно, які рядки YAML зміняться.',
+    ru: 'Настройки пресета ложатся поверх настроек проекта. Не меняются: id и название, репозиторий, ветка Production, имена БД и хостов, пути этого компьютера и пароли. Перед сохранением видно, какие строки YAML изменятся.',
+    en: 'The preset settings are laid over the project settings. Not changed: id and name, repository, Production branch, database and host names, this computer’s paths and passwords. Before saving you see which YAML lines change.',
+  },
+  'exp.applySource': { uk: 'Пресет або файл', ru: 'Пресет или файл', en: 'Preset or file' },
+  'exp.applyPick': { uk: 'Виберіть збережений пресет або «З файла…»', ru: 'Выберите сохранённый пресет или «Из файла…»', en: 'Pick a saved preset or «From file…»' },
+  'exp.applyNoChanges': { uk: '«{name}» нічого не змінює в цьому проєкті.', ru: '«{name}» ничего не меняет в этом проекте.', en: '«{name}» changes nothing in this project.' },
+  'exp.applyDiff': {
+    uk: 'Зміни в YAML проєкту ({n} {n:рядок|рядки|рядків}):',
+    ru: 'Изменения в YAML проекта ({n} {n:строка|строки|строк}):',
+    en: 'Changes to the project YAML ({n} {n:line|lines}):',
+  },
+  'exp.applyAfter': {
+    uk: 'Живі збірки, яких це стосується, покажуть «конфігурація змінилася» — натисніть «Застосувати» на сторінці гілки. Нові налаштування стадій діють з наступної збірки.',
+    ru: 'Живые сборки, которых это касается, покажут «конфигурация изменилась» — нажмите «Применить» на странице ветки. Новые настройки стадий действуют со следующей сборки.',
+    en: 'Live builds affected show «configuration changed» — press «Apply» on the branch page. New stage settings take effect from the next build.',
+  },
+  'exp.applyButton': { uk: 'Застосувати', ru: 'Применить', en: 'Apply' },
+  'exp.applied': { uk: 'Пресет «{name}» застосовано', ru: 'Пресет «{name}» применён', en: 'Preset «{name}» applied' },
   'exp.presetSaved': { uk: 'Пресет «{name}» збережено', ru: 'Пресет «{name}» сохранён', en: 'Preset «{name}» saved' },
 } satisfies Record<string, Entry>;

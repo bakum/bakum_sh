@@ -80,6 +80,25 @@ try {
   check('карточка «Пресеты» в настройках приложения', await win.getByText(saved.file).isVisible());
   await shot(win, 'presets-card');
 
+  // 3a. «Применить пресет…» to an existing project: the settings come back, the project's own values stay.
+  const changed = YAML.parseDocument((await bm(win, 'projects.get', { projectId: ID })).yaml);
+  changed.setIn(['repo', 'fetchIntervalMin'], 9);
+  changed.setIn(['autoAddBranches'], src.autoAddBranches === 'none' ? 'rules' : 'none');
+  await bm(win, 'projects.update', { projectId: ID, yaml: changed.toString() });
+  await win.evaluate((id) => (location.hash = `#/projects/${id}/settings/repo`), ID);
+  await win.getByRole('button', { name: 'Экспорт / пресет' }).click();
+  await win.getByText('Применить пресет…').click();
+  await win.locator('[data-testid="apply-preset-source"]').click();
+  await win.getByRole('option', { name: PRESET }).click();
+  await win.getByText(/Изменения в YAML проекта/).waitFor();
+  await shot(win, 'presets-apply');
+  await win.getByRole('dialog').getByRole('button', { name: 'Применить' }).click();
+  await win.waitForTimeout(2000);
+  const applied = (await bm(win, 'projects.get', { projectId: ID })).config;
+  check('применить пресет: настройки вернулись', applied.repo.fetchIntervalMin === src.repo.fetchIntervalMin && applied.autoAddBranches === src.autoAddBranches, `${applied.repo.fetchIntervalMin} ${applied.autoAddBranches}`);
+  check('применить пресет: свои значения проекта на месте', applied.id === ID && applied.repo.mirrorDir === src.repo.mirrorDir && applied.naming.db === src.naming.db && applied.runtime.network === src.runtime.network);
+  check('применить пресет: пароль Postgres на месте', applied.postgres.password === '********');
+
   // 4. Wizard: the sandbox repository again, with the preset.
   await win.evaluate(() => (location.hash = '#/projects/new'));
   await win.getByText('Адрес из папки на диске').click();
