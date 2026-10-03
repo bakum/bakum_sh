@@ -8,6 +8,7 @@ import { manifestVersion, moduleRootsFrom, modulesFromTree } from './modules';
 import { repoNameFromUrl } from './services/repo';
 import { demzPreset, genericPreset, odooPreset, stackAddons, type PresetInputs } from './config/presets';
 import { isInside, samePath, toPosix } from './util/paths';
+import { t } from './i18n';
 
 /** Secrets found during detection stay in Core; the renderer only learns that a password exists. */
 const secrets = new Map<string, { password: string }>();
@@ -34,7 +35,7 @@ export async function detectProject(
   },
 ): Promise<DetectResult> {
   const mirror = toPosix(input.mirror);
-  if (!fs.existsSync(mirror)) throw new BmError('NO_DIR', `Копия репозитория «${mirror}» не найдена: загрузите репозиторий заново.`);
+  if (!fs.existsSync(mirror)) throw new BmError('NO_DIR', t('detect.noMirror', { dir: mirror }));
   const warnings: string[] = [];
   const remote = 'origin';
   const remoteUrl = input.url;
@@ -49,14 +50,14 @@ export async function detectProject(
     null;
   const treeBranch = productionCandidate ?? (currentBranch && names.includes(currentBranch) ? currentBranch : names[0]) ?? null;
   const treeRef = treeBranch ? `refs/remotes/${remote}/${treeBranch}` : null;
-  if (!treeRef) warnings.push('В репозитории нет ни одной ветки.');
+  if (!treeRef) warnings.push(t('detect.noBranches'));
   const files = treeRef ? await git.lsTree(mirror, treeRef) : [];
 
   const modules = modulesFromTree(files)
     .filter((m) => m.dir.split('/').length <= 4 && !m.dir.split('/').some((p) => p.startsWith('.')))
     .sort((a, b) => a.dir.localeCompare(b.dir));
   const moduleRoots = moduleRootsFrom(modules);
-  if (!modules.length) warnings.push('В репозитории не найдено ни одного модуля Odoo (__manifest__.py на глубине до 4).');
+  if (!modules.length) warnings.push(t('detect.noModules'));
   const modulesToInstall = findModuleList(files);
   const repoPath = folder;
 
@@ -107,7 +108,7 @@ export async function detectProject(
       repoMount = best.mount;
     }
   } catch (err) {
-    warnings.push(`Docker недоступен: ${(err as Error).message}. Образ, сеть и Postgres нужно указать вручную.`);
+    warnings.push(t('detect.noDocker', { error: (err as Error).message }));
   }
 
   if (odooContainer) {
@@ -147,19 +148,19 @@ export async function detectProject(
           user,
           hasPassword: !!pgPassword,
         };
-        if (!port) warnings.push(`Postgres «${name}» не публикует порт на хост: приложению нужен доступ к нему с localhost.`);
-        if (c.State !== 'running') warnings.push(`Контейнер Postgres «${name}» не запущен.`);
+        if (!port) warnings.push(t('detect.pgNoPort', { name }));
+        if (c.State !== 'running') warnings.push(t('detect.pgStopped', { name }));
         break;
       }
     } catch {
       /* reported above */
     }
-    if (!pg) warnings.push(`В сети ${network ?? '?'} не найден контейнер Postgres.`);
+    if (!pg) warnings.push(t('detect.noPg', { network: network ?? '?' }));
   } else if (!isDemzUrl(remoteUrl, github)) {
     warnings.push(
       repoPath
-        ? 'Не найден контейнер Odoo, монтирующий этот репозиторий. Пресет «Odoo в Docker» поднимет Odoo и Postgres сам; для Generic образ, сеть и Postgres нужно указать вручную.'
-        : 'Пресет «Odoo в Docker» поднимет Odoo и Postgres сам. Для Generic укажите папку своего клона, который смонтирован в ваш контейнер Odoo, или впишите образ, сеть и Postgres вручную.',
+        ? t('detect.noOdooForRepo')
+        : t('detect.noOdoo'),
     );
   }
 
@@ -211,20 +212,20 @@ export async function detectProject(
   const supported = !!seriesFound && (ODOO_VERSIONS as readonly string[]).includes(seriesFound);
   const odooVersion = opts.odoo?.version ?? (supported ? seriesFound! : ODOO_VERSIONS[0]);
   if (seriesFound && !supported) {
-    warnings.push(`Модули репозитория рассчитаны на Odoo ${seriesFound}; пресет «Odoo в Docker» поддерживает ${ODOO_VERSIONS.join(', ')}.`);
+    warnings.push(t('detect.seriesUnsupported', { series: seriesFound, versions: ODOO_VERSIONS.join(', ') }));
   } else if (seriesFound && seriesFound !== odooVersion) {
-    warnings.push(`Модули репозитория рассчитаны на Odoo ${seriesFound}, а выбрана Odoo ${odooVersion}.`);
+    warnings.push(t('detect.seriesMismatch', { series: seriesFound, version: odooVersion }));
   }
   let enterpriseDir: string | null = null;
   if (opts.odoo?.enterprisePath) {
     const dir = toPosix(path.resolve(opts.odoo.enterprisePath));
     if (!fs.existsSync(path.join(dir, 'web_enterprise', '__manifest__.py'))) {
-      warnings.push(`В папке Enterprise ${dir} нет модуля web_enterprise: укажите корень репозитория odoo/enterprise нужной версии.`);
+      warnings.push(t('detect.noWebEnterprise', { dir }));
     } else {
       enterpriseDir = dir;
       const v = manifestVersion(readText(path.join(dir, 'web_enterprise', '__manifest__.py')));
       const entSeries = v?.match(/^\d+\.0/)?.[0];
-      if (entSeries && entSeries !== odooVersion) warnings.push(`Enterprise в ${dir} — версии ${entSeries}, а выбрана Odoo ${odooVersion}.`);
+      if (entSeries && entSeries !== odooVersion) warnings.push(t('detect.enterpriseMismatch', { dir, series: entSeries, version: odooVersion }));
     }
   }
   const odooProposal = odooPreset({

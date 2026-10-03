@@ -10,6 +10,7 @@ import { useComputedColorScheme } from '@mantine/core';
 import type { BranchView, LogChunk } from '@bm/shared';
 import { useBm } from '../../lib/query';
 import { LIGHT_SURFACE } from '../../theme';
+import { t } from '../../i18n';
 
 const LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
 const MAX_LINES = 20000;
@@ -120,14 +121,14 @@ export function LogsTab({ branch }: { branch: BranchView }) {
   }, [minLevel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildOptions = useMemo(
-    () => (builds.data?.items ?? []).map((b) => ({ value: String(b.id), label: `#${b.number} · ${b.status}${b.isLive ? ' · живая' : ''}` })),
+    () => (builds.data?.items ?? []).map((b) => ({ value: String(b.id), label: `#${b.number} · ${b.status}${b.isLive ? t('logs.live') : ''}` })),
     [builds.data],
   );
 
 
   return (
     <Stack h="calc(100vh - 250px)" gap="xs">
-      {builds.data && !builds.data.items.length && <Alert color="gray">Сборок ещё не было.</Alert>}
+      {builds.data && !builds.data.items.length && <Alert color="gray">{t('logs.noBuilds')}</Alert>}
       <Group gap="xs">
         <SegmentedControl
           size="xs"
@@ -146,7 +147,7 @@ export function LogsTab({ branch }: { branch: BranchView }) {
           value={minLevel}
           onChange={(v) => setMinLevel(v ?? 'all')}
           data={[
-            { value: 'all', label: 'Все уровни' },
+            { value: 'all', label: t('logs.allLevels') },
             { value: 'INFO', label: 'INFO+' },
             { value: 'WARNING', label: 'WARNING+' },
             { value: 'ERROR', label: 'ERROR+' },
@@ -155,7 +156,7 @@ export function LogsTab({ branch }: { branch: BranchView }) {
         <TextInput
           size="xs"
           w={220}
-          placeholder="Поиск (Enter — дальше)"
+          placeholder={t('logs.search')}
           leftSection={<IconSearch size={12} />}
           value={search}
           onChange={(e) => setSearch(e.currentTarget.value)}
@@ -172,11 +173,11 @@ export function LogsTab({ branch }: { branch: BranchView }) {
           leftSection={<IconDownload size={12} />}
           onClick={() => void window.bm.desktop.saveFile({ defaultPath: `${branch.slug}-${source}.log`, content: lines.current.join('\n') })}
         >
-          Сохранить как…
+          {t('logs.saveAs')}
         </Button>
-        <Tooltip label="Этап 3">
+        <Tooltip label={t('logs.stage3')}>
           <Button size="xs" variant="default" disabled>
-            В отдельном окне
+            {t('logs.window')}
           </Button>
         </Tooltip>
       </Group>

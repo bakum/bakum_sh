@@ -5,6 +5,7 @@ import type { Ctx } from '../context';
 import { docker } from '../docker/client';
 import { buildRow, testsLogPath } from '../builds/view';
 import { buildContainers } from '../builds/drop';
+import { t } from '../i18n';
 
 /** Collects lines and flushes them in batches (~100 ms) so a noisy log does not flood the UI. */
 function batcher(emit: (d: unknown) => void) {
@@ -52,12 +53,12 @@ function tailLines(file: string, maxLines: number): { lines: string[]; size: num
 export function subscribeBuildLog(ctx: Ctx, buildId: number, kind: 'build' | 'tests', emit: (d: unknown) => void): () => void {
   const b = buildRow(ctx, buildId);
   if (!b?.logPath) {
-    emit({ lines: ['(лог сборки не найден)'], reset: true });
+    emit({ lines: [t('logs.noBuildLog')], reset: true });
     return () => {};
   }
   const file = kind === 'tests' ? testsLogPath(b.logPath) : b.logPath;
   if (kind === 'tests' && !fs.existsSync(file) && b.status !== 'building' && b.status !== 'queued') {
-    emit({ lines: ['(тесты в этой сборке не запускались)'], reset: true });
+    emit({ lines: [t('logs.noTests')], reset: true });
     return () => {};
   }
   const bt = batcher(emit);
@@ -103,7 +104,7 @@ export function subscribeContainerLog(ctx: Ctx, buildId: number, emit: (d: unkno
     const id = await containerFor(ctx, buildId).catch(() => null);
     if (closed) return;
     if (!id) {
-      bt.reset(['(контейнер сборки не найден: сборка остановлена, отброшена или ещё не поднята)']);
+      bt.reset([t('logs.noContainer')]);
       return;
     }
     bt.reset([]);
@@ -117,8 +118,8 @@ export function subscribeContainerLog(ctx: Ctx, buildId: number, emit: (d: unkno
     const out = new PassThrough();
     docker.modem.demuxStream(s, out, out);
     out.on('data', (d: Buffer) => bt.push(d.toString('utf8')));
-    s.on('end', () => bt.push('\n(поток логов завершён: контейнер остановлен)\n'));
-  })().catch((err) => bt.reset([`(ошибка чтения логов: ${(err as Error).message})`]));
+    s.on('end', () => bt.push(`\n${t('logs.streamEnded')}\n`));
+  })().catch((err) => bt.reset([t('logs.readError', { error: (err as Error).message })]));
   return () => {
     closed = true;
     bt.close();
@@ -161,7 +162,7 @@ export function subscribeStats(ctx: Ctx, buildId: number, emit: (d: unknown) => 
 
 export async function readLogs(ctx: Ctx, p: { buildId: number; kind: 'build' | 'tests' | 'odoo'; tail?: number }): Promise<{ lines: string[]; path: string | null }> {
   const b = buildRow(ctx, p.buildId);
-  if (!b) throw new BmError('NO_BUILD', 'Сборка не найдена');
+  if (!b) throw new BmError('NO_BUILD', t('common.noBuild'));
   if (p.kind !== 'odoo') {
     const file = b.logPath && (p.kind === 'tests' ? testsLogPath(b.logPath) : b.logPath);
     return { lines: file ? tailLines(file, p.tail ?? 500).lines : [], path: file };

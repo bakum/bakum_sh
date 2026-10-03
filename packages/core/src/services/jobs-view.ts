@@ -4,6 +4,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { BmError, type JobView } from '@bm/shared';
 import type { Ctx } from '../context';
 import { jobs, type JobRow } from '../db/schema';
+import { t } from '../i18n';
 
 export function jobView(r: JobRow): JobView {
   return {
@@ -24,7 +25,7 @@ export function jobView(r: JobRow): JobView {
 /** Tail of a job log (logs/jobs/<id>-<type>.log) without the timestamps. */
 export function jobLog(ctx: Ctx, jobId: number, tail: number): { lines: string[] } {
   const r = ctx.db.select().from(jobs).where(eq(jobs.id, jobId)).get();
-  if (!r) throw new BmError('NO_JOB', 'Задача не найдена');
+  if (!r) throw new BmError('NO_JOB', t('queue.noJob'));
   const file = path.join(ctx.logsDir, 'jobs', `${r.id}-${r.type}.log`);
   if (!fs.existsSync(file)) return { lines: [] };
   const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);

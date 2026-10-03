@@ -1,5 +1,6 @@
 import { Badge, Code, Group, Text, Tooltip } from '@mantine/core';
 import type { OdooEdition } from '@bm/shared';
+import { t } from '../i18n';
 
 const LABEL = { enterprise: 'Enterprise', community: 'Community' } as const;
 const SHORT = { enterprise: 'EE', community: 'CE' } as const;
@@ -22,7 +23,7 @@ export function EditionLine({ edition }: { edition: OdooEdition | null | undefin
   return (
     <Group gap="xs" wrap="nowrap" align="flex-start">
       <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
-        Выпуск Odoo:
+        {t('edition.title')}
       </Text>
       <EditionBadge edition={edition} />
       <Text size="sm" c="dimmed">
@@ -33,7 +34,7 @@ export function EditionLine({ edition }: { edition: OdooEdition | null | undefin
             — <Code>{edition.source}</Code>
           </>
         )}
-        . Определяется по монтированиям (папка с web_enterprise) и полю runtime.enterprise.
+        {t('edition.how')}
       </Text>
     </Group>
   );

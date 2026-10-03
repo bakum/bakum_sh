@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import { execa } from 'execa';
-import { BmError, type AppStateView, type SystemStatus } from '@bm/shared';
+import { BmError, type AppStateView, type Lang, type SystemStatus } from '@bm/shared';
 import type { Ctx } from '../context';
 import { runtimeState } from '../state';
 import { listeningPorts } from '../util/ports';
@@ -14,6 +14,7 @@ import { audit } from './audit';
 import { reconcile } from '../reconcile';
 import * as git from '../git';
 import { isMac } from '../util/platform';
+import { t } from '../i18n';
 
 let lastReconcile = 0;
 
@@ -29,14 +30,16 @@ export function appState(ctx: Ctx): AppStateView {
 }
 
 /** First-run wizard: writes app.yaml; the Traefik port is 80 if free, otherwise 8080 (spec 3). */
-export async function completeFirstRun(ctx: Ctx, proxyPort?: number): Promise<{ ok: true }> {
+export async function completeFirstRun(ctx: Ctx, proxyPort?: number, language?: Lang): Promise<{ ok: true }> {
   let port = proxyPort;
   if (!port) {
     const busy = await listeningPorts();
     port = busy.has(80) ? 8080 : 80;
   }
   const next = ctx.store.updateApp((doc) => {
-    doc.commentBefore = ' Настройки уровня приложения Odoo Branch Manager (раздел 9 ТЗ). Правка файла подхватывается автоматически.';
+    doc.commentBefore = t('system.appYamlComment');
+    // The language chosen in the wizard (D69); without it app.yaml keeps the default.
+    if (language) doc.set('language', language);
     doc.set('proxyPort', port);
   });
   ctx.toMain({ kind: 'appConfig', config: next });
@@ -61,7 +64,7 @@ async function ghStatus(exe: string): Promise<{ ok: boolean; text: string }> {
   ghCache =
     r.exitCode === 0
       ? { ok: true, text: String(r.stdout).split('\n')[0]! }
-      : { ok: false, text: 'gh не найден: Merge будет открывать страницу compare на GitHub' };
+      : { ok: false, text: t('system.ghMissing') };
   return ghCache;
 }
 
@@ -70,7 +73,7 @@ let gitCache: { ok: boolean; text: string } | null = null;
 async function gitStatus(): Promise<{ ok: boolean; text: string }> {
   if (gitCache) return gitCache;
   const v = await git.version();
-  const s = v ? { ok: true, text: v } : { ok: false, text: git.GIT_MISSING_TEXT };
+  const s = v ? { ok: true, text: v } : { ok: false, text: git.gitMissingText() };
   if (v) gitCache = s;
   return s;
 }
@@ -112,12 +115,12 @@ export async function systemStatus(ctx: Ctx, refresh: boolean): Promise<SystemSt
     docker: {
       ok: runtimeState.docker.ok,
       version: runtimeState.docker.version,
-      text: runtimeState.docker.ok ? `Docker Engine ${runtimeState.docker.version}` : `Docker недоступен: ${runtimeState.docker.error ?? 'нет ответа'}`,
+      text: runtimeState.docker.ok ? `Docker Engine ${runtimeState.docker.version}` : t('system.dockerDown', { error: runtimeState.docker.error ?? t('system.noAnswer') }),
     },
     traefik: {
       ok: runtimeState.traefik.ok,
       port: runtimeState.traefik.port,
-      text: runtimeState.traefik.ok ? `работает, порт ${runtimeState.traefik.port}` : (runtimeState.traefik.error ?? 'не запущен'),
+      text: runtimeState.traefik.ok ? t('system.traefikRunning', { port: runtimeState.traefik.port }) : (runtimeState.traefik.error ?? t('system.traefikStopped')),
     },
     git: await gitStatus(),
     postgres: Object.fromEntries(runtimeState.postgres),
@@ -147,7 +150,7 @@ export function dockerDesktopExe(ctx: Ctx): string {
 
 export async function startDockerDesktop(ctx: Ctx): Promise<{ ok: true }> {
   const exe = dockerDesktopExe(ctx);
-  if (!fs.existsSync(exe)) throw new BmError('NO_DOCKER_DESKTOP', `Docker Desktop не найден (${exe}). Укажите путь в app.yaml → desktop.dockerDesktopExe.`);
+  if (!fs.existsSync(exe)) throw new BmError('NO_DOCKER_DESKTOP', t('system.noDockerDesktop', { exe }));
   // macOS: an .app bundle is started through LaunchServices (D67).
   const sub = isMac ? execa('open', [exe], { detached: true, stdio: 'ignore', reject: false }) : execa(exe, [], { detached: true, stdio: 'ignore', windowsHide: false, reject: false });
   sub.unref();

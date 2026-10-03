@@ -7,6 +7,7 @@ import { runtimeState } from '../state';
 import { listeningPorts } from '../util/ports';
 import { bus } from '../events';
 import { log } from '../util/logger';
+import { t } from '../i18n';
 
 export const TRAEFIK_PROJECT = 'bm-traefik';
 const CONTAINER = 'bm-traefik';
@@ -67,7 +68,7 @@ export function traefikCompose(image: string, port: number, networks: string[]):
 export async function writeTraefikDynamic(name: string, yaml: string): Promise<void> {
   const script = `cat > "${DYNAMIC_DIR}/.$1.tmp" && mv "${DYNAMIC_DIR}/.$1.tmp" "${DYNAMIC_DIR}/$1"`;
   const r = await dockerCli(['exec', '-i', CONTAINER, 'sh', '-c', script, 'sh', name], { input: yaml, timeoutMs: 30_000 });
-  if (r.exitCode !== 0) throw new Error(r.stderr.trim() || r.stdout.trim() || `docker exec ${CONTAINER}: код ${r.exitCode}`);
+  if (r.exitCode !== 0) throw new Error(r.stderr.trim() || r.stdout.trim() || t('traefik.execFailed', { container: CONTAINER, code: r.exitCode }));
 }
 
 /** Removes dynamic config files: one by name, or those matching `pattern` older than `minutes`. Errors are ignored. */
@@ -114,13 +115,13 @@ async function doEnsure(ctx: Ctx): Promise<void> {
       if (!existing?.State.Running || bound !== String(port)) {
         const busy = await listeningPorts();
         if (busy.has(port) && bound !== String(port)) {
-          throw new Error(`порт ${port} занят другим процессом. Укажите свободный порт в Settings → Приложение → Порт Traefik (например 8080).`);
+          throw new Error(t('traefik.portBusy', { port }));
         }
       }
       if (!(await imageExists(image))) {
         log().info({ image }, 'pulling traefik image');
         const r = await dockerCli(['pull', image], { timeoutMs: 600_000 });
-        if (r.exitCode !== 0) throw new Error(`не удалось скачать образ ${image}: ${r.stderr.trim()}`);
+        if (r.exitCode !== 0) throw new Error(t('traefik.pullFailed', { image, error: r.stderr.trim() }));
       }
       const dir = path.join(ctx.dataDir, 'traefik');
       fs.mkdirSync(dir, { recursive: true });
@@ -132,7 +133,7 @@ async function doEnsure(ctx: Ctx): Promise<void> {
     ctx.proxyPort = port;
     runtimeState.traefik = { ok: true, port, error: null };
   } catch (err) {
-    runtimeState.traefik = { ok: false, port: null, error: `Traefik не запущен: ${(err as Error).message}` };
+    runtimeState.traefik = { ok: false, port: null, error: t('traefik.notRunning', { error: (err as Error).message }) };
     log().warn({ err }, 'traefik ensure failed');
   }
   bus.emit({ type: 'system.changed' });

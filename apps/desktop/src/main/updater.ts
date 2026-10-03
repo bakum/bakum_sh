@@ -5,6 +5,7 @@ import path from 'node:path';
 import { net } from 'electron';
 import type { Logger } from 'pino';
 import { compareSemver, type UpdateState } from '@bm/shared';
+import { t } from './i18n';
 
 export type { UpdateState };
 
@@ -100,7 +101,7 @@ export class Updater {
         headers: { Accept: 'application/vnd.github+json', 'User-Agent': `Odoo-Branch-Manager/${this.o.current}` },
         signal: AbortSignal.timeout(15_000),
       });
-      if (!res.ok) throw new Error(`GitHub ответил ${res.status} ${res.statusText}`);
+      if (!res.ok) throw new Error(t('update.githubStatus', { status: `${res.status} ${res.statusText}` }));
       const list = (await res.json()) as Release[];
       const candidates = list.filter((r) => !r.draft && (includePrerelease || !r.prerelease));
       candidates.sort((a, b) => compareSemver(b.tag_name, a.tag_name));
@@ -130,8 +131,8 @@ export class Updater {
       this.o.log.info({ manual, latest, asset: setup?.name ?? null }, 'update available');
       return this.state;
     } catch (err) {
-      const msg = (err as Error).name === 'TimeoutError' ? 'нет ответа от GitHub за 15 с' : (err as Error).message;
-      this.set({ status: 'error', error: `Не удалось проверить обновления: ${msg}. Проверьте подключение к интернету.` });
+      const msg = (err as Error).name === 'TimeoutError' ? t('update.timeout') : (err as Error).message;
+      this.set({ status: 'error', error: t('update.checkError', { error: msg }) });
       this.o.log.warn({ err, manual }, 'update check failed');
       return this.state;
     }
@@ -142,7 +143,7 @@ export class Updater {
     if (this.file && this.state.status === 'ready') return this.file;
     const rel = this.release;
     const asset = rel?.assets.find((a) => isInstallerAsset(a.name));
-    if (!rel || !asset) throw new Error(process.platform === 'darwin' ? 'В релизе нет образа для macOS (…-mac-arm64.dmg)' : 'В релизе нет установщика (…Setup….exe)');
+    if (!rel || !asset) throw new Error(t(process.platform === 'darwin' ? 'update.noDmg' : 'update.noExe'));
     const dir = path.join(os.tmpdir(), 'odoo-branch-manager-update');
     fs.mkdirSync(dir, { recursive: true });
     const target = path.join(dir, path.basename(asset.name));
@@ -150,7 +151,7 @@ export class Updater {
     this.set({ status: 'downloading', progress: 0, error: null });
     try {
       const res = await net.fetch(asset.browser_download_url, { headers: { 'User-Agent': `Odoo-Branch-Manager/${this.o.current}` } });
-      if (!res.ok || !res.body) throw new Error(`загрузка: ${res.status} ${res.statusText}`);
+      if (!res.ok || !res.body) throw new Error(t('update.downloadStatus', { status: `${res.status} ${res.statusText}` }));
       const hash = crypto.createHash('sha256');
       const out = fs.createWriteStream(part);
       let done = 0;
@@ -169,10 +170,10 @@ export class Updater {
         }
       }
       await new Promise<void>((resolve, reject) => out.end((e?: Error | null) => (e ? reject(e) : resolve())));
-      if (asset.size && done !== asset.size) throw new Error(`размер ${done} байт вместо ${asset.size}`);
+      if (asset.size && done !== asset.size) throw new Error(t('update.sizeMismatch', { done, size: asset.size }));
       const digest = asset.digest?.startsWith('sha256:') ? asset.digest.slice(7) : null;
       const actual = hash.digest('hex');
-      if (digest && digest.toLowerCase() !== actual) throw new Error('контрольная сумма SHA-256 не совпадает с указанной в релизе');
+      if (digest && digest.toLowerCase() !== actual) throw new Error(t('update.shaMismatch'));
       fs.renameSync(part, target);
       this.file = target;
       this.set({ status: 'ready', progress: 1 });
@@ -180,7 +181,7 @@ export class Updater {
       return target;
     } catch (err) {
       fs.rmSync(part, { force: true });
-      this.set({ status: 'error', progress: null, error: `Не удалось скачать обновление: ${(err as Error).message}` });
+      this.set({ status: 'error', progress: null, error: t('update.downloadError', { error: (err as Error).message }) });
       throw err;
     }
   }

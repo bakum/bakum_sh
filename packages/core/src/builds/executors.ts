@@ -29,18 +29,19 @@ import { copyTree } from '../util/fs-tree';
 import * as pg from '../pg';
 import { docker } from '../docker/client';
 import { sleep } from '../util/time';
+import { t } from '../i18n';
 
 function mustBuild(ctx: Ctx, id: number | null): BuildRow {
   const b = id ? ctx.db.select().from(builds).where(eq(builds.id, id)).get() : undefined;
-  if (!b) throw new BmError('NO_BUILD', 'Сборка не найдена');
+  if (!b) throw new BmError('NO_BUILD', t('common.noBuild'));
   return b;
 }
 
 export function liveCompose(ctx: Ctx, b: BuildRow): string {
   const br = branchRow(ctx, b.branchId);
-  if (!br) throw new BmError('NO_BRANCH', 'Ветка сборки удалена');
+  if (!br) throw new BmError('NO_BRANCH', t('exec.branchDeleted'));
   const file = path.join(branchDir(ctx, b.projectId, br.slug), 'compose.yml');
-  if (!fs.existsSync(file)) throw new BmError('NO_COMPOSE', `Нет compose-файла живой сборки (${file}). Нажмите Rebuild.`);
+  if (!fs.existsSync(file)) throw new BmError('NO_COMPOSE', t('exec.noCompose', { file }));
   return file;
 }
 
@@ -58,12 +59,12 @@ async function waitHealthy(b: { projectId: string; id: number }, timeoutSec: num
     if (c) {
       const info = await docker.getContainer(c.id).inspect();
       if (info.State.Health?.Status === 'healthy') return;
-      if (info.State.Status === 'exited') throw new BmError('CONTAINER_EXITED', `Контейнер остановился (код ${info.State.ExitCode}). См. odoo.log.`);
+      if (info.State.Status === 'exited') throw new BmError('CONTAINER_EXITED', t('exec.exited', { code: info.State.ExitCode }));
     }
-    if (jc.signal.aborted) throw new BmError('CANCELLED', 'Отменено');
+    if (jc.signal.aborted) throw new BmError('CANCELLED', t('exec.cancelled'));
     await sleep(3000);
   }
-  throw new BmError('HEALTHCHECK', `Сборка не ответила за ${timeoutSec} с`);
+  throw new BmError('HEALTHCHECK', t('exec.healthTimeout', { s: timeoutSec }));
 }
 
 const done = (ctx: Ctx, b: BuildRow, action: string): void => {
@@ -94,11 +95,11 @@ async function assertBuildCode(ctx: Ctx, b: BuildRow, log: (l: string) => void):
 export async function writeLiveCompose(ctx: Ctx, b: BuildRow, log: (l: string) => void): Promise<string> {
   await syncLiveWorktree(ctx, b, log);
   const br = branchRow(ctx, b.branchId);
-  if (!br) throw new BmError('NO_BRANCH', 'Ветка сборки удалена');
+  if (!br) throw new BmError('NO_BRANCH', t('exec.branchDeleted'));
   const cfg = ctx.store.require(b.projectId);
   const scope = resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope;
   const code = codeSource(cfg, br, scope).dir;
-  if (!code) throw new BmError('NO_WORKTREE', 'Worktree ветки не найден — нужен Rebuild');
+  if (!code) throw new BmError('NO_WORKTREE', t('exec.noWorktree'));
   const file = path.join(branchDir(ctx, cfg.id, br.slug), 'compose.yml');
   const vars = codeVars(cfg, code);
   const text = generateCompose({
@@ -127,7 +128,7 @@ async function applyConfig(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void>
   const br = branchRow(ctx, b.branchId);
   if (br) await ensureImage(cfg, resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope.image, jc.log, jc.signal);
   const hash = await writeLiveCompose(ctx, b, jc.log);
-  jc.log('docker compose up -d (пересоздание контейнера, БД не трогается)');
+  jc.log(t('exec.recreate'));
   await compose(ctx, b, ['up', '-d', '--remove-orphans'], jc);
   await waitHealthy(b, cfg.runtime.healthcheck.timeoutSec, jc);
   ctx.db.update(builds).set({ configHash: hash, status: 'running' }).where(eq(builds.id, b.id)).run();
@@ -150,7 +151,7 @@ async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> 
     if (p.install?.length) cmd.push('-i', p.install.join(','));
     if (p.update?.length) cmd.push('-u', p.update.join(','));
     const r = await runOdooOneOff({ composeFile: file, project: b.composeProject, cmd, log: jc.log, signal: jc.signal });
-    assertOdooOk(r, 'Модули');
+    assertOdooOk(r, t('exec.modules'));
   } finally {
     await compose(ctx, b, ['start'], jc);
   }
@@ -167,7 +168,7 @@ async function testsJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   await assertBuildCode(ctx, b, jc.log);
   const cfg = ctx.store.require(b.projectId);
   const br = branchRow(ctx, b.branchId);
-  if (!br) throw new BmError('NO_BRANCH', 'Ветка сборки удалена');
+  if (!br) throw new BmError('NO_BRANCH', t('exec.branchDeleted'));
   const scope = resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope;
   const mods = (job.params as { modules?: string[] }).modules ?? [];
   const file = liveCompose(ctx, b);
@@ -175,7 +176,7 @@ async function testsJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const installed = await pg.installedModules(cfg.postgres, b.dbName);
   const missing = mods.filter((m) => !installed.has(m));
   if (missing.length) {
-    throw new BmError('NOT_INSTALLED', `Модули не установлены в базе сборки: ${missing.join(', ')}. Сначала установите их (-i): «Модули вручную» или bm modules.`);
+    throw new BmError('NOT_INSTALLED', t('exec.notInstalled', { modules: missing.join(', ') }));
   }
   const testDb = assertSqlIdent(`${b.dbName}_test`);
   const fsDir = path.join(cfg.runtime.filestore.hostDir, testDb);
@@ -199,7 +200,7 @@ async function testsJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   await cleanup();
   try {
     if (scope.cloneMethod === 'dump') {
-      tl(`pg_dump ${b.dbName} → ${testDb} (cloneMethod: dump, сборка не останавливается)`);
+      tl(t('exec.testDump', { db: b.dbName, testDb }));
       await pg.createEmpty(cfg.postgres, testDb);
       await copyDatabaseByDump({ cfg, buildId: b.id, src: b.dbName, dst: testDb, log: jc.log, signal: jc.signal });
     } else {
@@ -215,22 +216,24 @@ async function testsJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
     }
     const srcFs = path.join(cfg.runtime.filestore.hostDir, b.dbName);
     if (fs.existsSync(srcFs)) await copyTree(srcFs, fsDir, scope.filestoreCopy, jc.log);
-    tl(`[tests] модули: ${mods.join(', ')}`);
+    tl(t('exec.testModules', { modules: mods.join(', ') }));
     const code = codeSource(cfg, br, scope).dir;
     const cmd = ['odoo', ...serverBaseArgs(cfg, codeVars(cfg, code)), '-d', testDb, '--stop-after-init', '--no-http', '-u', mods.join(','), ...testArgs(scope.tests, mods)];
     const res = await runOdooOneOff({ composeFile: file, project: b.composeProject, cmd, log: tl, signal: jc.signal });
-    assertOdooOk(res, `Тесты на копии ${testDb}`);
-    if (!res.summary.tests) tl('[tests] итоговой строки тестов нет: ни один тест не совпал с --test-tags');
-    const t = res.summary.tests ?? { passed: 0, failed: 0, errors: 0, warnings: 0, failures: [] };
-    const summary = `пройдено ${t.passed}, упало ${t.failed}, ошибок ${t.errors}`;
+    assertOdooOk(res, t('exec.testsOnCopy', { db: testDb }));
+    if (!res.summary.tests) tl(t('exec.noTestLine'));
+    const tr = res.summary.tests ?? { passed: 0, failed: 0, errors: 0, warnings: 0, failures: [] };
+    const summary = t('exec.testSummary', { passed: tr.passed, failed: tr.failed, errors: tr.errors });
     tl(`[tests] ${summary}`);
-    ctx.db.update(builds).set({ tests: t }).where(eq(builds.id, b.id)).run();
-    audit(ctx, { projectId: b.projectId, action: 'build.tests', target: `${b.composeProject}#${b.number}`, params: { modules: mods, ...t, failures: t.failures.length } });
+    ctx.db.update(builds).set({ tests: tr }).where(eq(builds.id, b.id)).run();
+    audit(ctx, { projectId: b.projectId, action: 'build.tests', target: `${b.composeProject}#${b.number}`, params: { modules: mods, ...tr, failures: tr.failures.length } });
     bus.emit({ type: 'build.changed', projectId: b.projectId, branchId: b.branchId, buildId: b.id });
-    if (testsFailed(t)) throw new BmError('TESTS_FAILED', `Тесты не прошли: ${summary}.${t.failures.length ? `\n${t.failures.slice(0, 10).join('\n')}` : ''}\nПодробности — tests.log (вкладка Logs).`);
+    if (testsFailed(tr)) {
+      throw new BmError('TESTS_FAILED', t('exec.testsFailed', { summary, failures: tr.failures.length ? `\n${tr.failures.slice(0, 10).join('\n')}` : '' }));
+    }
   } finally {
     out?.end();
-    await cleanup().catch((e) => jc.log(`[warn] не удалось удалить ${testDb}: ${(e as Error).message}`));
+    await cleanup().catch((e) => jc.log(t('exec.dropTestFailed', { db: testDb, error: (e as Error).message })));
   }
 }
 

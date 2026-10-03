@@ -9,11 +9,11 @@ import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
 import { resolveBranchScope } from '../config/effective';
 import { samePath, toPosix } from '../util/paths';
+import { t } from '../i18n';
 
 /** A branch of the project is gone from the mirror: fetch prunes branches deleted on the remote (D49). */
 export const noRemoteBranch = (name: string, remote: string): string =>
-  `Ветки «${name}» нет в ${remote}: её удалили или переименовали на GitHub. Если ветка только что создана, нажмите ` +
-  '«Обновить» (fetch); иначе удалите её в приложении.';
+  t('wt.noRemoteBranch', { name, remote });
 
 export const worktreePathFor =(cfg: ProjectConfig, slug: string): string => toPosix(path.join(cfg.repo.worktreesDir, cfg.id, slug));
 
@@ -23,7 +23,7 @@ export const worktreePathFor =(cfg: ProjectConfig, slug: string): string => toPo
  */
 export function repoDir(cfg: ProjectConfig): string {
   const dir = cfg.repo.mirrorDir ?? cfg.repo.path;
-  if (!dir) throw new BmError('CONFIG_INVALID', `У проекта «${cfg.id}» не задан repo.mirrorDir`);
+  if (!dir) throw new BmError('CONFIG_INVALID', t('wt.noMirrorDir', { id: cfg.id }));
   return dir;
 }
 
@@ -44,10 +44,10 @@ export function codeSource(cfg: ProjectConfig, b: Pick<BranchRow, 'worktreePath'
 
 /** The user's folder must be the root of a git clone: it is mounted where the repository root is expected. */
 export async function assertFolderUsable(folder: string): Promise<void> {
-  if (!fs.existsSync(folder)) throw new BmError('NO_DIR', `Папка «${folder}» не найдена.`);
+  if (!fs.existsSync(folder)) throw new BmError('NO_DIR', t('wt.noDir', { dir: folder }));
   const top = await git.topLevel(folder);
-  if (!top) throw new BmError('NOT_A_REPO', `Папка «${folder}» не является git-репозиторием.`);
-  if (!samePath(top, folder)) throw new BmError('NOT_REPO_ROOT', `Укажите корень репозитория: ${top}`);
+  if (!top) throw new BmError('NOT_A_REPO', t('wt.notRepo', { dir: folder }));
+  if (!samePath(top, folder)) throw new BmError('NOT_REPO_ROOT', t('wt.notRoot', { top }));
 }
 
 /** The only job that runs while another branch is open in the folder (D59): it neither reads the code nor loses data. */
@@ -63,9 +63,7 @@ export async function folderBranchMismatch(folder: string, branchName: string): 
 }
 
 export const folderWrongBranchText = (folder: string, open: string, branchName: string): string =>
-  `В папке ${folder} открыта ветка ${open}, а сборка — ветки ${branchName}. Сборка заблокирована, с ней ничего не ` +
-  `происходит. Откройте в папке ${branchName} (git checkout ${branchName}) или выберите источник кода «С GitHub» ` +
-  '(вкладка Editor). Работает только Stop.';
+  t('wt.wrongBranch', { folder, open, branch: branchName });
 
 /**
  * Why a build from the user's folder is blocked (D59), null — it is not: another branch is open in the folder. A folder
@@ -137,19 +135,17 @@ export async function syncWorktreeTo(ctx: Ctx, cfg: ProjectConfig, b: BranchRow,
   if (!(await git.revParse(repoDir(cfg), sha))) {
     throw new BmError(
       'NO_BUILD_COMMIT',
-      `Коммита сборки ${short} нет в копии репозитория (${cfg.repo.remote}): сборка шла из вашей папки, а коммит не ` +
-        'отправлен. Отправьте его (git push) и нажмите «Обновить» или нажмите Rebuild — сборка возьмёт код ветки с GitHub.',
+      t('wt.noBuildCommit', { sha: short, remote: cfg.repo.remote }),
     );
   }
   const dirty = await git.worktreeChanges(wt);
   if (dirty.length) {
     throw new BmError(
       'WORKTREE_DIRTY',
-      `В worktree ${wt} есть незакоммиченные изменения, а он должен стоять на коммите сборки ${short}. Ничего не ` +
-        `затирается: перенесите или отмените изменения (правьте код в своей папке, см. Editor → «Код из моей папки»).\n${dirty.join('\n')}`,
+      t('wt.dirty', { wt, sha: short, files: dirty.join('\n') }),
     );
   }
-  log(`worktree на ${head ? head.slice(0, 7) : '?'}, а сборка — на ${short}: git checkout --detach ${short}`);
+  log(t('wt.checkout', { head: head ? head.slice(0, 7) : '?', sha: short }));
   await git.checkoutDetach(wt, sha);
   return wt;
 }

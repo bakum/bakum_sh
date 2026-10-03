@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Code, Group, List, Modal, Stack, Text, TextInput } from '@mantine/core';
 import { useBm, useBmMutation } from '../../lib/query';
+import { t, tx } from '../../i18n';
 
 /** Project removal (spec 8.1, full cleanup D34): lists every resource, confirmation by typing the id; the user's repository stays. */
 export function DeleteProjectButton({ projectId }: { projectId: string }) {
@@ -9,7 +10,7 @@ export function DeleteProjectButton({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState('');
   const pv = useBm('projects.deletePreview', { projectId }, { enabled: open });
-  const del = useBmMutation('projects.delete', { success: 'Проект удаляется' });
+  const del = useBmMutation('projects.delete', { success: t('delProject.deleting') });
   const section = (title: string, items: string[] | undefined) => (
     <Stack gap={2}>
       <Text size="sm" fw={600}>
@@ -29,44 +30,46 @@ export function DeleteProjectButton({ projectId }: { projectId: string }) {
   return (
     <>
       <Button color="red" variant="light" onClick={() => setOpen(true)}>
-        Удалить проект…
+        {t('delProject.button')}
       </Button>
-      <Modal opened={open} onClose={() => setOpen(false)} title={`Удалить проект ${projectId}`} size="lg">
+      <Modal opened={open} onClose={() => setOpen(false)} title={t('delProject.title', { id: projectId })} size="lg">
         <Stack>
           <Alert color="red">
-            Проект удаляется полностью: сборки (контейнеры, БД, filestore), папки веток, копия репозитория приложения, compose-файлы, логи, файл
-            настроек и записи в реестре. Ваш репозиторий, его ветки и ветки на GitHub не затрагиваются.
+            {t('delProject.what')}
           </Alert>
-          {section('Сборки', pv.data?.builds)}
-          {section('Базы данных', pv.data?.databases)}
+          {section(t('delProject.builds'), pv.data?.builds)}
+          {section(t('delProject.databases'), pv.data?.databases)}
           {section('filestore', pv.data?.filestores)}
-          {section('Папки веток (worktree)', pv.data?.worktrees)}
-          {section('Папки приложения (копия репозитория, compose-файлы, логи сборок)', pv.data?.folders)}
+          {section(t('delProject.worktrees'), pv.data?.worktrees)}
+          {section(t('delProject.folders'), pv.data?.folders)}
           {pv.data?.postgres && (
             <Text size="sm">
-              <b>Postgres проекта:</b> {pv.data.postgres} — удаляются вместе со всеми базами.
+              {tx('delProject.postgres', { pg: pv.data.postgres }, { b: (x) => <b>{x}</b> })}
             </Text>
           )}
           {pv.data?.image && (
             <Text size="sm">
-              <b>Образ Odoo, собранный приложением:</b> {pv.data.image}
+              {tx('delProject.image', { image: pv.data.image }, { b: (x) => <b>{x}</b> })}
             </Text>
           )}
           {pv.data && (
             <Text size="sm">
-              <b>Файл настроек:</b> <Code>{pv.data.settingsFile}</Code> — удаляется без копии. <b>Реестр:</b> задач {pv.data.registry.jobs} (с логами),
-              записей аудита {pv.data.registry.audit}, исключений автодобавления {pv.data.registry.kv}. В Audit Logs останется одна запись об удалении.
+              {tx(
+                'delProject.settings',
+                { file: pv.data.settingsFile, jobs: pv.data.registry.jobs, audit: pv.data.registry.audit, kv: pv.data.registry.kv },
+                { b: (x) => <b>{x}</b>, code: (x) => <Code>{x}</Code> },
+              )}
             </Text>
           )}
           {pv.data?.legacy && (
             <Text size="sm" c="dimmed">
-              Проект старой схемы: папки веток удаляются из вашего репозитория командой git worktree remove, больше в нём ничего не меняется.
+              {t('delProject.legacy')}
             </Text>
           )}
-          <TextInput label={`Введите id проекта: ${projectId}`} value={confirm} onChange={(e) => setConfirm(e.currentTarget.value)} />
+          <TextInput label={t('delProject.typeId', { id: projectId })} value={confirm} onChange={(e) => setConfirm(e.currentTarget.value)} />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setOpen(false)}>
-              Отмена
+              {t('common.cancel')}
             </Button>
             <Button
               color="red"
@@ -74,7 +77,7 @@ export function DeleteProjectButton({ projectId }: { projectId: string }) {
               loading={del.isPending}
               onClick={() => del.mutate({ projectId, confirm }, { onSuccess: () => { setOpen(false); nav('/'); } })}
             >
-              Удалить проект
+              {t('delProject.confirm')}
             </Button>
           </Group>
         </Stack>

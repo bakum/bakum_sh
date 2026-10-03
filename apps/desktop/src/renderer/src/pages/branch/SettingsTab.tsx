@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ActionIcon, Badge, Button, Card, Group, NumberInput, Select, Stack, Switch, Table, Text, TextInput, Title, Tooltip } from '@mantine/core';
 import { IconArrowBackUp, IconPencil } from '@tabler/icons-react';
-import { LEVEL_LABELS, type BranchScope, type BranchView, type EffectiveField, type Level, type Stage } from '@bm/shared';
+import { LEVELS, levelLabel, type BranchScope, type BranchView, type EffectiveField, type Level, type Stage } from '@bm/shared';
 import { useBm, useBmMutation } from '../../lib/query';
 import { YamlEditor } from '../../components/YamlEditor';
+import { t } from '../../i18n';
 
 const LEVEL_COLOR: Record<Level, string> = { app: 'gray', project: 'blue', stage: 'violet', rule: 'cyan', branch: 'orange' };
 
@@ -12,36 +13,31 @@ interface Editable {
   label: string;
   kind: 'select' | 'text' | 'number' | 'switch' | 'env';
   options?: string[];
-  /** Not acted upon yet: shown read-only with this badge («этап 2», «отложено»). */
+  /** Not acted upon yet: shown read-only with this badge (stage 2, postponed). */
   stage?: string;
   /** Shown under the label when the name alone is ambiguous. */
   hint?: string;
 }
 
-const FIELDS: Editable[] = [
-  { path: 'onNewCommit', label: 'Новый коммит', kind: 'select', options: ['none', 'update', 'new'] },
-  { path: 'database', label: 'База данных', kind: 'text' },
-  { path: 'install', label: 'Установка (fresh)', kind: 'select', options: ['my', 'roots', 'full'] },
-  { path: 'withDemo', label: 'Демо-данные (fresh)', kind: 'switch' },
-  { path: 'updateModules', label: 'Обновлять модули', kind: 'select', options: ['changed', 'version-bumped', 'all'] },
-  { path: 'onForcePush', label: 'Force-push', kind: 'select', options: ['pause', 'new'] },
-  { path: 'cloneMethod', label: 'Копирование БД', kind: 'select', options: ['template', 'dump'] },
-  { path: 'filestoreCopy', label: 'Копирование filestore', kind: 'select', options: ['hardlink', 'copy'] },
-  { path: 'image', label: 'Образ Odoo', kind: 'text' },
-  { path: 'env', label: 'Переменные окружения', kind: 'env' },
-  { path: 'protected', label: 'Защита от удаления', kind: 'switch' },
-  { path: 'buildOnAdd', label: 'Собирать при добавлении', kind: 'switch' },
-  {
-    path: 'deleteWithRemote',
-    label: 'Удалять, если ветку удалили на GitHub',
-    kind: 'switch',
-    hint: 'после fetch ветка удаляется и в приложении со сборками и БД; сама ветка на GitHub приложением не удаляется',
-  },
-  { path: 'idleStopHours', label: 'Остановка без активности, ч', kind: 'number' },
-  { path: 'dropAfterDays', label: 'Срок хранения (напоминание), дней', kind: 'number' },
-  { path: 'tests.mode', label: 'Тесты', kind: 'select', options: ['none', 'changed', 'my'] },
-  { path: 'tests.failBuild', label: 'Падение тестов роняет сборку', kind: 'switch' },
-  { path: 'mails.enabled', label: 'Mailpit', kind: 'switch', stage: 'отложено' },
+const fieldDefs = (): Editable[] => [
+  { path: 'onNewCommit', label: t('field.onNewCommit'), kind: 'select', options: ['none', 'update', 'new'] },
+  { path: 'database', label: t('field.database'), kind: 'text' },
+  { path: 'install', label: t('field.install'), kind: 'select', options: ['my', 'roots', 'full'] },
+  { path: 'withDemo', label: t('field.withDemo'), kind: 'switch' },
+  { path: 'updateModules', label: t('field.updateModules'), kind: 'select', options: ['changed', 'version-bumped', 'all'] },
+  { path: 'onForcePush', label: t('field.onForcePush'), kind: 'select', options: ['pause', 'new'] },
+  { path: 'cloneMethod', label: t('field.cloneMethod'), kind: 'select', options: ['template', 'dump'] },
+  { path: 'filestoreCopy', label: t('field.filestoreCopy'), kind: 'select', options: ['hardlink', 'copy'] },
+  { path: 'image', label: t('field.image'), kind: 'text' },
+  { path: 'env', label: t('field.env'), kind: 'env' },
+  { path: 'protected', label: t('field.protected'), kind: 'switch' },
+  { path: 'buildOnAdd', label: t('field.buildOnAdd'), kind: 'switch' },
+  { path: 'deleteWithRemote', label: t('field.deleteWithRemote'), kind: 'switch', hint: t('field.deleteWithRemoteHint') },
+  { path: 'idleStopHours', label: t('field.idleStopHours'), kind: 'number' },
+  { path: 'dropAfterDays', label: t('field.dropAfterDays'), kind: 'number' },
+  { path: 'tests.mode', label: t('field.tests'), kind: 'select', options: ['none', 'changed', 'my'] },
+  { path: 'tests.failBuild', label: t('field.failBuild'), kind: 'switch' },
+  { path: 'mails.enabled', label: t('field.mailpit'), kind: 'switch', stage: t('form.postponed') },
 ];
 
 function show(v: unknown): string {
@@ -79,10 +75,10 @@ function unsetPath(obj: Record<string, unknown>, path: string): Record<string, u
 export function SettingsTab({ branch }: { branch: BranchView }) {
   const eff = useBm('config.effective', { branchId: branch.id });
   const ov = useBm('config.get', { level: 'branch', branchId: branch.id });
-  const save = useBmMutation('branches.setOverrides', { success: 'Настройки ветки сохранены' });
-  const setStage = useBmMutation('branches.setStage', { success: 'Стадия изменена' });
-  const reset = useBmMutation('branches.resetToRule', { success: 'Стадия сброшена к правилу' });
-  const putYaml = useBmMutation('config.put', { success: 'Переопределения сохранены' });
+  const save = useBmMutation('branches.setOverrides', { success: t('bs.saved') });
+  const setStage = useBmMutation('branches.setStage', { success: t('bs.stageChanged') });
+  const reset = useBmMutation('branches.resetToRule', { success: t('bs.stageReset') });
+  const putYaml = useBmMutation('config.put', { success: t('bs.overridesSaved') });
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<unknown>(null);
   const [yaml, setYaml] = useState('');
@@ -104,7 +100,7 @@ export function SettingsTab({ branch }: { branch: BranchView }) {
       <Card withBorder>
         <Group justify="space-between">
           <Group>
-            <Text fw={600}>Стадия</Text>
+            <Text fw={600}>{t('bs.stage')}</Text>
             <Select
               w={180}
               data={[
@@ -116,11 +112,11 @@ export function SettingsTab({ branch }: { branch: BranchView }) {
               onChange={(v) => v && v !== branch.stage && setStage.mutate({ branchId: branch.id, stage: v as Stage })}
             />
             <Badge color={branch.assignedBy === 'user' ? 'orange' : 'cyan'} variant="light">
-              {branch.assignedBy === 'user' ? 'зафиксирована вручную' : `по правилу${eff.data.ruleIndex !== null ? ` #${eff.data.ruleIndex + 1}` : ''}`}
+              {branch.assignedBy === 'user' ? t('bs.pinned') : `${t('bs.byRule')}${eff.data.ruleIndex !== null ? ` #${eff.data.ruleIndex + 1}` : ''}`}
             </Badge>
           </Group>
           <Button variant="default" disabled={branch.assignedBy !== 'user' || branch.stage === 'production'} onClick={() => reset.mutate({ branchId: branch.id })}>
-            Сбросить к правилу
+            {t('bs.resetToRule')}
           </Button>
         </Group>
       </Card>
@@ -129,14 +125,14 @@ export function SettingsTab({ branch }: { branch: BranchView }) {
         <Table verticalSpacing={6} highlightOnHover data-testid="branch-settings">
           <Table.Thead>
             <Table.Tr>
-              <Table.Th pl="md">Параметр</Table.Th>
-              <Table.Th>Действующее значение</Table.Th>
-              <Table.Th>Откуда</Table.Th>
+              <Table.Th pl="md">{t('bs.param')}</Table.Th>
+              <Table.Th>{t('bs.effective')}</Table.Th>
+              <Table.Th>{t('bs.from')}</Table.Th>
               <Table.Th w={90} />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {FIELDS.map((def) => {
+            {fieldDefs().map((def) => {
               const f = def.kind === 'env' ? envField : fields.get(def.path);
               const isOverridden = def.path.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], overrides) !== undefined;
               return (
@@ -171,28 +167,28 @@ export function SettingsTab({ branch }: { branch: BranchView }) {
                   <Table.Td>
                     {f && (
                       <Badge color={LEVEL_COLOR[f.level]} variant="light" data-level={f.level}>
-                        {LEVEL_LABELS[f.level]}
+                        {levelLabel(f.level)}
                       </Badge>
                     )}
                   </Table.Td>
                   <Table.Td>
                     <Group gap={2} wrap="nowrap">
                       {!def.stage && (
-                        <Tooltip label="Переопределить в ветке">
+                        <Tooltip label={t('bs.override')}>
                           <ActionIcon
                             onClick={() => {
                               setEditing(def.path);
                               setDraft(def.kind === 'env' ? Object.entries((f?.value as Record<string, string>) ?? {}).map(([k, v]) => `${k}=${v}`).join('\n') : f?.value);
                             }}
-                            aria-label={`Изменить ${def.path}`}
+                            aria-label={t('bs.edit', { path: def.path })}
                           >
                             <IconPencil size={14} />
                           </ActionIcon>
                         </Tooltip>
                       )}
                       {isOverridden && (
-                        <Tooltip label="Сбросить (взять с верхнего уровня)">
-                          <ActionIcon color="orange" onClick={() => save.mutate({ branchId: branch.id, overrides: unsetPath(overrides, def.path) as BranchScope })} aria-label={`Сбросить ${def.path}`}>
+                        <Tooltip label={t('bs.unset')}>
+                          <ActionIcon color="orange" onClick={() => save.mutate({ branchId: branch.id, overrides: unsetPath(overrides, def.path) as BranchScope })} aria-label={t('bs.unsetPath', { path: def.path })}>
                             <IconArrowBackUp size={14} />
                           </ActionIcon>
                         </Tooltip>
@@ -208,15 +204,15 @@ export function SettingsTab({ branch }: { branch: BranchView }) {
 
       <Card withBorder>
         <Stack>
-          <Title order={6}>Переопределения ветки (YAML)</Title>
+          <Title order={6}>{t('bs.yamlTitle')}</Title>
           <YamlEditor path={`branch-${branch.id}`} schema="branch" value={yaml} onChange={setYaml} height={200} />
           <Group justify="flex-end">
             <Button disabled={yaml === ov.data?.yaml} loading={putYaml.isPending} onClick={() => putYaml.mutate({ level: 'branch', branchId: branch.id, yaml })}>
-              Сохранить YAML
+              {t('bs.saveYaml')}
             </Button>
           </Group>
           <Text size="xs" c="dimmed">
-            Уровни: {Object.entries(LEVEL_LABELS).map(([k, v]) => `${k} — ${v}`).join(' → ')}. Нижний уровень переопределяет верхний.
+            {t('bs.levels', { levels: LEVELS.map((k) => `${k} — ${levelLabel(k)}`).join(' → ') })}
           </Text>
         </Stack>
       </Card>

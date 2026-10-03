@@ -21,21 +21,22 @@ import { Spinner } from '../../components/Spinner';
 import { TestsBadge } from '../../components/TestsBadge';
 import { notifications } from '@mantine/notifications';
 import type { BranchView, BuildView } from '@bm/shared';
-import { DOCKER_DOWN_HINT, useBm, useDockerOk } from '../../lib/query';
+import { dockerDownHint, useBm, useDockerOk } from '../../lib/query';
 import { call, errorText } from '../../lib/bm';
-import { fmtDate, fmtDuration, shortSha, TRIGGER_LABELS } from '../../lib/format';
+import { fmtDate, fmtDuration, shortSha, triggerLabels } from '../../lib/format';
 import { githubAvatarUrl } from '../../lib/avatar';
 import { shellOpen } from '../BranchPage';
 import { folderBlockHint } from '../../lib/folder-block';
 import { ConnectAsDialog } from '../../components/dialogs/ConnectAsDialog';
+import { t } from '../../i18n';
 
 const PAGE = 5;
 
 function dbSourceText(s: string): string {
-  if (s.startsWith('backup:')) return `из бэкапа ${s.slice(7)}`;
-  if (s.startsWith('copy:')) return `копия БД ${s.slice(5)}`;
-  if (s.startsWith('update:')) return `обновление БД сборки ${s.slice(7)}`;
-  if (s === 'fresh') return 'чистая БД';
+  if (s.startsWith('backup:')) return t('history.fromBackup', { name: s.slice(7) });
+  if (s.startsWith('copy:')) return t('history.copyOf', { name: s.slice(5) });
+  if (s.startsWith('update:')) return t('history.updateOf', { name: s.slice(7) });
+  if (s === 'fresh') return t('history.fresh');
   return s;
 }
 
@@ -44,7 +45,7 @@ async function act(p: Promise<unknown>, ok?: string) {
     await p;
     if (ok) notifications.show({ message: ok });
   } catch (e) {
-    notifications.show({ color: 'red', title: 'Ошибка', message: errorText(e), autoClose: 12000 });
+    notifications.show({ color: 'red', title: t('common.error'), message: errorText(e), autoClose: 12000 });
   }
 }
 
@@ -60,7 +61,7 @@ export function HistoryTab({ branch }: { branch: BranchView }) {
   if (q.data && !total) {
     return (
       <Alert color="gray" variant="light">
-        Сборок ещё не было. Нажмите Rebuild, чтобы собрать ветку по правилам стадии {branch.stage}.
+        {t('history.none', { stage: branch.stage })}
       </Alert>
     );
   }
@@ -68,7 +69,7 @@ export function HistoryTab({ branch }: { branch: BranchView }) {
     <Stack>
       <Group justify="space-between" data-testid="history-header">
         <Text size="sm" c="dimmed">
-          Сборок: {total}
+          {t('history.count', { n: total })}
         </Text>
         {pages > 1 && <Pagination total={pages} value={page} onChange={setPage} size="sm" />}
       </Group>
@@ -104,7 +105,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
   const building = b.status === 'building' || b.status === 'queued';
   const failedStep = b.steps.find((s) => s.status === 'failed')?.name ?? null;
   const dockerOk = useDockerOk();
-  const blocked = folderBlockHint(branch) ?? (dockerOk ? null : DOCKER_DOWN_HINT);
+  const blocked = folderBlockHint(branch) ?? (dockerOk ? null : dockerDownHint());
   return (
     <Card withBorder padding="sm" data-testid={`build-${b.number}`}>
       <Group justify="space-between" wrap="nowrap" align="flex-start">
@@ -114,7 +115,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
               {author}
             </Text>
             <Text size="xs" c="dimmed">
-              {fmtDate(b.createdAt)} · сборка #{b.number} · {TRIGGER_LABELS[b.trigger] ?? b.trigger} · {b.kind === 'update' ? 'update' : 'new'}
+              {fmtDate(b.createdAt)} · {t('history.build', { n: b.number })} · {triggerLabels()[b.trigger] ?? b.trigger} · {b.kind === 'update' ? 'update' : 'new'}
             </Text>
           </Group>
           {commits.map((c) => (
@@ -129,13 +130,13 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
             <Group gap={6}>
               <Code>{shortSha(b.commitSha)}</Code>
               <Text size="sm" c="dimmed">
-                нет новых коммитов с прошлой сборки
+                {t('history.noNewCommits')}
               </Text>
             </Group>
           )}
           {b.commits.length > 3 && !more && (
             <Text size="xs" c="teal" style={{ cursor: 'pointer' }} onClick={() => setMore(true)}>
-              {b.commits.length - 3} commits more
+              {t('history.moreCommits', { n: b.commits.length - 3 })}
             </Text>
           )}
           <Group gap={6} mt={4}>
@@ -143,7 +144,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
               {dbSourceText(b.dbSource)}
             </Badge>
             <Badge variant="light" color="gray" size="sm">
-              БД {b.dbName}
+              {t('history.db', { name: b.dbName })}
             </Badge>
             <TestsBadge tests={b.tests} onClick={() => nav(`/projects/${branch.projectId}/branches/${branch.id}/logs?build=${b.id}&source=tests`)} />
             <Badge variant="light" color="gray" size="sm" leftSection={<IconClock size={10} />}>
@@ -153,10 +154,10 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
               <Tooltip
                 multiline
                 w={320}
-                label="dropAfterDays: срок хранения живой сборки считается от последнего захода или новой сборки. По истечении приходит напоминание; отбросить — CONNECT ▾ → «Отбросить сборку…». Сама сборка не удаляется."
+                label={t('history.dropTip')}
               >
                 <Badge variant="light" color={new Date(b.dropAt).getTime() <= Date.now() ? 'red' : 'orange'} size="sm">
-                  {new Date(b.dropAt).getTime() <= Date.now() ? 'срок хранения истёк — можно отбросить' : `хранить до ${fmtDate(b.dropAt).slice(0, 10)}`}
+                  {new Date(b.dropAt).getTime() <= Date.now() ? t('history.expired') : t('history.keepUntil', { date: fmtDate(b.dropAt).slice(0, 10) })}
                 </Badge>
               </Tooltip>
             )}
@@ -175,12 +176,12 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
             </Badge>
           ) : building ? (
             <Badge color="orange" size="lg" leftSection={b.status === 'queued' ? <IconClock size={12} /> : <Spinner size={12} />}>
-              {b.status === 'queued' ? 'В ОЧЕРЕДИ' : 'СБОРКА'}
+              {t(b.status === 'queued' ? 'history.queued' : 'history.building')}
             </Badge>
           ) : null}
           {b.isLive && b.containerState && b.containerState !== 'running' && (
             <Badge color="gray" variant="light">
-              контейнер: {b.containerState}
+              {t('history.container', { state: b.containerState })}
             </Badge>
           )}
         </Stack>
@@ -202,7 +203,7 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
           ))}
           {building && (
             <Button size="compact-xs" variant="subtle" onClick={() => nav(`/projects/${branch.projectId}/branches/${branch.id}/logs?build=${b.id}`)}>
-              Лог сборки
+              {t('history.buildLog')}
             </Button>
           )}
         </Group>
@@ -212,13 +213,13 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
         <Alert color="red" mt="xs" variant="light">
           <Stack gap={6}>
             <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-              {b.errorMessage ?? 'Сборка завершилась с ошибкой'}
+              {b.errorMessage ?? t('history.failedDefault')}
             </Text>
             <Group gap={6}>
               <Select
                 size="xs"
                 w={180}
-                placeholder="Шаг"
+                placeholder={t('history.step')}
                 data={b.steps.map((s) => s.name)}
                 value={retryStep ?? failedStep}
                 onChange={setRetryStep}
@@ -228,9 +229,9 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
                   size="xs"
                   leftSection={<IconPlayerPlay size={12} />}
                   data-disabled={blocked ? true : undefined}
-                  onClick={() => !blocked && void act(call('builds.retry', { buildId: b.id, fromStep: retryStep ?? failedStep ?? 'code' }), 'Сборка перезапущена')}
+                  onClick={() => !blocked && void act(call('builds.retry', { buildId: b.id, fromStep: retryStep ?? failedStep ?? 'code' }), t('history.restarted'))}
                 >
-                  Повторить с шага
+                  {t('history.retry')}
                 </Button>
               </Tooltip>
               <Button
@@ -240,17 +241,17 @@ function BuildCard({ b, branch }: { b: BuildView; branch: BranchView }) {
                 disabled={!!blocked}
                 onClick={async () => {
                   const r = await window.bm.desktop.confirm({
-                    message: `Отбросить сборку #${b.number}?`,
-                    detail: 'Будут удалены созданные ею БД, filestore и контейнер. Живая сборка ветки не затрагивается.',
-                    buttons: ['Отбросить', 'Отмена'],
+                    message: t('history.dropQ', { n: b.number }),
+                    detail: t('history.dropDetail'),
+                    buttons: [t('history.drop'), t('common.cancel')],
                   });
-                  if (r === 0) await act(call('builds.drop', { buildId: b.id }), 'Сборка отбрасывается');
+                  if (r === 0) await act(call('builds.drop', { buildId: b.id }), t('history.dropping'));
                 }}
               >
-                Отбросить
+                {t('history.drop')}
               </Button>
               <Button size="xs" variant="subtle" onClick={() => nav(`/projects/${branch.projectId}/branches/${branch.id}/logs?build=${b.id}`)}>
-                Лог сборки
+                {t('history.buildLog')}
               </Button>
             </Group>
           </Stack>
@@ -279,30 +280,30 @@ export function ConnectButton({ b, blocked = null }: { b: BuildView; blocked?: s
       </Button>
       <Menu position="bottom-end" withinPortal>
         <Menu.Target>
-          <Button color="teal" px={6} style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: '1px solid rgba(255,255,255,.4)' }} aria-label="Ещё">
+          <Button color="teal" px={6} style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: '1px solid rgba(255,255,255,.4)' }} aria-label={t('history.more')}>
             <IconChevronDown size={14} />
           </Button>
         </Menu.Target>
         <Menu.Dropdown>
           <Menu.Item disabled={!running} onClick={() => void shellOpen({ buildId: b.id, target: 'browser' })}>
-            Открыть
+            {t('history.open')}
           </Menu.Item>
           <Menu.Item disabled={!running} onClick={() => void shellOpen({ buildId: b.id, target: 'browser-debug' })}>
-            Открыть в режиме отладки (?debug=1)
+            {t('history.openDebug')}
           </Menu.Item>
           <Menu.Item disabled={!running} onClick={() => setConnectAs(true)} data-testid="connect-as">
-            Войти как…
+            {t('history.connectAs')}
           </Menu.Item>
           <Menu.Item
             onClick={async () => {
               const c = await call('builds.credentials', { buildId: b.id });
-              await window.bm.desktop.copy(`${c.login ?? 'admin'} / ${c.password ?? '(пароль прода)'}`);
-              notifications.show({ message: `Скопировано: логин ${c.login ?? 'admin'}` });
+              await window.bm.desktop.copy(`${c.login ?? 'admin'} / ${c.password ?? t('history.prodPassword')}`);
+              notifications.show({ message: t('history.copiedLogin', { login: c.login ?? 'admin' }) });
             }}
           >
-            Скопировать логин / пароль admin
+            {t('history.copyCreds')}
           </Menu.Item>
-          <Menu.Item onClick={() => b.url && void window.bm.desktop.copy(b.url)}>Скопировать URL</Menu.Item>
+          <Menu.Item onClick={() => b.url && void window.bm.desktop.copy(b.url)}>{t('history.copyUrl')}</Menu.Item>
           <Menu.Divider />
           {blocked && (
             <Menu.Label maw={280} style={{ whiteSpace: 'normal' }} data-testid="folder-blocked">
@@ -310,18 +311,18 @@ export function ConnectButton({ b, blocked = null }: { b: BuildView; blocked?: s
             </Menu.Label>
           )}
           {running ? (
-            <Menu.Item onClick={() => void act(call('builds.action', { buildId: b.id, action: 'stop' }), 'Остановка…')}>Stop</Menu.Item>
+            <Menu.Item onClick={() => void act(call('builds.action', { buildId: b.id, action: 'stop' }), t('history.stopping'))}>Stop</Menu.Item>
           ) : (
-            <Menu.Item disabled={!!blocked} onClick={() => void act(call('builds.action', { buildId: b.id, action: 'start' }), 'Запуск…')}>
+            <Menu.Item disabled={!!blocked} onClick={() => void act(call('builds.action', { buildId: b.id, action: 'start' }), t('history.starting'))}>
               Start
             </Menu.Item>
           )}
-          <Menu.Item disabled={!!blocked} onClick={() => void act(call('builds.action', { buildId: b.id, action: 'restart' }), 'Перезапуск…')}>
+          <Menu.Item disabled={!!blocked} onClick={() => void act(call('builds.action', { buildId: b.id, action: 'restart' }), t('history.restarting'))}>
             Restart
           </Menu.Item>
           {b.configChanged && (
-            <Menu.Item disabled={!!blocked} onClick={() => void act(call('builds.action', { buildId: b.id, action: 'apply-config' }), 'Контейнер пересоздаётся…')}>
-              Применить конфигурацию
+            <Menu.Item disabled={!!blocked} onClick={() => void act(call('builds.action', { buildId: b.id, action: 'apply-config' }), t('history.recreating'))}>
+              {t('history.applyConfig')}
             </Menu.Item>
           )}
           {/* spec 11: the production mirror's database changes only through a backup import. */}
@@ -333,14 +334,14 @@ export function ConnectButton({ b, blocked = null }: { b: BuildView; blocked?: s
                 disabled={!!blocked}
                 onClick={async () => {
                   const r = await window.bm.desktop.confirm({
-                    message: `Отбросить живую сборку #${b.number}?`,
-                    detail: `Будут удалены контейнер, БД ${b.dbName}, её filestore и снапшоты. Ветка и её код остаются, собрать заново — Rebuild.`,
-                    buttons: ['Отбросить', 'Отмена'],
+                    message: t('history.dropLiveQ', { n: b.number }),
+                    detail: t('history.dropLiveDetail', { db: b.dbName }),
+                    buttons: [t('history.drop'), t('common.cancel')],
                   });
-                  if (r === 0) await act(call('builds.drop', { buildId: b.id }), 'Сборка отбрасывается');
+                  if (r === 0) await act(call('builds.drop', { buildId: b.id }), t('history.dropping'));
                 }}
               >
-                Отбросить сборку…
+                {t('history.dropBuild')}
               </Menu.Item>
             </>
           )}

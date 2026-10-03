@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { MessageChannelMain, utilityProcess, type MessagePortMain, type UtilityProcess } from 'electron';
 import type { ClientMessage, CoreToMain, MainToCore, MethodName, MethodParams, MethodResult, ServerMessage } from '@bm/shared';
 import type { Logger } from 'pino';
+import { t } from './i18n';
 
 export interface CoreHostOptions {
   configDir: string;
@@ -67,7 +68,7 @@ export class CoreHost extends EventEmitter {
       this.opts.log.warn({ code, pid: this.pid }, 'core exited');
       this.proc = null;
       this.pid = null;
-      for (const p of this.pending.values()) p.reject(new Error('Core перезапускается, повторите действие'));
+      for (const p of this.pending.values()) p.reject(new Error(t('core.restarting')));
       this.pending.clear();
       if (this.stopping) {
         this.emit('stopped');
@@ -117,7 +118,7 @@ export class CoreHost extends EventEmitter {
   /** Main-originated RPC (tray menu, hooks). */
   call<K extends MethodName>(method: K, params: MethodParams<K>): Promise<MethodResult<K>> {
     const port = this.mainPort;
-    if (!port) return Promise.reject(new Error('Core не запущен'));
+    if (!port) return Promise.reject(new Error(t('core.notRunning')));
     const id = ++this.reqId;
     const msg: ClientMessage = { kind: 'req', id, method, params };
     return new Promise((resolve, reject) => {

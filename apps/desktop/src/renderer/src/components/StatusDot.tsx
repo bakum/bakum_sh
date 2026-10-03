@@ -1,15 +1,7 @@
 import { Box, Loader, Tooltip } from '@mantine/core';
 import type { LiveIndicator } from '@bm/shared';
+import { t } from '../i18n';
 
-const TEXT: Record<LiveIndicator, string> = {
-  ok: 'Работает, тесты в порядке',
-  warning: 'Есть предупреждения тестов',
-  failed: 'Сборка или тесты упали',
-  stopped: 'Сборка остановлена',
-  none: 'Сборки нет',
-  building: 'Идёт сборка',
-  unknown: 'Состояние неизвестно: Docker Desktop не запущен',
-};
 
 const COLOR: Record<LiveIndicator, string> = {
   ok: '#2fb344',
@@ -24,7 +16,7 @@ const COLOR: Record<LiveIndicator, string> = {
 /** Live build indicator (spec 6): green / orange / red / grey / empty / dashed (Docker down) / spinner. */
 export function StatusDot({ indicator, size = 10 }: { indicator: LiveIndicator; size?: number }) {
   return (
-    <Tooltip label={TEXT[indicator]} openDelay={400}>
+    <Tooltip label={t(`dot.${indicator}`)} openDelay={400}>
       {indicator === 'building' ? (
         <Loader size={size + 2} color="orange" data-indicator={indicator} />
       ) : (

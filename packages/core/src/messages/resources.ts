@@ -1,0 +1,252 @@
+import type { Entry } from '@bm/shared';
+
+/** Code lag, managed Postgres, ownership checks, Postgres migration, snapshots. */
+export default {
+  'lag.commits': { uk: '{n} {n:коміт|коміти|комітів}', ru: '{n} {n:коммит|коммита|коммитов}', en: '{n} {n:commit|commits}' },
+  'lag.dbProd': { uk: 'дзеркала прода', ru: 'зеркала прода', en: 'production mirror' },
+  'lag.dbBranch': { uk: 'збірки гілки {src}', ru: 'сборки ветки {src}', en: 'build of branch {src}' },
+  'lag.more': { uk: ' і ще {n}', ru: ' и ещё {n}', en: ' and {n} more' },
+  'lag.whatOne': {
+    uk: 'У гілці немає 1 коміту з {src}, яким уже оновлено БД {db}, звідки гілка бере копію бази.',
+    ru: 'В ветке нет 1 коммита из {src}, которым уже обновлена БД {db}, откуда ветка берёт копию базы.',
+    en: 'The branch lacks 1 commit from {src} that is already applied to the database of the {db}, which the branch copies its database from.',
+  },
+  'lag.whatMany': {
+    uk: 'У гілці немає {n} {n:коміту|комітів|комітів} з {src}, якими вже оновлено БД {db}, звідки гілка бере копію бази.',
+    ru: 'В ветке нет {n} {n:коммита|коммитов|коммитов} из {src}, которыми уже обновлена БД {db}, откуда ветка берёт копию базы.',
+    en: 'The branch lacks {n} {n:commit|commits} from {src} that are already applied to the database of the {db}, which the branch copies its database from.',
+  },
+  'lag.merged': {
+    uk: 'Гілку повністю влито в {src}, і вона відстала від неї на {commits}; власних комітів у ній немає.',
+    ru: 'Ветка целиком влита в {src} и отстала от неё на {commits}; своих коммитов в ней нет.',
+    en: 'The branch is fully merged into {src} and is {commits} behind it; it has no commits of its own.',
+  },
+  'lag.riskyOne': {
+    uk: 'Rebuild ризикований: відсутній коміт змінює модулі {list}. Rebuild оновить їх у свіжій копії бази кодом гілки — старішим, ніж у базі: збірка може впасти (тоді залишиться поточна) або база виявиться напівзламаною. Код гілки Rebuild не змінює.',
+    ru: 'Rebuild рискован: недостающий коммит меняет модули {list}. Rebuild обновит их в свежей копии базы кодом ветки — более старым, чем в базе: сборка может упасть (тогда останется текущая) или база окажется полусломанной. Код ветки Rebuild не меняет.',
+    en: 'Rebuild is risky: the missing commit changes modules {list}. Rebuild will upgrade them in a fresh copy of the database with the branch code, which is older than the database: the build may fail (the current one then stays) or the database may end up half-broken. Rebuild does not change the branch code.',
+  },
+  'lag.riskyMany': {
+    uk: 'Rebuild ризикований: відсутні коміти змінюють модулі {list}. Rebuild оновить їх у свіжій копії бази кодом гілки — старішим, ніж у базі: збірка може впасти (тоді залишиться поточна) або база виявиться напівзламаною. Код гілки Rebuild не змінює.',
+    ru: 'Rebuild рискован: недостающие коммиты меняют модули {list}. Rebuild обновит их в свежей копии базы кодом ветки — более старым, чем в базе: сборка может упасть (тогда останется текущая) или база окажется полусломанной. Код ветки Rebuild не меняет.',
+    en: 'Rebuild is risky: the missing commits change modules {list}. Rebuild will upgrade them in a fresh copy of the database with the branch code, which is older than the database: the build may fail (the current one then stays) or the database may end up half-broken. Rebuild does not change the branch code.',
+  },
+  'lag.safeOne': {
+    uk: 'Rebuild безпечний: відсутній коміт не змінює модулі. Код гілки Rebuild не змінює, база збірки замінюється свіжою копією.',
+    ru: 'Rebuild безопасен: недостающий коммит не меняет модули. Код ветки Rebuild не меняет, база сборки заменяется свежей копией.',
+    en: 'Rebuild is safe: the missing commit does not change modules. Rebuild does not change the branch code; the build database is replaced with a fresh copy.',
+  },
+  'lag.safeMany': {
+    uk: 'Rebuild безпечний: відсутні коміти не змінюють модулі. Код гілки Rebuild не змінює, база збірки замінюється свіжою копією.',
+    ru: 'Rebuild безопасен: недостающие коммиты не меняют модули. Код ветки Rebuild не меняет, база сборки заменяется свежей копией.',
+    en: 'Rebuild is safe: the missing commits do not change modules. Rebuild does not change the branch code; the build database is replaced with a fresh copy.',
+  },
+  'lag.todoMerge': {
+    uk: 'Що зробити: влийте {src} у гілку — git fetch, git merge origin/{src}, git push, потім Rebuild. Rebase не потрібен: він переписує історію гілки й вимагає push --force.',
+    ru: 'Что сделать: влейте {src} в ветку — git fetch, git merge origin/{src}, git push, затем Rebuild. Rebase не нужен: он переписывает историю ветки и требует push --force.',
+    en: 'What to do: merge {src} into the branch — git fetch, git merge origin/{src}, git push, then Rebuild. Do not rebase: it rewrites the branch history and needs push --force.',
+  },
+  'lag.todoFastForward': {
+    uk: 'Що зробити: гілка не потрібна — видаліть її (Delete). Потрібна — перемотайте на {src} (fast-forward, історія не переписується): git fetch, git merge --ff-only origin/{src}, git push, потім Rebuild.',
+    ru: 'Что сделать: ветка не нужна — удалите её (Delete). Нужна — перемотайте на {src} (fast-forward, история не переписывается): git fetch, git merge --ff-only origin/{src}, git push, затем Rebuild.',
+    en: 'What to do: if the branch is not needed, delete it (Delete). If it is, fast-forward it to {src} (history is not rewritten): git fetch, git merge --ff-only origin/{src}, git push, then Rebuild.',
+  },
+
+  'pgTools.dumpFailed': {
+    uk: 'Копіювання {src} → {dst} через pg_dump не вдалося: {error}',
+    ru: 'Копирование {src} → {dst} через pg_dump не удалось: {error}',
+    en: 'Copying {src} → {dst} with pg_dump failed: {error}',
+  },
+  'pgTools.readFailed': { uk: 'Не вдалося прочитати {name} з архіву: {error}', ru: 'Не удалось прочитать {name} из архива: {error}', en: 'Could not read {name} from the archive: {error}' },
+  'mpg.noPort': { uk: 'Немає вільного порту для Postgres у діапазоні {from}–{to}', ru: 'Нет свободного порта для Postgres в диапазоне {from}–{to}', en: 'No free port for Postgres in the range {from}–{to}' },
+  'mpg.network': { uk: 'Не вдалося створити мережу {network}: {error}', ru: 'Не удалось создать сеть {network}: {error}', en: 'Could not create network {network}: {error}' },
+  'mpg.pull': {
+    uk: 'docker pull {image} (перше завантаження може тривати кілька хвилин)',
+    ru: 'docker pull {image} (первая загрузка может занять несколько минут)',
+    en: 'docker pull {image} (the first download may take a few minutes)',
+  },
+  'mpg.pullFailed': { uk: 'Не вдалося завантажити образ {image}: {error}', ru: 'Не удалось скачать образ {image}: {error}', en: 'Could not pull image {image}: {error}' },
+  'mpg.portReserved': {
+    uk: 'Порт {port} для Postgres зарезервовано Windows (netsh interface ipv4 show excludedportrange protocol=tcp). Вкажіть інший postgres.port у налаштуваннях проєкту.',
+    ru: 'Порт {port} для Postgres зарезервирован Windows (netsh interface ipv4 show excludedportrange protocol=tcp). Укажите другой postgres.port в настройках проекта.',
+    en: 'Port {port} for Postgres is reserved by Windows (netsh interface ipv4 show excludedportrange protocol=tcp). Set another postgres.port in the project settings.',
+  },
+  'mpg.portMoved': {
+    uk: 'Порт {port} зарезервовано Windows (Hyper-V / WSL), Docker не може його опублікувати: Postgres переїжджає на 127.0.0.1:{newPort}',
+    ru: 'Порт {port} зарезервирован Windows (Hyper-V / WSL), Docker не может его опубликовать: Postgres переезжает на 127.0.0.1:{newPort}',
+    en: 'Port {port} is reserved by Windows (Hyper-V / WSL) and Docker cannot publish it: Postgres moves to 127.0.0.1:{newPort}',
+  },
+  'mpg.noPassword': {
+    uk: 'У managed Postgres немає пароля (postgres.password у налаштуваннях проєкту).',
+    ru: 'У managed Postgres нет пароля (postgres.password в настройках проекта).',
+    en: 'The managed Postgres has no password (postgres.password in the project settings).',
+  },
+  'mpg.dockerDown': { uk: 'Docker недоступний: запустіть Docker Desktop', ru: 'Docker недоступен: запустите Docker Desktop', en: 'Docker is unavailable: start Docker Desktop' },
+  'mpg.portBusy': {
+    uk: 'Порт {port} для Postgres зайнятий іншим процесом. Вкажіть інший postgres.port у налаштуваннях проєкту.',
+    ru: 'Порт {port} для Postgres занят другим процессом. Укажите другой postgres.port в настройках проекта.',
+    en: 'Port {port} for Postgres is used by another process. Set another postgres.port in the project settings.',
+  },
+  'mpg.notStarted': { uk: 'Postgres не запустився: {error}', ru: 'Postgres не запустился: {error}', en: 'Postgres did not start: {error}' },
+  'mpg.noAnswer': { uk: 'Postgres {name} не відповідає: {error}', ru: 'Postgres {name} не отвечает: {error}', en: 'Postgres {name} does not respond: {error}' },
+  'mpg.runningOn': { uk: 'Postgres {name} працює на 127.0.0.1:{port}', ru: 'Postgres {name} работает на 127.0.0.1:{port}', en: 'Postgres {name} is running on 127.0.0.1:{port}' },
+  'mpg.starting': {
+    uk: 'Postgres {host}:{port} недоступний: запускаю контейнер {name} (docker start)',
+    ru: 'Postgres {host}:{port} недоступен: запускаю контейнер {name} (docker start)',
+    en: 'Postgres {host}:{port} is unavailable: starting container {name} (docker start)',
+  },
+  'mpg.startFailed': {
+    uk: 'Не вдалося запустити контейнер Postgres {name}: {error}',
+    ru: 'Не удалось запустить контейнер Postgres {name}: {error}',
+    en: 'Could not start the Postgres container {name}: {error}',
+  },
+  'mpg.running': { uk: 'Postgres {name} працює', ru: 'Postgres {name} работает', en: 'Postgres {name} is running' },
+  'mpg.containerError': { uk: 'контейнер: {error}', ru: 'контейнер: {error}', en: 'container: {error}' },
+  'mpg.networkError': { uk: 'мережа: {error}', ru: 'сеть: {error}', en: 'network: {error}' },
+
+  'safety.denied': {
+    uk: 'Відмовлено: {why}. Застосунок видаляє лише ресурси, які сам створив і записав у реєстр.',
+    ru: 'Отказано: {why}. Приложение удаляет только ресурсы, которые само создало и записало в реестр.',
+    en: 'Refused: {why}. The app deletes only resources it created itself and recorded in its registry.',
+  },
+  'safety.badDbName': { uk: '«{name}» не є допустимим ім’ям БД', ru: '«{name}» не является допустимым именем БД', en: '«{name}» is not a valid database name' },
+  'safety.dbProtected': { uk: 'БД «{name}» захищена', ru: 'БД «{name}» защищена', en: 'database «{name}» is protected' },
+  'safety.dbTemplate': {
+    uk: 'БД «{name}» не відповідає шаблону naming.db проєкту {id}',
+    ru: 'БД «{name}» не соответствует шаблону naming.db проекта {id}',
+    en: 'database «{name}» does not match the naming.db template of project {id}',
+  },
+  'safety.dbNotRegistered': { uk: 'БД «{name}» відсутня в реєстрі застосунку', ru: 'БД «{name}» отсутствует в реестре приложения', en: 'database «{name}» is not in the app’s registry' },
+  'safety.containerProtected': { uk: 'контейнер «{name}» захищено', ru: 'контейнер «{name}» защищён', en: 'container «{name}» is protected' },
+  'safety.noLabel': { uk: 'у контейнера «{name}» немає мітки bm.project={id}', ru: 'у контейнера «{name}» нет метки bm.project={id}', en: 'container «{name}» has no bm.project={id} label' },
+  'safety.composeTemplate': {
+    uk: 'compose-проєкт «{name}» не відповідає шаблону naming.composeProject',
+    ru: 'compose-проект «{name}» не соответствует шаблону naming.composeProject',
+    en: 'compose project «{name}» does not match the naming.composeProject template',
+  },
+  'safety.composeNotRegistered': { uk: 'compose-проєкт «{name}» відсутній у реєстрі', ru: 'compose-проект «{name}» отсутствует в реестре', en: 'compose project «{name}» is not in the registry' },
+  'safety.worktreeOutside': {
+    uk: '«{path}» поза папкою worktree проєкту ({dir})',
+    ru: '«{path}» вне папки worktree проекта ({dir})',
+    en: '«{path}» is outside the project’s worktree folder ({dir})',
+  },
+  'safety.projectRepo': { uk: 'це репозиторій проєкту, а не worktree', ru: 'это репозиторий проекта, а не worktree', en: 'this is the project repository, not a worktree' },
+  'safety.yourFolder': { uk: 'це ваша папка з кодом', ru: 'это ваша папка с кодом', en: 'this is your code folder' },
+  'safety.worktreeNotRegistered': { uk: 'worktree «{path}» відсутній у реєстрі', ru: 'worktree «{path}» отсутствует в реестре', en: 'worktree «{path}» is not in the registry' },
+  'safety.notMirror': {
+    uk: '«{path}» не є копією репозиторію проєкту {id}',
+    ru: '«{path}» не является копией репозитория проекта {id}',
+    en: '«{path}» is not the repository copy of project {id}',
+  },
+  'safety.mirrorOutside': {
+    uk: 'копія «{path}» лежить поза папкою застосунку {root}',
+    ru: 'копия «{path}» лежит вне папки приложения {root}',
+    en: 'copy «{path}» is outside the app folder {root}',
+  },
+  'safety.notFilestore': { uk: 'каталог «{path}» не є filestore БД {db}', ru: 'каталог «{path}» не является filestore БД {db}', en: 'folder «{path}» is not the filestore of database {db}' },
+  'safety.volumeNamed': { uk: 'том «{name}» не анонімний', ru: 'том «{name}» не анонимный', en: 'volume «{name}» is not anonymous' },
+
+  'migrate.alreadyManaged': {
+    uk: 'Проєкт уже працює на власному Postgres застосунку.',
+    ru: 'Проект уже работает на своём Postgres приложения.',
+    en: 'The project already runs on the app’s own Postgres.',
+  },
+  'migrate.legacy': { uk: 'Проєкт старої схеми: видаліть його і додайте наново.', ru: 'Проект старой схемы: удалите его и добавьте заново.', en: 'An old-style project: delete it and add it again.' },
+  'migrate.noPassword': { uk: 'Не задано пароль Postgres (Settings → Postgres).', ru: 'Не задан пароль Postgres (Settings → Postgres).', en: 'The Postgres password is not set (Settings → Postgres).' },
+  'migrate.dockerDown': { uk: 'Docker недоступний: запустіть Docker Desktop.', ru: 'Docker недоступен: запустите Docker Desktop.', en: 'Docker is unavailable: start Docker Desktop.' },
+  'migrate.running': { uk: 'Перенесення вже йде (завдання {id}).', ru: 'Перевод уже идёт (задача {id}).', en: 'The move is already running (job {id}).' },
+  'migrate.unreachable': {
+    uk: 'Postgres {host}:{port} недоступний, а його контейнер не знайдено: {error}',
+    ru: 'Postgres {host}:{port} недоступен, а его контейнер не найден: {error}',
+    en: 'Postgres {host}:{port} is unavailable and its container was not found: {error}',
+  },
+  'migrate.tables': {
+    uk: '{db}: таблиць {a} у вихідній БД і {b} у копії',
+    ru: '{db}: таблиц {a} в исходной БД и {b} в копии',
+    en: '{db}: {a} tables in the source database and {b} in the copy',
+  },
+  'migrate.modules': {
+    uk: '{db}: встановлених модулів {a} у вихідній БД і {b} у копії',
+    ru: '{db}: установленных модулей {a} в исходной БД и {b} в копии',
+    en: '{db}: {a} installed modules in the source database and {b} in the copy',
+  },
+  'migrate.copied': { uk: '{db}: скопійовано за {s} с', ru: '{db}: скопирована за {s} с', en: '{db}: copied in {s} s' },
+  'migrate.source': {
+    uk: 'Джерело: {host}:{port}, PostgreSQL {version}; баз для копіювання: {n}',
+    ru: 'Источник: {host}:{port}, PostgreSQL {version}; баз для копирования: {n}',
+    en: 'Source: {host}:{port}, PostgreSQL {version}; databases to copy: {n}',
+  },
+  'migrate.target': {
+    uk: 'Власний Postgres: {name} ({image}), 127.0.0.1:{port}, мережа {network}',
+    ru: 'Свой Postgres: {name} ({image}), 127.0.0.1:{port}, сеть {network}',
+    en: 'Own Postgres: {name} ({image}), 127.0.0.1:{port}, network {network}',
+  },
+  'migrate.olderVersion': {
+    uk: 'PostgreSQL {dst} у {name} старший за джерело {src}: вкажіть образ не нижче',
+    ru: 'PostgreSQL {dst} в {name} старше источника {src}: укажите образ не ниже',
+    en: 'PostgreSQL {dst} in {name} is older than the source {src}: choose an image of at least that version',
+  },
+  'migrate.settings': {
+    uk: 'Налаштування проєкту: postgres.mode managed, порт {port}, мережа {network}',
+    ru: 'Настройки проекта: postgres.mode managed, порт {port}, сеть {network}',
+    en: 'Project settings: postgres.mode managed, port {port}, network {network}',
+  },
+  'migrate.rollback': { uk: 'Відкат: {error}', ru: 'Откат: {error}', en: 'Rollback: {error}' },
+  'migrate.recreate': { uk: '{project}: перестворення в мережі {network}', ru: '{project}: пересоздание в сети {network}', en: '{project}: recreating in network {network}' },
+  'migrate.recreateNoStart': {
+    uk: '{project}: перестворення в мережі {network} (без запуску)',
+    ru: '{project}: пересоздание в сети {network} (без запуска)',
+    en: '{project}: recreating in network {network} (without starting)',
+  },
+  'migrate.done': {
+    uk: 'Готово. Бази в колишньому Postgres ({source}) не зачеплено — видаліть їх вручну, коли переконаєтеся, що гілки працюють.',
+    ru: 'Готово. Базы в прежнем Postgres ({source}) не тронуты — удалите их вручную, когда убедитесь, что ветки работают.',
+    en: 'Done. The databases in the previous Postgres ({source}) are untouched — delete them by hand once you are sure the branches work.',
+  },
+  'migrate.composeFailed': {
+    uk: 'Бази перенесено, але не перестворилися збірки: {builds}. Натисніть у них «Застосувати».',
+    ru: 'Базы перенесены, но не пересоздались сборки: {builds}. Нажмите у них «Применить».',
+    en: 'The databases were moved, but these builds were not recreated: {builds}. Press «Apply» on them.',
+  },
+
+  'snap.noLive': {
+    uk: 'У гілки «{branch}» немає живої збірки: знімки робляться з БД живої збірки.',
+    ru: 'У ветки «{branch}» нет живой сборки: снапшоты делаются с БД живой сборки.',
+    en: 'Branch «{branch}» has no live build: snapshots are taken of the live build database.',
+  },
+  'snap.notFound': { uk: 'Знімок не знайдено', ru: 'Снапшот не найден', en: 'Snapshot not found' },
+  'snap.stale': {
+    uk: 'Знімок належить до БД, якої в гілки більше немає (збірку перезібрано). Його можна лише видалити.',
+    ru: 'Снапшот относится к БД, которой у ветки больше нет (сборка пересобрана). Его можно только удалить.',
+    en: 'The snapshot belongs to a database the branch no longer has (the build was rebuilt). It can only be deleted.',
+  },
+  'snap.nameTooLong': {
+    uk: 'Ім’я знімка {name} довше за {max} символів (обмеження Postgres). Скоротіть naming.db проєкту.',
+    ru: 'Имя снапшота {name} длиннее {max} символов (ограничение Postgres). Сократите naming.db проекта.',
+    en: 'Snapshot name {name} is longer than {max} characters (a Postgres limit). Shorten the project’s naming.db.',
+  },
+  'snap.startFailed': { uk: '[warn] не вдалося запустити {name}: {error}', ru: '[warn] не удалось запустить {name}: {error}', en: '[warn] could not start {name}: {error}' },
+  'snap.filestore': {
+    uk: 'filestore: {n} {n:файл|файли|файлів} ({how})',
+    ru: 'filestore: {n} {n:файл|файла|файлов} ({how})',
+    en: 'filestore: {n} {n:file|files} ({how})',
+  },
+  'snap.hardlinks': { uk: 'хардлінки', ru: 'хардлинки', en: 'hard links' },
+  'snap.copying': { uk: 'копіювання', ru: 'копирование', en: 'copying' },
+  'snap.defaultName': { uk: 'Знімок {date}', ru: 'Снапшот {date}', en: 'Snapshot {date}' },
+  'snap.beforeRestore': { uk: 'Перед відкатом до «{name}»', ru: 'Перед откатом к «{name}»', en: 'Before restoring «{name}»' },
+  'snap.restoreFailed': {
+    uk: '[error] відкат не вдався, повертаю колишню БД: {error}',
+    ru: '[error] откат не удался, возвращаю прежнюю БД: {error}',
+    en: '[error] restore failed, putting the previous database back: {error}',
+  },
+  'snap.noBuild': { uk: 'Збірку знімка не знайдено', ru: 'Сборка снапшота не найдена', en: 'The snapshot’s build was not found' },
+  'snap.dumpWhat': { uk: 'Вивантаження (odoo db dump)', ru: 'Выгрузка (odoo db dump)', en: 'Export (odoo db dump)' },
+  'snap.dumpNoFile': {
+    uk: 'odoo db dump завершився, але файл не з’явився. Див. журнал завдання.',
+    ru: 'odoo db dump завершился, но файл не появился. См. лог задачи.',
+    en: 'odoo db dump finished, but no file appeared. See the job log.',
+  },
+  'snap.saved': { uk: 'збережено: {file} ({size} байт)', ru: 'сохранено: {file} ({size} байт)', en: 'saved: {file} ({size} bytes)' },
+  'snap.fullPath': { uk: 'Потрібен повний шлях до файлу .zip', ru: 'Нужен полный путь к файлу .zip', en: 'A full path to the .zip file is needed' },
+} satisfies Record<string, Entry>;

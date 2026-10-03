@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import YAML from 'yaml';
 import { Alert, Badge, Box, Button, Card, Code, Container, Group, Stack, Switch, Table, Tabs, Text, TextInput, Title } from '@mantine/core';
@@ -10,102 +10,89 @@ import { YamlForm, type FieldDef, type FieldGroup } from '../components/YamlForm
 import { DeleteProjectButton } from '../components/dialogs/DeleteProject';
 import { MigratePostgresCard } from '../components/dialogs/MigratePostgres';
 import { UpdatesCard } from '../components/UpdatesCard';
+import { LANG_NAMES, LANGS } from '@bm/shared';
+import { t, tx } from '../i18n';
 
 const STAGE_NAMES = { production: 'Production', development: 'Development' } as const;
 
 function stageFields(stage: keyof typeof STAGE_NAMES): FieldDef[] {
   const p = (k: string) => ['stages', stage, k];
-  const inh = 'значение по умолчанию (odoo.sh)';
+  const inh = t('sf.inherit');
   return [
-    { path: p('database'), label: 'База данных', type: 'text', inherit: inh, description: stage === 'production' ? 'backup' : 'fresh | copy:production | copy:<ветка>' },
-    { path: p('onNewCommit'), label: 'Новый коммит', type: 'select', options: ['none', 'update', 'new'], inherit: inh },
+    { path: p('database'), label: t('field.database'), type: 'text', inherit: inh, description: stage === 'production' ? 'backup' : t('sf.dbHint') },
+    { path: p('onNewCommit'), label: t('field.onNewCommit'), type: 'select', options: ['none', 'update', 'new'], inherit: inh },
     {
       path: p('updateModules'),
-      label: 'Обновлять модули (-u)',
+      label: t('sf.updateModules'),
       type: 'select',
       options: ['changed', 'version-bumped', 'all'],
       inherit: inh,
-      description: 'version-bumped — только модули с новой версией в манифесте (как odoo.sh)',
+      description: t('sf.updateModulesHint'),
     },
-    { path: p('install'), label: 'Установка для fresh', type: 'select', options: ['my', 'roots', 'full'], inherit: inh },
-    { path: p('withDemo'), label: 'Демо-данные (fresh)', type: 'switch' },
+    { path: p('install'), label: t('sf.install'), type: 'select', options: ['my', 'roots', 'full'], inherit: inh },
+    { path: p('withDemo'), label: t('field.withDemo'), type: 'switch' },
     {
       path: p('cloneMethod'),
-      label: 'Копирование БД',
+      label: t('field.cloneMethod'),
       type: 'select',
       options: ['template', 'dump'],
       inherit: inh,
-      description: 'template — быстро, источник останавливается на время копии; dump — pg_dump без остановки, медленнее',
+      description: t('sf.cloneMethodHint'),
     },
-    { path: p('buildOnAdd'), label: 'Собирать при добавлении ветки', type: 'switch' },
-    { path: p('protected'), label: 'Защита от удаления', type: 'switch' },
-    {
-      path: p('deleteWithRemote'),
-      label: 'Удалять, если ветку удалили на GitHub',
-      type: 'switch',
-      description:
-        'ветку удалили на GitHub — после fetch она удаляется и в приложении вместе со сборками и их БД. Production, защищённые ветки, ветки со своей папкой и worktree с изменениями не удаляются. Саму ветку на GitHub приложение не удаляет',
-    },
+    { path: p('buildOnAdd'), label: t('sf.buildOnAdd'), type: 'switch' },
+    { path: p('protected'), label: t('field.protected'), type: 'switch' },
+    { path: p('deleteWithRemote'), label: t('field.deleteWithRemote'), type: 'switch', description: t('sf.deleteWithRemoteHint') },
     { path: p('onForcePush'), label: 'Force-push', type: 'select', options: ['pause', 'new'], inherit: inh },
-    {
-      path: p('idleStopHours'),
-      label: 'Остановка без активности, ч',
-      type: 'number',
-      description: 'живая сборка останавливается, если столько часов к ней не было запросов; 0 — никогда. Start поднимает её снова',
-    },
-    {
-      path: p('dropAfterDays'),
-      label: 'Срок хранения, дней',
-      type: 'number',
-      description: 'после стольких дней без новых сборок и заходов — напоминание «можно отбросить»; сама сборка не удаляется. 0 — без срока',
-    },
+    { path: p('idleStopHours'), label: t('field.idleStopHours'), type: 'number', description: t('sf.idleHint') },
+    { path: p('dropAfterDays'), label: t('sf.dropAfterDays'), type: 'number', description: t('sf.dropHint') },
   ];
 }
 
-const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?: string }> = {
+/** Project settings tabs; a function, so the labels follow the interface language. */
+const projectTabs = (): Record<string, { label: string; groups: FieldGroup[]; stage?: string }> => ({
   repo: {
-    label: 'Репозиторий',
+    label: t('tab.repo'),
     groups: [
       {
         fields: [
-          { path: ['name'], label: 'Название проекта', type: 'text' },
-          { path: ['repo', 'url'], label: 'Адрес репозитория', type: 'text', description: 'откуда берётся код сборок' },
-          { path: ['repo', 'mirrorDir'], label: 'Копия приложения', type: 'text', description: 'своя копия репозитория приложения, в ней не работают' },
-          { path: ['repo', 'localFolder'], label: 'Ваша папка с клоном', type: 'text', nullable: true, description: 'подсказка для «своей папки» у веток Development' },
+          { path: ['name'], label: t('set.projectName'), type: 'text' },
+          { path: ['repo', 'url'], label: t('set.repoUrl'), type: 'text', description: t('set.repoUrlHint') },
+          { path: ['repo', 'mirrorDir'], label: t('set.mirror'), type: 'text', description: t('set.mirrorHint') },
+          { path: ['repo', 'localFolder'], label: t('set.localFolder'), type: 'text', nullable: true, description: t('set.localFolderHint') },
           { path: ['repo', 'remote'], label: 'Remote', type: 'text' },
           { path: ['repo', 'github'], label: 'GitHub (owner/repo)', type: 'text', nullable: true },
-          { path: ['repo', 'fetchIntervalMin'], label: 'Fetch каждые, мин', type: 'number', description: '0 — только вручную' },
-          { path: ['repo', 'worktreesDir'], label: 'Папка веток (worktree)', type: 'text' },
-          { path: ['repo', 'protectedBranches'], label: 'Защищённые ветки', type: 'tags' },
-          { path: ['repo', 'moduleRoots'], label: 'Корни модулей', type: 'tags', description: 'пусто — весь репозиторий' },
-          { path: ['repo', 'modulesToInstall'], label: 'Файл «моих» модулей', type: 'text', nullable: true },
-          { path: ['repo', 'issueUrl'], label: 'Ссылка на задачу', type: 'text', nullable: true },
+          { path: ['repo', 'fetchIntervalMin'], label: t('set.fetchEvery'), type: 'number', description: t('set.fetchManual') },
+          { path: ['repo', 'worktreesDir'], label: t('set.worktrees'), type: 'text' },
+          { path: ['repo', 'protectedBranches'], label: t('set.protectedBranches'), type: 'tags' },
+          { path: ['repo', 'moduleRoots'], label: t('set.moduleRoots'), type: 'tags', description: t('set.wholeRepo') },
+          { path: ['repo', 'modulesToInstall'], label: t('set.myModules'), type: 'text', nullable: true },
+          { path: ['repo', 'issueUrl'], label: t('set.issueUrl'), type: 'text', nullable: true },
         ],
       },
       {
-        title: 'Имена ресурсов',
-        description: 'Переменные: {project} {branch} {slug} {slug_} {build} {stage} {issue} {type}. Имена БД разных проектов не могут пересекаться.',
+        title: t('set.naming'),
+        description: t('set.namingHint'),
         fields: [
           { path: ['naming', 'slug'], label: 'Slug', type: 'text' },
-          { path: ['naming', 'slugStrip'], label: 'Убрать из slug (regex)', type: 'text', nullable: true },
-          { path: ['naming', 'db'], label: 'Имя БД', type: 'text' },
-          { path: ['naming', 'host'], label: 'Хост сборки', type: 'text' },
-          { path: ['naming', 'composeProject'], label: 'Compose-проект', type: 'text' },
-          { path: ['naming', 'parse'], label: 'Разбор имени ветки (regex)', type: 'text', nullable: true },
-          { path: ['naming', 'branch', 'pattern'], label: 'Шаблон новой ветки (Fork)', type: 'text' },
-          { path: ['naming', 'branch', 'base'], label: 'База новой ветки', type: 'text' },
+          { path: ['naming', 'slugStrip'], label: t('set.slugStrip'), type: 'text', nullable: true },
+          { path: ['naming', 'db'], label: t('set.dbName'), type: 'text' },
+          { path: ['naming', 'host'], label: t('set.host'), type: 'text' },
+          { path: ['naming', 'composeProject'], label: t('set.compose'), type: 'text' },
+          { path: ['naming', 'parse'], label: t('set.parse'), type: 'text', nullable: true },
+          { path: ['naming', 'branch', 'pattern'], label: t('set.branchPattern'), type: 'text' },
+          { path: ['naming', 'branch', 'base'], label: t('set.branchBase'), type: 'text' },
         ],
       },
     ],
   },
   stages: {
-    label: 'Стадии и правила',
+    label: t('tab.stages'),
     groups: [
       {
         fields: [
-          { path: ['production', 'branch'], label: 'Ветка Production', type: 'text' },
-          { path: ['production', 'slug'], label: 'Slug Production', type: 'text' },
-          { path: ['autoAddBranches'], label: 'Добавлять новые ветки', type: 'select', options: ['none', 'rules', 'all'] },
+          { path: ['production', 'branch'], label: t('set.prodBranch'), type: 'text' },
+          { path: ['production', 'slug'], label: t('set.prodSlug'), type: 'text' },
+          { path: ['autoAddBranches'], label: t('set.autoAdd'), type: 'select', options: ['none', 'rules', 'all'] },
         ],
       },
       { title: 'Production', fields: stageFields('production') },
@@ -113,24 +100,24 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
     ],
   },
   runtime: {
-    label: 'Рантайм',
+    label: t('tab.runtime'),
     groups: [
       {
-        description: 'Изменение образа, команды, монтирований или переменных помечает живые сборки «конфигурация изменилась».',
+        description: t('set.runtimeHint'),
         fields: [
-          { path: ['runtime', 'image'], label: 'Образ Odoo', type: 'text' },
-          { path: ['runtime', 'odooVersion'], label: 'Версия Odoo', type: 'text' },
-          { path: ['runtime', 'network'], label: 'Docker-сеть', type: 'text' },
-          { path: ['runtime', 'repoMount'], label: 'Путь репозитория в контейнере', type: 'text' },
-          { path: ['runtime', 'env'], label: 'Переменные окружения', type: 'keyvalue' },
-          { path: ['runtime', 'command'], label: 'Команда контейнера', type: 'tags' },
-          { path: ['runtime', 'filestore', 'hostDir'], label: 'Filestore на хосте', type: 'text' },
-          { path: ['runtime', 'filestore', 'containerDir'], label: 'Filestore в контейнере', type: 'text' },
-          { path: ['runtime', 'filestore', 'copy'], label: 'Копирование filestore', type: 'select', options: ['hardlink', 'copy'] },
-          { path: ['runtime', 'debug', 'containerPort'], label: 'Порт debugpy в контейнере', type: 'number' },
-          { path: ['runtime', 'healthcheck', 'path'], label: 'Healthcheck, путь', type: 'text' },
-          { path: ['runtime', 'healthcheck', 'timeoutSec'], label: 'Healthcheck, таймаут, с', type: 'number' },
-          { path: ['runtime', 'composeTemplate'], label: 'Свой шаблон compose', type: 'text', stage: 'этап 3' },
+          { path: ['runtime', 'image'], label: t('field.image'), type: 'text' },
+          { path: ['runtime', 'odooVersion'], label: t('set.odooVersion'), type: 'text' },
+          { path: ['runtime', 'network'], label: t('set.network'), type: 'text' },
+          { path: ['runtime', 'repoMount'], label: t('set.repoMount'), type: 'text' },
+          { path: ['runtime', 'env'], label: t('field.env'), type: 'keyvalue' },
+          { path: ['runtime', 'command'], label: t('set.command'), type: 'tags' },
+          { path: ['runtime', 'filestore', 'hostDir'], label: t('set.fsHost'), type: 'text' },
+          { path: ['runtime', 'filestore', 'containerDir'], label: t('set.fsContainer'), type: 'text' },
+          { path: ['runtime', 'filestore', 'copy'], label: t('field.filestoreCopy'), type: 'select', options: ['hardlink', 'copy'] },
+          { path: ['runtime', 'debug', 'containerPort'], label: t('set.debugPort'), type: 'number' },
+          { path: ['runtime', 'healthcheck', 'path'], label: t('set.hcPath'), type: 'text' },
+          { path: ['runtime', 'healthcheck', 'timeoutSec'], label: t('set.hcTimeout'), type: 'number' },
+          { path: ['runtime', 'composeTemplate'], label: t('set.composeTemplate'), type: 'text', stage: 'stage3' },
         ],
       },
     ],
@@ -140,77 +127,60 @@ const projectTabs: Record<string, { label: string; groups: FieldGroup[]; stage?:
     groups: [
       {
         fields: [
-          {
-            path: ['postgres', 'mode'],
-            label: 'Режим',
-            type: 'select',
-            options: ['external', 'managed'],
-            description: 'external — существующий Postgres; managed — свой контейнер приложения bm-<проект>-db',
-          },
-          { path: ['postgres', 'image'], label: 'Образ (managed)', type: 'text' },
-          { path: ['postgres', 'host'], label: 'Хост (с машины)', type: 'text' },
-          { path: ['postgres', 'port'], label: 'Порт (с машины)', type: 'number' },
-          { path: ['postgres', 'internalHost'], label: 'Хост в Docker-сети', type: 'text' },
-          { path: ['postgres', 'user'], label: 'Пользователь', type: 'text' },
-          { path: ['postgres', 'password'], label: 'Пароль', type: 'password', description: 'хранится только в файле проекта и в Core' },
-          { path: ['postgres', 'protectedDbs'], label: 'Защищённые БД', type: 'tags' },
-          { path: ['postgres', 'protectedContainers'], label: 'Защищённые контейнеры', type: 'tags' },
+          { path: ['postgres', 'mode'], label: t('set.pgMode'), type: 'select', options: ['external', 'managed'], description: t('set.pgModeHint') },
+          { path: ['postgres', 'image'], label: t('set.pgImage'), type: 'text' },
+          { path: ['postgres', 'host'], label: t('set.pgHost'), type: 'text' },
+          { path: ['postgres', 'port'], label: t('set.pgPort'), type: 'number' },
+          { path: ['postgres', 'internalHost'], label: t('set.pgInternal'), type: 'text' },
+          { path: ['postgres', 'user'], label: t('set.pgUser'), type: 'text' },
+          { path: ['postgres', 'password'], label: t('set.pgPassword'), type: 'password', description: t('set.pgPasswordHint') },
+          { path: ['postgres', 'protectedDbs'], label: t('set.protectedDbs'), type: 'tags' },
+          { path: ['postgres', 'protectedContainers'], label: t('set.protectedContainers'), type: 'tags' },
         ],
       },
     ],
   },
   data: {
-    label: 'Данные (Production)',
+    label: t('tab.data'),
     groups: [
       {
         fields: [
-          { path: ['production', 'backups', 'dir'], label: 'Папка бэкапов прода', type: 'text', nullable: true },
-          { path: ['production', 'backups', 'pattern'], label: 'Шаблон имени', type: 'text', description: 'бэкап Odoo *.zip или дамп pg_dump -Fc *.dump (без filestore)' },
-          { path: ['production', 'backups', 'pick'], label: 'Выбор файла', type: 'select', options: ['latest', 'manual'] },
-          {
-            path: ['production', 'backups', 'autoImport'],
-            label: 'Автоимпорт нового бэкапа',
-            type: 'switch',
-            description: 'новый файл в папке сразу собирается в зеркало прода; уведомление о новом бэкапе приходит всегда',
-          },
-          { path: ['production', 'postRestore', 'sql'], label: 'SQL после восстановления', type: 'tags' },
-          { path: ['production', 'postRestore', 'verifySql'], label: 'Проверка (должна вернуть 0)', type: 'textarea', nullable: true },
-          { path: ['connect', 'adminPassword'], label: 'Пароль admin в копиях БД', type: 'text', nullable: true },
-          { path: ['extraSql'], label: 'Дополнительный SQL (local-tweaks)', type: 'tags' },
+          { path: ['production', 'backups', 'dir'], label: t('set.backupsDir'), type: 'text', nullable: true },
+          { path: ['production', 'backups', 'pattern'], label: t('set.pattern'), type: 'text', description: t('set.patternHint') },
+          { path: ['production', 'backups', 'pick'], label: t('set.pick'), type: 'select', options: ['latest', 'manual'] },
+          { path: ['production', 'backups', 'autoImport'], label: t('set.autoImport'), type: 'switch', description: t('set.autoImportHint') },
+          { path: ['production', 'postRestore', 'sql'], label: t('set.postRestoreSql'), type: 'tags' },
+          { path: ['production', 'postRestore', 'verifySql'], label: t('set.verifySql'), type: 'textarea', nullable: true },
+          { path: ['connect', 'adminPassword'], label: t('set.adminPassword'), type: 'text', nullable: true },
+          { path: ['extraSql'], label: t('set.extraSql'), type: 'tags' },
         ],
       },
     ],
   },
   modules: {
-    label: 'Модули и тесты',
+    label: t('tab.modules'),
     groups: (['development', 'production'] as const).map((s) => ({
-      title: `Тесты ${STAGE_NAMES[s]}`,
-      description:
-        s === 'development'
-          ? 'Какие модули обновлять — в «Стадии и правила». changed — изменённые модули (для чистой БД — изменённые относительно ветки Production), my — «мои» модули, none — без тестов. Чистая БД тестируется при установке модулей, копия — на временной копии <БД>_test.'
-          : undefined,
+      title: t('set.testsOf', { stage: STAGE_NAMES[s] }),
+      description: s === 'development' ? t('set.testsHint') : undefined,
       fields: [
-        { path: ['stages', s, 'tests', 'mode'], label: 'Какие модули тестировать', type: 'select', options: ['none', 'changed', 'my'], inherit: 'значение по умолчанию (odoo.sh)' },
-        { path: ['stages', s, 'tests', 'tags'], label: '--test-tags', type: 'text', description: 'шаблон на модуль, по умолчанию /{module}' },
-        { path: ['stages', s, 'tests', 'extraArgs'], label: 'Доп. аргументы Odoo', type: 'tags' },
-        { path: ['stages', s, 'tests', 'failBuild'], label: 'Падение тестов роняет сборку', type: 'switch', description: 'сборка не поднимается, живой остаётся предыдущая' },
+        { path: ['stages', s, 'tests', 'mode'], label: t('set.testsMode'), type: 'select', options: ['none', 'changed', 'my'], inherit: t('sf.inherit') },
+        { path: ['stages', s, 'tests', 'tags'], label: '--test-tags', type: 'text', description: t('set.testTagsHint') },
+        { path: ['stages', s, 'tests', 'extraArgs'], label: t('set.extraArgs'), type: 'tags' },
+        { path: ['stages', s, 'tests', 'failBuild'], label: t('field.failBuild'), type: 'switch', description: t('set.failBuildHint') },
       ],
     })),
   },
   mails: {
-    label: 'Почта',
-    stage: 'отложено',
+    label: t('tab.mails'),
+    stage: t('form.postponed'),
     groups: [
       {
-        description:
-          'Mailpit в сборках отложен (docs/decisions.md D43). Письма из сборок наружу не уходят: почтовые серверы копий прода выключены нейтрализацией, в чистых БД их нет, а без сервера Odoo пытается отправить на localhost:25 внутри контейнера и получает ошибку. Не включайте почтовый сервер вручную в сборке с копией прода: письма уйдут настоящим адресатам.',
-        fields: [
-          { path: ['stages', 'development', 'mails', 'enabled'], label: 'Mailpit в Development', type: 'switch', stage: 'отложено' },
-        ],
+        description: t('set.mailsHint'),
+        fields: [{ path: ['stages', 'development', 'mails', 'enabled'], label: t('set.mailpitDev'), type: 'switch', stage: 'postponed' }],
       },
     ],
   },
-};
+});
 
 /** Settings (spec 8.11): project tabs with forms, full YAML, application settings. */
 export function SettingsPage() {
@@ -220,8 +190,8 @@ export function SettingsPage() {
   const active = isApp ? 'app' : (tab ?? 'repo');
   const project = useBm('projects.get', { projectId: pid ?? '' }, { enabled: !!pid });
   const appCfg = useBm('config.get', { level: 'app' });
-  const update = useBmMutation('projects.update', { success: 'Настройки проекта сохранены' });
-  const putApp = useBmMutation('config.put', { success: 'Настройки приложения сохранены' });
+  const update = useBmMutation('projects.update', { success: t('set.projectSaved') });
+  const putApp = useBmMutation('config.put', { success: t('set.appSaved') });
   const setEnabled = useBmMutation('projects.setEnabled');
   const [yaml, setYaml] = useState('');
   useEffect(() => {
@@ -230,20 +200,21 @@ export function SettingsPage() {
 
   const saveProject = (text: string) => update.mutateAsync({ projectId: pid!, yaml: text });
   // Within a project the «Приложение» tab keeps the project route, so its tabs and the header's project stay.
-  const go = (t: string | null) => nav(pid ? `/projects/${pid}/settings/${t}` : '/settings/app');
+  const go = (tab: string | null) => nav(pid ? `/projects/${pid}/settings/${tab}` : '/settings/app');
+  const tabs = projectTabs();
 
   return (
     <Container size="xl" py="md">
       <Stack>
         <Group justify="space-between">
           <Group gap="sm">
-            <Title order={3}>{isApp ? 'Настройки приложения' : `Настройки проекта ${project.data?.summary.name ?? ''}`}</Title>
+            <Title order={3}>{isApp ? t('set.appTitle') : t('set.projectTitle', { name: project.data?.summary.name ?? '' })}</Title>
             {!isApp && <EditionBadge edition={project.data?.summary.edition} />}
           </Group>
           {project.data && (
             <Group>
               <Switch
-                label="Проект включён (fetch и авто-сборки)"
+                label={t('set.enabled')}
                 checked={project.data.summary.enabled}
                 onChange={(e) => setEnabled.mutate({ projectId: pid!, enabled: e.currentTarget.checked })}
               />
@@ -252,39 +223,37 @@ export function SettingsPage() {
           )}
         </Group>
         {project.data?.summary.legacy && (
-          <Alert color="red" title="Проект старой схемы">
-            Приложение работало внутри вашего репозитория ({project.data.summary.repoPath}), поэтому Git мешал переключать ветки. Сборки и fetch для
-            этого проекта отключены. Удалите проект кнопкой «Удалить проект…» (он удаляется полностью) и добавьте заново: код сборок будет браться с
-            GitHub через копию приложения, а свою папку можно подключить у веток Development.
+          <Alert color="red" title={t('set.legacyTitle')}>
+            {t('set.legacy', { path: project.data.summary.repoPath })}
           </Alert>
         )}
         {project.data?.summary.configError && (
-          <Alert color="red" title="Файл настроек содержит ошибку">
+          <Alert color="red" title={t('set.configError')}>
             {project.data.summary.configError}
           </Alert>
         )}
         <Tabs value={active} onChange={go} keepMounted={false}>
           <Tabs.List>
             {!isApp &&
-              Object.entries(projectTabs).map(([k, t]) => (
-                <Tabs.Tab key={k} value={k} rightSection={t.stage ? <Badge size="xs" variant="light" color="gray">{t.stage}</Badge> : null}>
-                  {t.label}
+              Object.entries(tabs).map(([k, tb]) => (
+                <Tabs.Tab key={k} value={k} rightSection={tb.stage ? <Badge size="xs" variant="light" color="gray">{tb.stage}</Badge> : null}>
+                  {tb.label}
                 </Tabs.Tab>
               ))}
-            {!isApp && <Tabs.Tab value="rules">Правила веток</Tabs.Tab>}
-            {!isApp && <Tabs.Tab value="agents">Ассистенты</Tabs.Tab>}
+            {!isApp && <Tabs.Tab value="rules">{t('tab.rules')}</Tabs.Tab>}
+            {!isApp && <Tabs.Tab value="agents">{t('tab.agents')}</Tabs.Tab>}
             {!isApp && (
-              <Tabs.Tab value="hooks" rightSection={<Badge size="xs" variant="light" color="gray">отложено</Badge>}>
-                Хуки
+              <Tabs.Tab value="hooks" rightSection={<Badge size="xs" variant="light" color="gray">{t('form.postponed')}</Badge>}>
+                {t('tab.hooks')}
               </Tabs.Tab>
             )}
             {!isApp && <Tabs.Tab value="yaml">YAML</Tabs.Tab>}
-            <Tabs.Tab value="app">Приложение</Tabs.Tab>
+            <Tabs.Tab value="app">{t('tab.app')}</Tabs.Tab>
           </Tabs.List>
 
           {!isApp &&
             project.data &&
-            Object.entries(projectTabs).map(([k, t]) => (
+            Object.entries(tabs).map(([k, tb]) => (
               <Tabs.Panel key={k} value={k} pt="md">
                 <Card withBorder>
                   {k === 'runtime' && (
@@ -298,7 +267,7 @@ export function SettingsPage() {
                   {k === 'postgres' && !project.data.summary.legacy && (
                     <MigratePostgresCard projectId={pid!} external={project.data.config.postgres.mode === 'external'} />
                   )}
-                  <YamlForm text={project.data.yaml} groups={t.groups} onSave={saveProject} saving={update.isPending} defaults={project.data.config} />
+                  <YamlForm text={project.data.yaml} groups={tb.groups} onSave={saveProject} saving={update.isPending} defaults={project.data.config} />
                 </Card>
               </Tabs.Panel>
             ))}
@@ -308,15 +277,15 @@ export function SettingsPage() {
               <Card withBorder>
                 <Stack>
                   <Text size="sm" c="dimmed">
-                    Правила применяются сверху вниз, первое совпадение задаёт стадию. match — glob (* — любые символы), список или {'{ regex: … }'}. Редактируются во вкладке YAML.
+                    {t('set.rulesHint')}
                   </Text>
                   <Table striped withTableBorder>
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th>#</Table.Th>
                         <Table.Th>match</Table.Th>
-                        <Table.Th>Стадия</Table.Th>
-                        <Table.Th>Переопределения</Table.Th>
+                        <Table.Th>{t('set.stage')}</Table.Th>
+                        <Table.Th>{t('set.overrides')}</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -331,7 +300,7 @@ export function SettingsPage() {
                     </Table.Tbody>
                   </Table>
                   <Text size="sm">
-                    Режим добавления новых веток: <b>{project.data.config.autoAddBranches}</b>
+                    {tx('set.autoAddMode', { mode: project.data.config.autoAddBranches }, { b: (x) => <b>{x}</b> })}
                   </Text>
                 </Stack>
               </Card>
@@ -347,8 +316,7 @@ export function SettingsPage() {
           {!isApp && project.data && (
             <Tabs.Panel value="hooks" pt="md">
               <Alert color="gray">
-                Хуки шагов сборки (before/after, SQL, odoo-shell, container, host) отложены (docs/decisions.md D44): раздел hooks в YAML
-                принимается, но не выполняется.
+                {t('set.hooks')}
               </Alert>
             </Tabs.Panel>
           )}
@@ -357,17 +325,17 @@ export function SettingsPage() {
             <Tabs.Panel value="yaml" pt="md">
               <Stack>
                 <Text size="sm" c="dimmed">
-                  {project.data.summary.configPath} — правка файла вручную тоже подхватывается автоматически. Пароль Postgres скрыт; «********» сохраняет прежний.
+                  {t('set.yamlHint', { path: project.data.summary.configPath })}
                 </Text>
                 <Box style={{ border: '1px solid var(--mantine-color-default-border)' }}>
                   <YamlEditor path={`project-${pid}`} schema="project" value={yaml} onChange={setYaml} height="calc(100vh - 300px)" />
                 </Box>
                 <Group justify="flex-end">
                   <Button variant="default" onClick={() => setYaml(project.data!.yaml)}>
-                    Отменить
+                    {t('common.revert')}
                   </Button>
                   <Button loading={update.isPending} disabled={yaml === project.data.yaml} onClick={() => void saveProject(yaml)}>
-                    Сохранить
+                    {t('common.save')}
                   </Button>
                 </Group>
               </Stack>
@@ -375,7 +343,7 @@ export function SettingsPage() {
           )}
 
           <Tabs.Panel value="app" pt="md">
-            {appCfg.data && <AppSettings text={appCfg.data.yaml} defaults={appCfg.data.value} onSave={(t) => putApp.mutateAsync({ level: 'app', yaml: t })} saving={putApp.isPending} />}
+            {appCfg.data && <AppSettings text={appCfg.data.yaml} defaults={appCfg.data.value} onSave={(text) => putApp.mutateAsync({ level: 'app', yaml: text })} saving={putApp.isPending} />}
           </Tabs.Panel>
         </Tabs>
       </Stack>
@@ -403,7 +371,7 @@ function RuntimeBuildCard({
   const [context, setContext] = useState(build?.context ?? '');
   const [dockerfile, setDockerfile] = useState(build?.dockerfile ?? 'Dockerfile');
   const [tag, setTag] = useState(image);
-  const buildNow = useBmMutation('projects.buildImage', { success: 'Сборка образа поставлена в очередь' });
+  const buildNow = useBmMutation('projects.buildImage', { success: t('img.queued') });
   const jobs = useBm('jobs.list', { projectId, limit: 30 }, { refetchInterval: 3000 });
   const job = (jobs.data ?? []).find((j) => j.type === 'build_image');
   const [showLog, setShowLog] = useState(false);
@@ -424,31 +392,29 @@ function RuntimeBuildCard({
     <Card withBorder mb="md" data-testid="runtime-build">
       <Stack gap="xs">
         <Group justify="space-between">
-          <Text fw={600}>Сборка образа Odoo из Dockerfile</Text>
+          <Text fw={600}>{t('img.title')}</Text>
           <Badge color={build ? 'teal' : 'gray'} variant="light">
-            {build ? 'включена' : 'выключена'}
+            {t(build ? 'img.on' : 'img.off')}
           </Badge>
         </Group>
         <Text size="xs" c="dimmed">
-          Приложение само собирает образ перед каждой сборкой ветки и при «Применить» (кэш Docker делает это быстрым) и ставит ему тег из поля
-          «Образ Odoo». Изменение Dockerfile помечает живые сборки «конфигурация изменилась». Образ, собранный не приложением (например, образ
-          вашего docker-compose), приложение не перезапишет — задайте свой тег.
+          {t('img.hint')}
         </Text>
         <Group align="flex-end" gap="xs">
-          <TextInput label="Папка сборки (context)" w={420} value={context} onChange={(e) => setContext(e.currentTarget.value)} />
+          <TextInput label={t('img.context')} w={420} value={context} onChange={(e) => setContext(e.currentTarget.value)} />
           <Button
             variant="default"
             onClick={async () => {
-              const d = await window.bm.desktop.selectDirectory('Папка сборки образа (context)');
+              const d = await window.bm.desktop.selectDirectory(t('img.pickContext'));
               if (d) setContext(d);
             }}
           >
-            Выбрать…
+            {t('repo.choose')}
           </Button>
           <TextInput label="Dockerfile" w={180} value={dockerfile} onChange={(e) => setDockerfile(e.currentTarget.value)} />
         </Group>
         <Group align="flex-end" gap="xs">
-          <TextInput label="Тег образа (runtime.image)" w={420} value={tag} onChange={(e) => setTag(e.currentTarget.value)} />
+          <TextInput label={t('img.tag')} w={420} value={tag} onChange={(e) => setTag(e.currentTarget.value)} />
           {tag !== suggested && (
             <Button variant="subtle" onClick={() => setTag(suggested)}>
               {suggested}
@@ -457,15 +423,15 @@ function RuntimeBuildCard({
         </Group>
         <Group gap="xs">
           <Button disabled={!context.trim() || !dockerfile.trim() || !tag.trim()} onClick={() => void save({ context: context.trim(), dockerfile: dockerfile.trim() })}>
-            {build ? 'Сохранить' : 'Включить'}
+            {build ? t('common.save') : t('img.enable')}
           </Button>
           {build && (
             <>
               <Button variant="default" loading={buildNow.isPending} onClick={() => buildNow.mutate({ projectId })}>
-                Собрать образ сейчас
+                {t('img.buildNow')}
               </Button>
               <Button variant="subtle" color="red" onClick={() => void save(null)}>
-                Выключить
+                {t('img.disable')}
               </Button>
             </>
           )}
@@ -473,12 +439,12 @@ function RuntimeBuildCard({
         {job && (
           <Stack gap={4}>
             <Group gap="xs">
-              <Text size="sm">Последняя сборка образа вручную:</Text>
+              <Text size="sm">{t('img.lastManual')}</Text>
               <Badge color={job.status === 'success' ? 'teal' : job.status === 'failed' ? 'red' : 'orange'} variant="light" data-testid="image-job-status">
                 {job.status}
               </Badge>
               <Button size="compact-xs" variant="subtle" onClick={() => setShowLog((v) => !v)}>
-                {showLog ? 'Скрыть лог' : 'Лог'}
+                {t(showLog ? 'img.hideLog' : 'img.log')}
               </Button>
             </Group>
             {job.error && (
@@ -494,13 +460,11 @@ function RuntimeBuildCard({
   );
 }
 
-const SKILL_STATE: Record<string, { text: string; color: string }> = {
-  none: { text: 'не установлен', color: 'gray' },
-  current: { text: 'актуален', color: 'teal' },
-  outdated: { text: 'есть новее', color: 'orange' },
-  modified: { text: 'изменён вручную', color: 'red' },
-  foreign: { text: 'чужой файл', color: 'red' },
-};
+const SKILL_COLOR: Record<string, string> = { none: 'gray', current: 'teal', outdated: 'orange', modified: 'red', foreign: 'red' };
+const skillState = (s: string): { text: string; color: string } => ({
+  text: s in SKILL_COLOR ? t(`skill.${s as 'none'}`) : s,
+  color: SKILL_COLOR[s] ?? 'gray',
+});
 
 /**
  * Skill for Claude Code / Cursor (D52): the app writes it from the project settings into `<folder>/.claude/skills`,
@@ -511,38 +475,35 @@ function AgentSkillCard({ projectId }: { projectId: string }) {
   const [inGit, setInGit] = useState(false);
   const [showText, setShowText] = useState(false);
   const status = useBm('agents.skillStatus', { projectId, ...(dir ? { dir } : {}) });
-  const install = useBmMutation('agents.installSkill', { success: 'Skill для ассистентов записан' });
+  const install = useBmMutation('agents.installSkill', { success: t('skill.written') });
   const s = status.data;
   const target = dir ?? s?.dir ?? null;
-  const st = SKILL_STATE[s?.state ?? 'none']!;
+  const st = skillState(s?.state ?? 'none');
   const risky = s?.state === 'modified' || s?.state === 'foreign';
   const choices = [...new Set([...(s?.suggestedDirs ?? []), ...(target ? [target] : [])])];
   return (
     <Card withBorder data-testid="agent-skill">
       <Stack gap="sm">
         <Group justify="space-between">
-          <Text fw={600}>Skill для Claude Code и Cursor</Text>
+          <Text fw={600}>{t('skill.title')}</Text>
           <Badge color={st.color} variant="light" data-testid="skill-state">
             {st.text}
             {s?.installedVersion ? ` · ${s.installedVersion}` : ''}
           </Badge>
         </Group>
         <Text size="sm" c="dimmed">
-          Инструкция для ассистента по сборкам этого проекта: как найти сборку ветки, обновить модуль, запустить тесты, где логи и что можно делать
-          только через приложение. Приложение пишет её из настроек проекта в <Code>.claude/skills/{s?.name ?? '…'}/SKILL.md</Code> выбранной
-          папки — этот путь читают и Claude Code, и Cursor. Выберите папку, которую открываете в редакторе. После обновления приложения или
-          изменения настроек нажмите «Обновить».
+          {tx('skill.hint', { file: `.claude/skills/${s?.name ?? '…'}/SKILL.md` }, { code: (x: ReactNode) => <Code>{x}</Code> })}
         </Text>
         <Group align="flex-end" gap="xs">
-          <TextInput label="Папка проекта в редакторе" w={420} value={target ?? ''} onChange={(e) => setDir(e.currentTarget.value || null)} />
+          <TextInput label={t('skill.folder')} w={420} value={target ?? ''} onChange={(e) => setDir(e.currentTarget.value || null)} />
           <Button
             variant="default"
             onClick={async () => {
-              const d = await window.bm.desktop.selectDirectory('Папка, которую вы открываете в Claude Code или Cursor');
+              const d = await window.bm.desktop.selectDirectory(t('skill.pickFolder'));
               if (d) setDir(d);
             }}
           >
-            Выбрать…
+            {t('repo.choose')}
           </Button>
           {choices
             .filter((c) => c !== target)
@@ -554,20 +515,19 @@ function AgentSkillCard({ projectId }: { projectId: string }) {
         </Group>
         {s?.path && (
           <Text size="xs" c="dimmed">
-            Файл: <Code>{s.path}</Code>
+            {t('skill.file')} <Code>{s.path}</Code>
           </Text>
         )}
         {risky && (
           <Alert color="red">
             {s?.state === 'modified'
-              ? 'Файл изменён вручную: перезапись уберёт эти правки. Свои правила лучше держать в отдельном skill.'
-              : 'Файл по этому пути создан не приложением: перезапись заменит его.'}
+              ? t('skill.modifiedWarn')
+              : t('skill.foreignWarn')}
           </Alert>
         )}
         {inGit && (
           <Alert color="blue">
-            Папка в git, и skill не в .gitignore: он появится в изменениях репозитория. Закоммитьте его, если skill нужен всей команде, или добавьте в
-            .gitignore.
+            {t('skill.inGit')}
           </Alert>
         )}
         <Group gap="xs">
@@ -581,10 +541,10 @@ function AgentSkillCard({ projectId }: { projectId: string }) {
               setDir(null);
             }}
           >
-            {s?.state === 'none' ? 'Установить' : risky ? 'Перезаписать' : 'Обновить'}
+            {s?.state === 'none' ? t('skill.install') : risky ? t('skill.overwrite') : t('skill.update')}
           </Button>
           <Button variant="subtle" onClick={() => setShowText((v) => !v)}>
-            {showText ? 'Скрыть текст' : 'Показать текст'}
+            {t(showText ? 'skill.hideText' : 'skill.showText')}
           </Button>
         </Group>
         {showText && s && (
@@ -602,52 +562,59 @@ function AppSettings({ text, defaults, onSave, saving }: { text: string; default
   useEffect(() => setYaml(text), [text]);
   const groups: FieldGroup[] = [
     {
-      title: 'Сборки и ресурсы',
+      title: t('app.general'),
       fields: [
-        { path: ['proxyPort'], label: 'Порт Traefik', type: 'number', description: '80, если свободен; иначе 8080' },
-        { path: ['limits', 'maxParallelBuilds'], label: 'Параллельных сборок', type: 'number' },
-        { path: ['limits', 'maxRunningBuilds'], label: 'Живых сборок (предупреждение)', type: 'number' },
-        { path: ['limits', 'enforce'], label: 'Запрещать запуск сверх лимита', type: 'switch' },
-        { path: ['limits', 'minFreeDiskGb'], label: 'Минимум свободного места, ГБ', type: 'number' },
-        { path: ['dataDir'], label: 'Папка данных', type: 'text', description: 'после изменения перезапустите приложение' },
+        // D69: the window switches as soon as the file is saved; Core and main follow the same setting.
+        { path: ['language'], label: t('app.language'), type: 'select', options: [...LANGS], optionLabels: LANG_NAMES, description: t('app.languageHint') },
       ],
     },
     {
-      title: 'Десктоп',
+      title: t('app.builds'),
       fields: [
-        { path: ['desktop', 'closeToTray'], label: 'Закрытие окна — в трей', type: 'switch' },
-        { path: ['desktop', 'startMinimized'], label: 'Запускать свёрнутым (при автозапуске)', type: 'switch' },
-        { path: ['desktop', 'autostart'], label: isMac ? 'Автозапуск при входе в систему' : 'Автозапуск с Windows', type: 'switch', stage: 'этап 3' },
-        { path: ['desktop', 'editor'], label: 'Редактор', type: 'text', description: 'code | cursor | путь к CLI' },
+        { path: ['proxyPort'], label: t('app.traefikPort'), type: 'number', description: t('app.traefikPortHint') },
+        { path: ['limits', 'maxParallelBuilds'], label: t('app.parallel'), type: 'number' },
+        { path: ['limits', 'maxRunningBuilds'], label: t('app.running'), type: 'number' },
+        { path: ['limits', 'enforce'], label: t('app.enforce'), type: 'switch' },
+        { path: ['limits', 'minFreeDiskGb'], label: t('app.minDisk'), type: 'number' },
+        { path: ['dataDir'], label: t('app.dataDir'), type: 'text', description: t('app.dataDirHint') },
+      ],
+    },
+    {
+      title: t('app.desktop'),
+      fields: [
+        { path: ['desktop', 'closeToTray'], label: t('app.closeToTray'), type: 'switch' },
+        { path: ['desktop', 'startMinimized'], label: t('app.startMinimized'), type: 'switch' },
+        { path: ['desktop', 'autostart'], label: t(isMac ? 'app.autostartMac' : 'app.autostartWin'), type: 'switch', stage: 'stage3' },
+        { path: ['desktop', 'editor'], label: t('app.editor'), type: 'text', description: t('app.editorHint') },
         // macOS always opens Terminal.app (D67).
-        ...(isMac ? [] : [{ path: ['desktop', 'terminal'], label: 'Терминал', type: 'select', options: ['wt', 'git-bash', 'cmd'] } satisfies FieldDef]),
+        ...(isMac ? [] : [{ path: ['desktop', 'terminal'], label: t('app.terminal'), type: 'select', options: ['wt', 'git-bash', 'cmd'] } satisfies FieldDef]),
         {
           path: ['desktop', 'dockerDesktopExe'],
           label: isMac ? 'Docker Desktop' : 'Docker Desktop.exe',
           type: 'text',
-          description: isMac ? 'auto или путь к Docker.app' : undefined,
+          description: isMac ? t('app.dockerAppHint') : undefined,
         },
         { path: ['desktop', 'gh'], label: 'gh CLI', type: 'text' },
       ],
     },
     {
-      title: 'Обновления',
+      title: t('app.updates'),
       fields: [
-        { path: ['updates', 'checkOnStart'], label: 'Проверять обновления при запуске', type: 'switch' },
-        { path: ['updates', 'includePrerelease'], label: 'Предлагать предварительные версии', type: 'switch' },
-        { path: ['updates', 'repository'], label: 'GitHub-репозиторий релизов', type: 'text', description: 'owner/repo' },
+        { path: ['updates', 'checkOnStart'], label: t('app.checkOnStart'), type: 'switch' },
+        { path: ['updates', 'includePrerelease'], label: t('app.prerelease'), type: 'switch' },
+        { path: ['updates', 'repository'], label: t('app.repository'), type: 'text', description: 'owner/repo' },
       ],
     },
     {
-      title: isMac ? 'Уведомления' : 'Уведомления Windows',
+      title: t(isMac ? 'app.notificationsMac' : 'app.notificationsWin'),
       fields: [
-        { path: ['desktop', 'notifications', 'buildReady'], label: 'Сборка готова', type: 'switch' },
-        { path: ['desktop', 'notifications', 'buildFailed'], label: 'Сборка упала', type: 'switch' },
-        { path: ['desktop', 'notifications', 'testsFailed'], label: 'Тесты упали', type: 'switch' },
-        { path: ['desktop', 'notifications', 'newBackup'], label: 'Найден новый бэкап прода', type: 'switch' },
-        { path: ['desktop', 'notifications', 'lowDisk'], label: 'Мало места', type: 'switch' },
-        { path: ['desktop', 'notifications', 'buildExpired'], label: 'Истёк срок хранения сборки (dropAfterDays)', type: 'switch' },
-        { path: ['desktop', 'notifications', 'branchRemoved'], label: 'Ветку удалили на GitHub', type: 'switch' },
+        { path: ['desktop', 'notifications', 'buildReady'], label: t('app.nReady'), type: 'switch' },
+        { path: ['desktop', 'notifications', 'buildFailed'], label: t('app.nFailed'), type: 'switch' },
+        { path: ['desktop', 'notifications', 'testsFailed'], label: t('app.nTests'), type: 'switch' },
+        { path: ['desktop', 'notifications', 'newBackup'], label: t('app.nBackup'), type: 'switch' },
+        { path: ['desktop', 'notifications', 'lowDisk'], label: t('app.nDisk'), type: 'switch' },
+        { path: ['desktop', 'notifications', 'buildExpired'], label: t('app.nExpired'), type: 'switch' },
+        { path: ['desktop', 'notifications', 'branchRemoved'], label: t('app.nRemoved'), type: 'switch' },
       ],
     },
   ];
@@ -663,7 +630,7 @@ function AppSettings({ text, defaults, onSave, saving }: { text: string; default
           <YamlEditor path="app" schema="app" value={yaml} onChange={setYaml} height={320} />
           <Group justify="flex-end">
             <Button loading={saving} disabled={yaml === text} onClick={() => void onSave(yaml)}>
-              Сохранить
+              {t('common.save')}
             </Button>
           </Group>
         </Stack>

@@ -8,6 +8,7 @@ import { literalPrefix, renderTemplate, templateToRegex } from './templates';
 import { migrateProjectYaml } from './migrate';
 import { expandPath } from '../util/paths';
 import { log } from '../util/logger';
+import { t } from '../i18n';
 
 export interface ProjectEntry {
   id: string;
@@ -77,7 +78,7 @@ export class ConfigStore {
     let entry: ProjectEntry;
     try {
       const cfg = parseProjectYaml(text);
-      if (cfg.id !== id) throw new BmError('CONFIG_ID', `id «${cfg.id}» не совпадает с именем файла ${id}.yaml`);
+      if (cfg.id !== id) throw new BmError('CONFIG_ID', t('store.idMismatch', { id: cfg.id, file: id }));
       entry = { id, path: file, text, config: cfg, error: null };
     } catch (err) {
       entry = { id, path: file, text, config: null, error: (err as Error).message };
@@ -101,8 +102,8 @@ export class ConfigStore {
   /** Throws a user-facing error if the project is missing or its YAML is invalid. */
   require(id: string): ProjectConfig {
     const e = this.projects.get(id);
-    if (!e) throw new BmError('NO_PROJECT', `Проект «${id}» не найден`);
-    if (!e.config) throw new BmError('CONFIG_INVALID', `Настройки проекта «${id}» содержат ошибку: ${e.error}. Исправьте ${e.path}.`);
+    if (!e) throw new BmError('NO_PROJECT', t('projects.notFound', { id }));
+    if (!e.config) throw new BmError('CONFIG_INVALID', t('store.invalid', { id, error: e.error, path: e.path }));
     return e.config;
   }
 
@@ -111,10 +112,10 @@ export class ConfigStore {
     text = migrateProjectYaml(text) ?? text;
     const cfg = parseProjectYaml(text);
     if (opts.expectId && cfg.id !== opts.expectId) {
-      throw new BmError('CONFIG_ID', `Нельзя менять id проекта (${opts.expectId} → ${cfg.id}). Создайте новый проект.`);
+      throw new BmError('CONFIG_ID', t('store.idChange', { from: opts.expectId, to: cfg.id }));
     }
     if (opts.create && this.projects.has(cfg.id)) {
-      throw new BmError('PROJECT_EXISTS', `Проект с id «${cfg.id}» уже есть. Выберите другой id.`);
+      throw new BmError('PROJECT_EXISTS', t('store.exists', { id: cfg.id }));
     }
     const others = this.list().filter((e) => e.id !== cfg.id && e.config).map((e) => e.config!);
     checkCrossProject(cfg, others);
@@ -210,7 +211,7 @@ export function parseProjectYaml(text: string): ProjectConfig {
   try {
     raw = YAML.parse(text);
   } catch (err) {
-    throw new BmError('YAML_SYNTAX', `Ошибка синтаксиса YAML: ${(err as Error).message}`);
+    throw new BmError('YAML_SYNTAX', t('config.yamlSyntax', { error: (err as Error).message }));
   }
   const cfg = projectConfigSchema.parse(raw ?? {});
   validateProject(cfg);
@@ -228,13 +229,13 @@ export function validateProject(cfg: ProjectConfig): void {
     }
   };
   const db = tryRender(cfg.naming.db, 'naming.db');
-  if (!/^[a-z0-9_]+$/.test(db)) throw new BmError('CONFIG_TEMPLATE', `naming.db даёт недопустимое имя БД «${db}»: только a-z, 0-9, «_»`);
-  if (!cfg.naming.db.includes('{build}')) throw new BmError('CONFIG_TEMPLATE', 'naming.db должен содержать {build}: у каждой сборки своя БД');
+  if (!/^[a-z0-9_]+$/.test(db)) throw new BmError('CONFIG_TEMPLATE', t('store.badDb', { db }));
+  if (!cfg.naming.db.includes('{build}')) throw new BmError('CONFIG_TEMPLATE', t('store.dbNoBuild'));
   if (literalPrefix(cfg.naming.db).length < 3) {
-    throw new BmError('CONFIG_TEMPLATE', 'naming.db должен начинаться с постоянного префикса не короче 3 символов (например o19_br_): по нему приложение узнаёт свои БД');
+    throw new BmError('CONFIG_TEMPLATE', t('store.dbPrefix'));
   }
   for (const p of cfg.postgres.protectedDbs) {
-    if (templateToRegex(cfg.naming.db).test(p)) throw new BmError('CONFIG_TEMPLATE', `naming.db может совпасть с защищённой БД «${p}»`);
+    if (templateToRegex(cfg.naming.db).test(p)) throw new BmError('CONFIG_TEMPLATE', t('store.dbProtected', { db: p }));
   }
   tryRender(cfg.naming.host, 'naming.host');
   tryRender(cfg.naming.composeProject, 'naming.composeProject');
@@ -247,7 +248,7 @@ export function validateProject(cfg: ProjectConfig): void {
     try {
       new RegExp(re);
     } catch (err) {
-      throw new BmError('CONFIG_REGEX', `${field}: неверное регулярное выражение (${(err as Error).message})`);
+      throw new BmError('CONFIG_REGEX', t('store.badRegex', { field, error: (err as Error).message }));
     }
   }
 }
@@ -258,7 +259,7 @@ export function checkCrossProject(cfg: ProjectConfig, others: ProjectConfig[]): 
     const a = literalPrefix(cfg.naming.db);
     const b = literalPrefix(o.naming.db);
     if (a.startsWith(b) || b.startsWith(a)) {
-      throw new BmError('CONFIG_CONFLICT', `Шаблон naming.db («${cfg.naming.db}») пересекается с проектом «${o.id}» («${o.naming.db}»). Задайте другой префикс.`);
+      throw new BmError('CONFIG_CONFLICT', t('store.dbConflict', { tpl: cfg.naming.db, other: o.id, otherTpl: o.naming.db }));
     }
     const samples = ['crm', 'prod', 'a-b', 'dev', cfg.id, o.id];
     for (const [tplA, tplB, field] of [
@@ -271,7 +272,7 @@ export function checkCrossProject(cfg: ProjectConfig, others: ProjectConfig[]): 
         const va = renderTemplate(tplA, { project: cfg.id, slug: s, slug_: s.replace(/-/g, '_') });
         const vb = renderTemplate(tplB, { project: o.id, slug: s, slug_: s.replace(/-/g, '_') });
         if (reB.test(va) || reA.test(vb)) {
-          throw new BmError('CONFIG_CONFLICT', `${field} («${tplA}») может совпасть с проектом «${o.id}» («${tplB}»). Добавьте {project} или другой суффикс.`);
+          throw new BmError('CONFIG_CONFLICT', t('store.conflict', { field, tpl: tplA, other: o.id, otherTpl: tplB }));
         }
       }
     }

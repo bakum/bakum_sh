@@ -3,6 +3,7 @@ import net from 'node:net';
 import type { Ctx } from '../context';
 import { log } from '../util/logger';
 import { runCli, type CliRequest } from './commands';
+import { t } from '../i18n';
 
 /**
  * Named pipe of the command line (D53). No TCP port: the pipe is local, and its default Windows ACL lets only the
@@ -31,7 +32,7 @@ export function startCliServer(ctx: Ctx, pipe: string): void {
         if (!Array.isArray(v.argv) || !v.argv.every((a) => typeof a === 'string') || typeof v.cwd !== 'string') throw new Error('bad request');
         req = { argv: v.argv, cwd: v.cwd };
       } catch {
-        send({ e: 'Неверный запрос CLI' });
+        send({ e: t('cli.badRequest') });
         send({ x: 1 });
         sock.end();
         return;

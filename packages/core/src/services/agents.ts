@@ -13,6 +13,7 @@ import * as git from '../git';
 import { isInside, samePath, toPosix } from '../util/paths';
 import { audit } from './audit';
 import { onProjectConfigChanged } from './projects';
+import { t } from '../i18n';
 
 /** Protected branches of the project now: the settings list plus branches of the registry with the protected setting. */
 function protectedBranches(ctx: Ctx, cfg: ProjectConfig): string[] {
@@ -95,13 +96,13 @@ export function outdatedSkills(ctx: Ctx): { projectId: string; path: string }[] 
 export async function installSkill(ctx: Ctx, projectId: string, dir: string, overwrite: boolean): Promise<{ path: string; inGit: boolean }> {
   const cfg = ctx.store.require(projectId);
   if (!path.isAbsolute(dir) || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
-    throw new BmError('BAD_DIR', `Папка «${dir}» не найдена. Выберите существующую папку, в которой открываете проект в Claude Code или Cursor.`);
+    throw new BmError('BAD_DIR', t('agents.badDir', { dir }));
   }
   const file = skillPath(dir, cfg.id);
   const next = content(ctx, cfg);
   const cur = stateOf(file, next);
   if ((cur.state === 'modified' || cur.state === 'foreign') && !overwrite) {
-    throw new BmError('SKILL_MODIFIED', `${toPosix(file)} изменён вручную. Перезапишите его, если правки не нужны, или перенесите их в другой skill.`);
+    throw new BmError('SKILL_MODIFIED', t('agents.modified', { file: toPosix(file) }));
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;

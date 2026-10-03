@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { IconCircleCheck, IconCircleX } from '@tabler/icons-react';
 import { useBm, useBmMutation } from '../lib/query';
 import { fmtAgo } from '../lib/format';
+import { t, tx } from '../i18n';
 
 function StatusRow({ ok, title, text }: { ok: boolean; title: string; text: string }) {
   return (
@@ -21,18 +22,13 @@ function StatusRow({ ok, title, text }: { ok: boolean; title: string; text: stri
   );
 }
 
-const ORPHAN_KIND: Record<string, string> = {
-  database: 'БД',
-  filestore: 'filestore',
-  compose: 'compose-проект',
-  container: 'контейнер',
-  worktree: 'worktree',
-};
+const orphanKind = (kind: string): string =>
+  ({ database: t('status.database'), filestore: 'filestore', compose: t('status.compose'), container: t('status.container'), worktree: 'worktree' })[kind] ?? kind;
 
 /** Status (spec 8.11/8.12): services, resources, fetches, reconciliation discrepancies and orphans. */
 export function StatusPage() {
   const st = useBm('system.status', { refresh: true }, { refetchInterval: 10000 });
-  const cleanup = useBmMutation('system.cleanupOrphans', { success: 'Очистка выполнена' });
+  const cleanup = useBmMutation('system.cleanupOrphans', { success: t('status.cleaned') });
   const appState = useBm('system.state', {});
   const [selected, setSelected] = useState<string[]>([]);
   const nav = useNavigate();
@@ -45,7 +41,7 @@ export function StatusPage() {
         <Group justify="space-between">
           <Title order={3}>Status</Title>
           <Button variant="default" loading={st.isFetching} onClick={() => void st.refetch()}>
-            Обновить
+            {t('common.refresh')}
           </Button>
         </Group>
         <SimpleGrid cols={3}>
@@ -61,22 +57,22 @@ export function StatusPage() {
               {Object.entries(s.postgres).map(([pid, p]) => (
                 <StatusRow key={pid} ok={p.ok} title={`Postgres · ${pid}`} text={p.text} />
               ))}
-              {!Object.keys(s.postgres).length && <Text size="sm" c="dimmed">Нет проектов</Text>}
+              {!Object.keys(s.postgres).length && <Text size="sm" c="dimmed">{t('status.noProjects')}</Text>}
             </Stack>
           </Card>
           <Card withBorder>
             <Stack gap={6}>
               <StatusRow
                 ok={!s.disk.low}
-                title="Свободное место"
-                text={s.disk.freeGb === null ? 'неизвестно' : `${s.disk.freeGb.toFixed(1)} ГБ на диске данных`}
+                title={t('status.freeSpace')}
+                text={s.disk.freeGb === null ? t('status.unknown') : t('status.freeGb', { gb: s.disk.freeGb.toFixed(1) })}
               />
               <StatusRow
                 ok={s.running.count <= s.running.limit}
-                title="Живые сборки"
-                text={`${s.running.count} из ${s.running.limit} (maxRunningBuilds)`}
+                title={t('status.liveBuilds')}
+                text={t('status.liveOf', { n: s.running.count, limit: s.running.limit })}
               />
-              <StatusRow ok title="Очередь" text={`выполняется ${s.queue.running} из ${s.queue.maxParallel}, ждёт ${s.queue.queued}`} />
+              <StatusRow ok title={t('status.queue')} text={t('status.queueText', { running: s.queue.running, max: s.queue.maxParallel, queued: s.queue.queued })} />
             </Stack>
           </Card>
         </SimpleGrid>
@@ -85,10 +81,10 @@ export function StatusPage() {
           <Alert key={k.projectId} color="orange" variant="light" data-testid="outdated-skill">
             <Group justify="space-between">
               <Text size="sm">
-                Skill для ассистентов проекта {k.projectId} устарел (<Code>{k.path}</Code>): приложение или настройки изменились.
+                {tx('status.skillOutdated', { id: k.projectId, path: k.path }, { code: (x) => <Code>{x}</Code> })}
               </Text>
               <Button size="compact-sm" variant="light" onClick={() => nav(`/projects/${k.projectId}/settings/agents`)}>
-                Обновить
+                {t('common.refresh')}
               </Button>
             </Group>
           </Alert>
@@ -96,7 +92,7 @@ export function StatusPage() {
 
         <Card withBorder>
           <Text fw={600} mb="xs">
-            Последний fetch
+            {t('status.lastFetch')}
           </Text>
           <Table>
             <Table.Tbody>
@@ -104,7 +100,7 @@ export function StatusPage() {
                 <Table.Tr key={f.projectId}>
                   <Table.Td w={200}>{f.projectId}</Table.Td>
                   <Table.Td>{fmtAgo(f.at)}</Table.Td>
-                  <Table.Td c={f.error ? 'red' : undefined}>{f.error ?? 'ок'}</Table.Td>
+                  <Table.Td c={f.error ? 'red' : undefined}>{f.error ?? t('status.ok')}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -113,11 +109,11 @@ export function StatusPage() {
 
         <Card withBorder>
           <Text fw={600} mb="xs">
-            Согласование реестра с Docker, Postgres и git
+            {t('status.reconcile')}
           </Text>
           {!s.discrepancies.length ? (
             <Text size="sm" c="dimmed">
-              Расхождений нет
+              {t('status.noDiscrepancies')}
             </Text>
           ) : (
             <Table striped>
@@ -139,23 +135,23 @@ export function StatusPage() {
 
         <Card withBorder>
           <Group justify="space-between" mb="xs">
-            <Text fw={600}>Сироты (ресурсы приложения без записи в реестре)</Text>
+            <Text fw={600}>{t('status.orphans')}</Text>
             <Button
               color="red"
               disabled={!selected.length}
               loading={cleanup.isPending}
               onClick={async () => {
-                const r = await window.bm.desktop.confirm({ message: `Удалить выбранные ресурсы (${selected.length})?`, detail: 'Действие необратимо.', buttons: ['Удалить', 'Отмена'] });
+                const r = await window.bm.desktop.confirm({ message: t('status.deleteSelectedQ', { n: selected.length }), detail: t('status.irreversible'), buttons: [t('common.delete'), t('common.cancel')] });
                 if (r !== 0) return;
                 cleanup.mutate({ items: s.orphans.filter((o) => selected.includes(orphanKey(o))) }, { onSuccess: () => setSelected([]) });
               }}
             >
-              Удалить выбранные
+              {t('status.deleteSelected')}
             </Button>
           </Group>
           {!s.orphans.length ? (
             <Text size="sm" c="dimmed">
-              Сирот нет
+              {t('status.noOrphans')}
             </Text>
           ) : (
             <Table>
@@ -172,7 +168,7 @@ export function StatusPage() {
                         }}
                       />
                     </Table.Td>
-                    <Table.Td w={140}>{ORPHAN_KIND[o.kind] ?? o.kind}</Table.Td>
+                    <Table.Td w={140}>{orphanKind(o.kind)}</Table.Td>
                     <Table.Td>
                       <Code>{o.name}</Code>
                     </Table.Td>
@@ -187,11 +183,10 @@ export function StatusPage() {
         <Alert variant="light" color="gray">
           <Group justify="space-between">
             <Text size="sm">
-              Версия: <Code>{appState.data?.version ?? '…'}</Code> · Настройки: <Code>{s.paths.configDir}</Code> · Данные:{' '}
-              <Code>{s.paths.dataDir}</Code>
+              {tx('status.paths', { version: appState.data?.version ?? '…', config: s.paths.configDir, data: s.paths.dataDir }, { code: (x) => <Code>{x}</Code> })}
             </Text>
             <Button variant="default" onClick={() => void window.bm.call('shell.open', { target: 'logs-dir' })}>
-              Открыть папку логов
+              {t('status.openLogs')}
             </Button>
           </Group>
         </Alert>

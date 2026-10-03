@@ -29,6 +29,7 @@ import { nowIso } from '../util/time';
 import { codeLagOf, lagBadge } from './code-lag';
 import { localWatcher } from './watch-local';
 import { runtimeState } from '../state';
+import { t } from '../i18n';
 
 /** Branch names known to git per project, refreshed by fetch. */
 const gitCache = new Map<string, GitBranchInfo[]>();
@@ -69,38 +70,38 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
   if (folderBlocked) {
     badges.push({
       kind: 'folder-wrong-branch',
-      text: `В папке ${r.scope.folder} открыта ветка ${folderBranch}, а не ${b.name}: сборка заблокирована, с ней ничего не происходит (работает только Stop). Откройте ${b.name} в папке — блокировка снимется сама.`,
+      text: t('badge.folderWrongBranch', { folder: r.scope.folder, open: folderBranch, branch: b.name }),
     });
   }
-  if (!live && !active) badges.push({ kind: 'no-build', text: 'Сборки нет' });
+  if (!live && !active) badges.push({ kind: 'no-build', text: t('badge.noBuild') });
   if (live && head && live.commitSha && head !== live.commitSha && !active && !folderBlocked) {
-    badges.push({ kind: 'unbuilt-commits', text: 'Есть несобранные коммиты' });
+    badges.push({ kind: 'unbuilt-commits', text: t('badge.unbuilt') });
   }
   if (live && b.stageChangedAt && b.stageChangedAt > live.createdAt) {
-    badges.push({ kind: 'stage-changed', text: 'Настройки стадии изменились — Rebuild' });
+    badges.push({ kind: 'stage-changed', text: t('badge.stageChanged') });
   }
-  if (live && live.configHash && live.configHash !== hash) badges.push({ kind: 'config-changed', text: 'Конфигурация изменилась' });
+  if (live && live.configHash && live.configHash !== hash) badges.push({ kind: 'config-changed', text: t('badge.configChanged') });
   // D64: the container mounts the worktree (same config), but it is on another commit — e.g. after building from the
   // user's folder. A changed config already asks for «Применить», which puts the worktree back itself.
   const wtHead = !r.scope.folder && live?.commitSha && b.worktreePath && !active && live.configHash === hash ? worktreeHeadSync(b.worktreePath) : null;
   if (wtHead && wtHead !== live!.commitSha) {
     badges.push({
       kind: 'worktree-off-build',
-      text: `Код в worktree (${wtHead.slice(0, 7)}) не совпадает с кодом сборки #${live!.number} (${live!.commitSha!.slice(0, 7)}): Odoo работает не на том коде. «Применить» вернёт worktree к коду сборки и пересоздаст контейнер, база не трогается.`,
+      text: t('badge.worktreeOffBuild', { head: wtHead.slice(0, 7), number: live!.number, sha: live!.commitSha!.slice(0, 7) }),
     });
   }
-  if (b.pausedReason === 'dirty-worktree') badges.push({ kind: 'dirty-worktree', text: 'Авто-сборки приостановлены: в worktree есть изменения' });
-  if (b.pausedReason === 'force-push') badges.push({ kind: 'force-push', text: 'Force-push в ветку: авто-сборки приостановлены' });
+  if (b.pausedReason === 'dirty-worktree') badges.push({ kind: 'dirty-worktree', text: t('badge.dirtyWorktree') });
+  if (b.pausedReason === 'force-push') badges.push({ kind: 'force-push', text: t('badge.forcePush') });
   // D47: a branch behind the code of its copy source gets the lag badge instead of «mirror newer» — a Rebuild from the
   // fresh copy would run older module code on that database.
   const lag = codeLagOf(ctx, cfg, b, r.scope);
   const behind = lag && lag.behind > 0 ? lag : null;
   if (behind) badges.push(lagBadge(behind));
   else if (live && live.sourceMirrorBuildId && prodLive && prodLive.id !== live.sourceMirrorBuildId && b.stage !== 'production') {
-    badges.push({ kind: 'mirror-newer', text: 'Зеркало прода обновилось после сборки вашей БД: Rebuild возьмёт свежую копию' });
+    badges.push({ kind: 'mirror-newer', text: t('badge.mirrorNewer') });
   }
   const liveView = live ? toBuildView(ctx, live, { branchName: b.name, currentHash: hash, dropAfterDays: r.scope.dropAfterDays, lastActiveAt: b.lastActiveAt }) : null;
-  if (liveView && liveView.containerState === 'missing') badges.push({ kind: 'discrepancy', text: 'Контейнер сборки не найден в Docker' });
+  if (liveView && liveView.containerState === 'missing') badges.push({ kind: 'discrepancy', text: t('badge.noContainer') });
   return {
     id: b.id,
     projectId: b.projectId,
@@ -166,7 +167,7 @@ export function getBranchView(ctx: Ctx, branchId: number): BranchView {
 
 export function mustBranch(ctx: Ctx, branchId: number): BranchRow {
   const b = branchRow(ctx, branchId);
-  if (!b) throw new BmError('NO_BRANCH', 'Ветка не найдена (возможно, удалена)');
+  if (!b) throw new BmError('NO_BRANCH', t('branches.notFound'));
   return b;
 }
 
@@ -174,8 +175,8 @@ export function mustBranch(ctx: Ctx, branchId: number): BranchRow {
 export async function addBranch(ctx: Ctx, p: { projectId: string; name: string; stage?: Stage; build?: boolean }): Promise<BranchView> {
   const cfg = ctx.store.require(p.projectId);
   const known = await gitBranches(ctx, cfg);
-  if (!known.some((g) => g.name === p.name)) throw new BmError('NO_BRANCH_REF', `Ветка «${p.name}» не найдена в репозитории. Выполните fetch.`);
-  if (p.stage === 'production') throw new BmError('BAD_STAGE', 'Production — ровно одна ветка: перетащите ветку на Production, чтобы заменить её.');
+  if (!known.some((g) => g.name === p.name)) throw new BmError('NO_BRANCH_REF', t('branches.noRef', { name: p.name }));
+  if (p.stage === 'production') throw new BmError('BAD_STAGE', t('branches.prodOne'));
   const sel = selectStage(cfg, p.name);
   const stage: Stage = p.stage ?? (sel.stage === 'ignore' || sel.stage === 'production' ? 'development' : sel.stage);
   setAutoAddSkip(ctx, cfg.id, p.name, false);
@@ -216,7 +217,7 @@ export function setStage(ctx: Ctx, branchId: number, stage: Stage): BranchView {
   const cfg = ctx.store.require(b.projectId);
   if (b.stage === stage) return getBranchView(ctx, branchId);
   if (b.stage === 'production') {
-    throw new BmError('BAD_STAGE', 'Production не может остаться без ветки: перетащите на Production другую ветку, текущая уйдёт в Development.');
+    throw new BmError('BAD_STAGE', t('branches.prodEmpty'));
   }
   if (stage === 'production') {
     const e = ctx.store.get(cfg.id)!;
@@ -236,7 +237,7 @@ export function setStage(ctx: Ctx, branchId: number, stage: Stage): BranchView {
 /** «Скрыть» / «Показать» in the sidebar. Only the list changes: builds, auto-builds and the branch itself stay. */
 export function setHidden(ctx: Ctx, branchId: number, hidden: boolean): BranchView {
   const b = mustBranch(ctx, branchId);
-  if (b.stage === 'production' && hidden) throw new BmError('BAD_STAGE', 'Продакшн-ветку скрыть нельзя.');
+  if (b.stage === 'production' && hidden) throw new BmError('BAD_STAGE', t('branches.hideProd'));
   if (b.hidden === hidden) return getBranchView(ctx, branchId);
   ctx.db.update(branches).set({ hidden }).where(eq(branches.id, branchId)).run();
   audit(ctx, { projectId: b.projectId, action: hidden ? 'branch.hide' : 'branch.show', target: b.name });
@@ -291,7 +292,7 @@ export function forkName(ctx: Ctx, projectId: string, input: string): { name: st
   } catch {
     name = input;
   }
-  return { name, base: nb.base, valid, error: valid ? null : `Имя «${short}» не подходит под ${nb.nameRegex}` };
+  return { name, base: nb.base, valid, error: valid ? null : t('branches.badName', { name: short, regex: nb.nameRegex }) };
 }
 
 /**
@@ -306,14 +307,14 @@ export async function forkBranch(ctx: Ctx, p: { branchId: number; name: string; 
   const repo = repoDir(cfg);
   const n = forkName(ctx, cfg.id, p.name);
   if (!n.valid) throw new BmError('BAD_NAME', n.error!);
-  if (!(await git.isValidBranchName(repo, n.name))) throw new BmError('BAD_NAME', `«${n.name}» — недопустимое имя ветки git`);
+  if (!(await git.isValidBranchName(repo, n.name))) throw new BmError('BAD_NAME', t('branches.invalidGit', { name: n.name }));
   const known = await gitBranches(ctx, cfg, true);
-  if (known.some((g) => g.name === n.name)) throw new BmError('BRANCH_EXISTS', `Ветка «${n.name}» уже существует`);
+  if (known.some((g) => g.name === n.name)) throw new BmError('BRANCH_EXISTS', t('branches.exists', { name: n.name }));
   const live = liveBuild(ctx, src.id);
   // A live build from the user's folder may sit on an unpushed commit: then the branch starts from the remote head.
   const liveSha = live?.commitSha && (await git.revParse(repo, live.commitSha)) ? live.commitSha : null;
   const start = liveSha ?? (await git.remoteSha(repo, cfg.repo.remote, src.name));
-  if (!start) throw new BmError('NO_BRANCH_REF', `Не найден коммит ветки «${src.name}». Выполните fetch.`);
+  if (!start) throw new BmError('NO_BRANCH_REF', t('branches.noCommit', { name: src.name }));
   await git.pushNewBranch(repo, cfg.repo.remote, start, n.name, { interactive: p.interactive });
   await git.fetch(repo, cfg.repo.remote);
   invalidateGitCache(cfg.id);

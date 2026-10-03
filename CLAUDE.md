@@ -125,8 +125,15 @@ and orphans (Status page); nothing is deleted without the user.
 
 ## Conventions
 
-- UI text, user-facing error messages (`BmError` with a clear next step), README/CHANGELOG/decisions are in Russian;
-  code, comments and commit messages in English (commit messages explain why).
+- User-facing text is in three languages (D69): Ukrainian (default), Russian, English — UI, `BmError` messages (with a
+  clear next step), notifications, job/build log lines, the `bm` command. Never hard-code it: add a key with all three
+  translations to the area's dictionary (Core `packages/core/src/messages/*.ts` → `t()` from `core/src/i18n.ts`;
+  renderer `renderer/src/i18n/messages/*.ts` → `t()` / `tx()` from `renderer/src/i18n`; main `src/main/i18n.ts`;
+  shared `packages/shared/src/i18n.ts` → `st()`). `{name}` is a parameter, `{n:one|few|many}` (en `{n:one|other}`) a
+  plural; module-level labels must be functions so they follow a language change. `test/i18n.test.ts` checks that
+  every entry has all languages with the same parameters; Core tests run in Russian (`test/setup.ts`).
+  README/CHANGELOG/decisions/spec stay in Russian; code, comments and commit messages in English (commit messages
+  explain why).
 - Line endings are mixed (many files are CRLF, `CHANGELOG.md` has both); preserve each file's existing endings when
   editing.
 - OS differences live in `core/src/util/platform.ts` and `desktop/src/main/platform-dirs.ts` (D67); keep Windows

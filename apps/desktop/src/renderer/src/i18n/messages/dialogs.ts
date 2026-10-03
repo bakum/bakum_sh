@@ -1,0 +1,188 @@
+import type { Entry } from '@bm/shared';
+
+/** Dialogs: merge, delete branch / project, Connect as, Postgres move, Fork. */
+export default {
+  'merge.into': { uk: 'Влити в гілку', ru: 'Влить в ветку', en: 'Merge into branch' },
+  'merge.hint': {
+    uk: 'Відкриється сторінка порівняння на GitHub, де можна створити PR. Локальний merge і push застосунок не виконує.',
+    ru: 'Откроется страница сравнения на GitHub, где можно создать PR. Локальный merge и push приложение не выполняет.',
+    en: 'The GitHub compare page opens, where you can create a PR. The app does not merge or push locally.',
+  },
+  'merge.open': { uk: 'Відкрити compare на GitHub', ru: 'Открыть compare на GitHub', en: 'Open compare on GitHub' },
+
+  'delBranch.deleting': { uk: 'Гілка видаляється', ru: 'Ветка удаляется', en: 'The branch is being deleted' },
+  'delBranch.title': { uk: 'Видалити гілку {branch}', ru: 'Удалить ветку {branch}', en: 'Delete branch {branch}' },
+  'delBranch.protected': {
+    uk: 'Гілку захищено (protected). Зніміть захист у Settings гілки, щоб видалити її.',
+    ru: 'Ветка защищена (protected). Снимите защиту в Settings ветки, чтобы удалить её.',
+    en: 'The branch is protected. Turn off protection in the branch Settings to delete it.',
+  },
+  'delBranch.what': {
+    uk: 'Буде відкинуто всі збірки гілки ({n}): БД, filestore і контейнери. Worktree буде видалено. Історія залишається в Audit Logs. Гілку на GitHub і вашу папку з кодом не зачеплено: якщо гілка більше не потрібна, видаліть її на GitHub самі.',
+    ru: 'Будут отброшены все сборки ветки ({n}): БД, filestore и контейнеры. Worktree будет удалён. История остаётся в Audit Logs. Ветка на GitHub и ваша папка с кодом не трогаются: если ветка больше не нужна, удалите её на GitHub сами.',
+    en: 'All builds of the branch ({n}) will be dropped: databases, filestores and containers. The worktree will be removed. History stays in Audit Logs. The branch on GitHub and your code folder are not touched: if you no longer need the branch, delete it on GitHub yourself.',
+  },
+  'delBranch.dirty': { uk: 'У worktree є незакомічені зміни', ru: 'В worktree есть незакоммиченные изменения', en: 'The worktree has uncommitted changes' },
+  'delBranch.dirtyOk': { uk: 'Я розумію, що ці зміни буде втрачено', ru: 'Я понимаю, что эти изменения будут потеряны', en: 'I understand these changes will be lost' },
+  'delBranch.typeSlug': { uk: 'Для підтвердження введіть slug: {slug}', ru: 'Для подтверждения введите slug: {slug}', en: 'To confirm, type the slug: {slug}' },
+
+  'connectAs.failed': { uk: 'Не вдалося увійти як {login}', ru: 'Не удалось войти как {login}', en: 'Could not log in as {login}' },
+  'connectAs.title': { uk: 'Увійти як — внутрішні користувачі{count}', ru: 'Войти как — внутренние пользователи{count}', en: 'Log in as — internal users{count}' },
+  'connectAs.search': { uk: 'Пошук за іменем або логіном', ru: 'Поиск по имени или логину', en: 'Search by name or login' },
+  'connectAs.byLogin': { uk: 'Увійти за логіном', ru: 'Войти по логину', en: 'Log in by login' },
+  'connectAs.login': { uk: 'Увійти', ru: 'Войти', en: 'Log in' },
+  'connectAs.hint': {
+    uk: 'Сесію створює Odoo збірки (кілька секунд), пароль користувача не читається й не змінюється. Браузер вийде з поточної сесії на {url}.',
+    ru: 'Сессию создаёт Odoo сборки (несколько секунд), пароль пользователя не читается и не меняется. Браузер выйдет из текущей сессии на {url}.',
+    en: 'The build’s Odoo creates the session (a few seconds); the user’s password is neither read nor changed. The browser leaves its current session at {url}.',
+  },
+  'connectAs.buildAddress': { uk: 'адресі збірки', ru: 'адресе сборки', en: 'the build address' },
+  'connectAs.name': { uk: 'Ім’я', ru: 'Имя', en: 'Name' },
+  'connectAs.loginCol': { uk: 'Логін', ru: 'Логин', en: 'Login' },
+  'connectAs.nobody': { uk: 'Нікого не знайшли', ru: 'Никого не нашли', en: 'Nobody found' },
+  'connectAs.noUsers': { uk: 'У базі немає внутрішніх користувачів', ru: 'В базе нет внутренних пользователей', en: 'The database has no internal users' },
+
+  'delProject.deleting': { uk: 'Проєкт видаляється', ru: 'Проект удаляется', en: 'The project is being deleted' },
+  'delProject.button': { uk: 'Видалити проєкт…', ru: 'Удалить проект…', en: 'Delete project…' },
+  'delProject.title': { uk: 'Видалити проєкт {id}', ru: 'Удалить проект {id}', en: 'Delete project {id}' },
+  'delProject.what': {
+    uk: 'Проєкт видаляється повністю: збірки (контейнери, БД, filestore), папки гілок, копія репозиторію застосунку, compose-файли, журнали, файл налаштувань і записи в реєстрі. Ваш репозиторій, його гілки й гілки на GitHub не зачіпаються.',
+    ru: 'Проект удаляется полностью: сборки (контейнеры, БД, filestore), папки веток, копия репозитория приложения, compose-файлы, логи, файл настроек и записи в реестре. Ваш репозиторий, его ветки и ветки на GitHub не затрагиваются.',
+    en: 'The project is deleted completely: builds (containers, databases, filestores), branch folders, the app’s repository copy, compose files, logs, the settings file and registry records. Your repository, its branches and the branches on GitHub are not affected.',
+  },
+  'delProject.builds': { uk: 'Збірки', ru: 'Сборки', en: 'Builds' },
+  'delProject.databases': { uk: 'Бази даних', ru: 'Базы данных', en: 'Databases' },
+  'delProject.worktrees': { uk: 'Папки гілок (worktree)', ru: 'Папки веток (worktree)', en: 'Branch folders (worktree)' },
+  'delProject.folders': {
+    uk: 'Папки застосунку (копія репозиторію, compose-файли, журнали збірок)',
+    ru: 'Папки приложения (копия репозитория, compose-файлы, логи сборок)',
+    en: 'App folders (repository copy, compose files, build logs)',
+  },
+  'delProject.postgres': {
+    uk: '<b>Postgres проєкту:</b> {pg} — видаляються разом з усіма базами.',
+    ru: '<b>Postgres проекта:</b> {pg} — удаляются вместе со всеми базами.',
+    en: '<b>Project Postgres:</b> {pg} — removed together with all databases.',
+  },
+  'delProject.image': { uk: '<b>Образ Odoo, зібраний застосунком:</b> {image}', ru: '<b>Образ Odoo, собранный приложением:</b> {image}', en: '<b>Odoo image built by the app:</b> {image}' },
+  'delProject.settings': {
+    uk: '<b>Файл налаштувань:</b> <code>{file}</code> — видаляється без копії. <b>Реєстр:</b> завдань {jobs} (з журналами), записів аудиту {audit}, винятків автододавання {kv}. В Audit Logs залишиться один запис про видалення.',
+    ru: '<b>Файл настроек:</b> <code>{file}</code> — удаляется без копии. <b>Реестр:</b> задач {jobs} (с логами), записей аудита {audit}, исключений автодобавления {kv}. В Audit Logs останется одна запись об удалении.',
+    en: '<b>Settings file:</b> <code>{file}</code> — deleted without a copy. <b>Registry:</b> {jobs} jobs (with logs), {audit} audit records, {kv} auto-add exceptions. Audit Logs keeps one record of the deletion.',
+  },
+  'delProject.legacy': {
+    uk: 'Проєкт старої схеми: папки гілок видаляються з вашого репозиторію командою git worktree remove, більше в ньому нічого не змінюється.',
+    ru: 'Проект старой схемы: папки веток удаляются из вашего репозитория командой git worktree remove, больше в нём ничего не меняется.',
+    en: 'An old-style project: branch folders are removed from your repository with git worktree remove; nothing else in it changes.',
+  },
+  'delProject.typeId': { uk: 'Введіть id проєкту: {id}', ru: 'Введите id проекта: {id}', en: 'Type the project id: {id}' },
+  'delProject.confirm': { uk: 'Видалити проєкт', ru: 'Удалить проект', en: 'Delete project' },
+
+  'migrate.external': {
+    uk: 'Гілки працюють на зовнішньому Postgres (зазвичай <code>db</code> вашого compose-проєкту): якщо його зупинити або видалити, збірки не запустяться. Власний Postgres застосунку не залежить від вашого стенду.',
+    ru: 'Ветки работают на внешнем Postgres (обычно <code>db</code> вашего compose-проекта): если его остановить или удалить, сборки не запустятся. Свой Postgres приложения не зависит от вашего стенда.',
+    en: 'Branches run on an external Postgres (usually the <code>db</code> of your compose project): if it is stopped or removed, builds will not start. The app’s own Postgres does not depend on your stack.',
+  },
+  'migrate.button': { uk: 'Перевести на власний Postgres…', ru: 'Перевести на свой Postgres…', en: 'Move to own Postgres…' },
+  'migrate.title': { uk: 'Перевести проєкт на власний Postgres', ru: 'Перевести проект на свой Postgres', en: 'Move the project to its own Postgres' },
+  'migrate.checking': { uk: 'Перевірка…', ru: 'Проверка…', en: 'Checking…' },
+  'migrate.now': { uk: 'Зараз:', ru: 'Сейчас:', en: 'Now:' },
+  'migrate.container': { uk: ', контейнер ', ru: ', контейнер ', en: ', container ' },
+  'migrate.unavailable': { uk: 'Postgres недоступний{start}: {error}', ru: 'Postgres недоступен{start}: {error}', en: 'Postgres is unavailable{start}: {error}' },
+  'migrate.willStart': {
+    uk: ' — завдання спочатку запустить контейнер {name}',
+    ru: ' — задача сначала запустит контейнер {name}',
+    en: ' — the job will start container {name} first',
+  },
+  'migrate.target': {
+    uk: '<b>Буде:</b> контейнер <code>{container}</code> (образ <code>{image}</code>), порт 127.0.0.1:{port}, мережа <code>{network}</code>',
+    ru: '<b>Будет:</b> контейнер <code>{container}</code> (образ <code>{image}</code>), порт 127.0.0.1:{port}, сеть <code>{network}</code>',
+    en: '<b>Will be:</b> container <code>{container}</code> (image <code>{image}</code>), port 127.0.0.1:{port}, network <code>{network}</code>',
+  },
+  'migrate.databases': { uk: 'Бази для копіювання (pg_dump → pg_restore): {n}', ru: 'Базы для копирования (pg_dump → pg_restore): {n}', en: 'Databases to copy (pg_dump → pg_restore): {n}' },
+  'migrate.liveBuilds': {
+    uk: '<b>Живі збірки</b> ({builds}) на час копіювання зупиняються й перестворюються в мережі {network}.',
+    ru: '<b>Живые сборки</b> ({builds}) на время копирования останавливаются и пересоздаются в сети {network}.',
+    en: '<b>Live builds</b> ({builds}) are stopped while copying and recreated in network {network}.',
+  },
+  'migrate.safe': {
+    uk: 'Бази в колишньому Postgres не видаляються. Якщо щось піде не так, налаштування проєкту не змінюються, а новий контейнер видаляється. Решта завдань проєкту чекає закінчення перенесення.',
+    ru: 'Базы в прежнем Postgres не удаляются. Если что-то пойдёт не так, настройки проекта не меняются, а новый контейнер удаляется. Остальные задачи проекта ждут окончания перевода.',
+    en: 'The databases in the previous Postgres are not deleted. If something goes wrong, the project settings do not change and the new container is removed. Other jobs of the project wait until the move ends.',
+  },
+  'migrate.go': { uk: 'Перевести', ru: 'Перевести', en: 'Move' },
+  'migrate.done': { uk: 'Проєкт працює на власному Postgres.', ru: 'Проект работает на своём Postgres.', en: 'The project runs on its own Postgres.' },
+  'migrate.waiting': { uk: 'очікування…', ru: 'ожидание…', en: 'waiting…' },
+  'migrate.cancelJob': { uk: 'Скасувати', ru: 'Отменить', en: 'Cancel' },
+  'migrate.hide': { uk: 'Сховати', ru: 'Скрыть', en: 'Hide' },
+
+  'fork.created': { uk: 'Гілку створено, збірку поставлено в чергу', ru: 'Ветка создана, сборка поставлена в очередь', en: 'Branch created, build queued' },
+  'fork.fromLive': { uk: 'коміту живої збірки {sha}', ru: 'коммита живой сборки {sha}', en: 'the live build commit {sha}' },
+  'fork.fromHead': { uk: 'останнього коміту {branch}', ru: 'последнего коммита {branch}', en: 'the last commit of {branch}' },
+  'fork.title': { uk: 'Fork від {branch}', ru: 'Fork от {branch}', en: 'Fork from {branch}' },
+  'fork.name': { uk: 'Ім’я нової гілки', ru: 'Имя новой ветки', en: 'New branch name' },
+  'fork.preview': {
+    uk: 'Гілку <b>{name}</b> буде створено в репозиторії на GitHub від {from}. Її створює Git цього комп’ютера від імені облікового запису GitHub, під яким він увійшов; цьому обліковому запису потрібна роль Write або вища.',
+    ru: 'Ветка <b>{name}</b> будет создана в репозитории на GitHub от {from}. Её создаёт Git этого компьютера от имени учётной записи GitHub, под которой он вошёл; этой учётной записи нужна роль Write или выше.',
+    en: 'Branch <b>{name}</b> will be created in the GitHub repository from {from}. Git on this computer creates it on behalf of the GitHub account it is signed in with; that account needs the Write role or higher.',
+  },
+  'fork.create': { uk: 'Створити гілку', ru: 'Создать ветку', en: 'Create branch' },
+  'fork.loginRetry': { uk: 'Увійти й повторити', ru: 'Войти и повторить', en: 'Sign in and retry' },
+  'fork.tokenProject': {
+    uk: 'Проєкт підключено за токеном (користувач <code>{user}</code> в адресі репозиторію). Токену потрібен доступ до цього репозиторію з правом Contents — Read and write. Створіть такий токен на GitHub і замініть ним пароль запису <code>{cred}</code> {where}',
+    ru: 'Проект подключён по токену (пользователь <code>{user}</code> в адресе репозитория). Токену нужен доступ к этому репозиторию с правом Contents — Read and write. Создайте такой токен на GitHub и замените им пароль записи <code>{cred}</code> {where}',
+    en: 'The project is connected with a token (user <code>{user}</code> in the repository address). The token needs access to this repository with Contents — Read and write. Create such a token on GitHub and put it as the password of the <code>{cred}</code> entry {where}',
+  },
+  'fork.whereMac': {
+    uk: 'у застосунку «Зв’язка ключів» (тип «пароль інтернету»).',
+    ru: 'в приложении «Связка ключей» (тип «пароль интернета»).',
+    en: 'in the Keychain Access app (kind «Internet password»).',
+  },
+  'fork.whereWin': {
+    uk: 'у «Диспетчері облікових даних Windows» → «Облікові дані Windows».',
+    ru: 'в «Диспетчере учётных данных Windows» → «Учётные данные Windows».',
+    en: 'in Windows Credential Manager → Windows Credentials.',
+  },
+  'fork.notCreated': { uk: 'Гілку не створено', ru: 'Ветка не создана', en: 'The branch was not created' },
+  'fork.authNote': {
+    uk: 'Git на цьому комп’ютері не ввійшов у GitHub або вхід застарів. Для публічного репозиторію fetch працює і без входу, а створити гілку — ні.',
+    ru: 'Git на этом компьютере не вошёл в GitHub или вход устарел. Для публичного репозитория fetch работает и без входа, а создать ветку — нет.',
+    en: 'Git on this computer is not signed in to GitHub, or the sign-in is out of date. For a public repository fetch works without signing in, but creating a branch does not.',
+  },
+  'fork.authHttps': {
+    uk: 'Натисніть «Увійти й повторити»: відкриється вікно Git Credential Manager. Увійдіть обліковим записом із роллю Write у цьому репозиторії.',
+    ru: 'Нажмите «Войти и повторить»: откроется окно Git Credential Manager. Войдите учётной записью с ролью Write в этом репозитории.',
+    en: 'Press «Sign in and retry»: the Git Credential Manager window opens. Sign in with an account that has the Write role in this repository.',
+  },
+  'fork.askAdmin': {
+    uk: 'Попросіть адміністратора репозиторію видати {who} роль Write (GitHub → репозиторій → Settings → Collaborators and teams).',
+    ru: 'Попросите администратора репозитория выдать {who} роль Write (GitHub → репозиторий → Settings → Collaborators and teams).',
+    en: 'Ask the repository administrator to give {who} the Write role (GitHub → repository → Settings → Collaborators and teams).',
+  },
+  'fork.yourAccount': { uk: 'вашому обліковому запису', ru: 'вашей учётной записи', en: 'your account' },
+  'fork.otherAccount': {
+    uk: 'Або увійдіть іншим обліковим записом: виконайте в терміналі',
+    ru: 'Или войдите другой учётной записью: выполните в терминале',
+    en: 'Or sign in with another account: run in a terminal',
+  },
+  'fork.thenLogin': { uk: 'і натисніть «Увійти й повторити».', ru: 'и нажмите «Войти и повторить».', en: 'and press «Sign in and retry».' },
+  'fork.whoSigned': {
+    uk: 'Команда покаже, під ким увійшов Git; вийдіть командою git credential-manager github logout <обліковий запис> і натисніть «Увійти й повторити».',
+    ru: 'Команда покажет, под кем вошёл Git; выйдите командой git credential-manager github logout <учётная запись> и нажмите «Войти и повторить».',
+    en: 'The command shows whom Git is signed in as; sign out with git credential-manager github logout <account> and press «Sign in and retry».',
+  },
+  'fork.fineGrained': {
+    uk: 'Якщо Git увійшов за fine-grained токеном, йому потрібен доступ до цього репозиторію з правом Contents — Read and write. Токени для репозиторіїв організації може знадобитися схвалити її власнику.',
+    ru: 'Если Git вошёл по fine-grained токену, ему нужен доступ к этому репозиторию с правом Contents — Read and write. Токены для репозиториев организации может потребоваться одобрить её владельцу.',
+    en: 'If Git signed in with a fine-grained token, it needs access to this repository with Contents — Read and write. Tokens for organization repositories may need the owner’s approval.',
+  },
+  'fork.rules': {
+    uk: 'Виберіть інше ім’я гілки або попросіть адміністратора дозволити такі гілки (GitHub → репозиторій → Settings → Rules або Branches).',
+    ru: 'Выберите другое имя ветки или попросите администратора разрешить такие ветки (GitHub → репозиторий → Settings → Rules или Branches).',
+    en: 'Choose another branch name or ask the administrator to allow such branches (GitHub → repository → Settings → Rules or Branches).',
+  },
+  'fork.network': {
+    uk: 'Перевірте підключення до інтернету, проксі або VPN і повторіть.',
+    ru: 'Проверьте подключение к интернету, прокси или VPN и повторите.',
+    en: 'Check the internet connection, proxy or VPN and try again.',
+  },
+} satisfies Record<string, Entry>;

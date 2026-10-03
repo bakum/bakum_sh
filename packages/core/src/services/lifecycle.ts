@@ -10,6 +10,7 @@ import { audit } from './audit';
 import { notify } from './notify';
 import { log } from '../util/logger';
 import { lifecycleState } from '../builds/lifecycle-state';
+import { t } from '../i18n';
 
 /**
  * Lifecycle tick (D45): every 5 minutes live builds past `idleStopHours` are stopped, and a build past its
@@ -81,8 +82,8 @@ async function lifecycleTick(ctx: Ctx): Promise<void> {
       notify(
         ctx,
         'buildExpired',
-        `Сборку можно отбросить: ${br.name}`,
-        `#${b.number}: ${scope.dropAfterDays} дн. без новых коммитов и заходов. Отбросить — History → CONNECT ▾ → «Отбросить сборку…».`,
+        t('lifecycle.expiredTitle', { branch: br.name }),
+        t('lifecycle.expiredBody', { number: b.number, days: scope.dropAfterDays }),
         { route: `/projects/${b.projectId}/branches/${br.id}/history` },
       );
     }

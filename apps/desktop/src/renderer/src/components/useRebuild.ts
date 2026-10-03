@@ -1,6 +1,7 @@
 import { notifications } from '@mantine/notifications';
 import type { BranchView } from '@bm/shared';
 import { call, errorText } from '../lib/bm';
+import { t } from '../i18n';
 
 /**
  * Rebuild with a notification; errors (legacy project, missing folder, active build) are shown as they are. A branch
@@ -12,17 +13,17 @@ export function useRebuild() {
     const lag = b.badges.find((x) => x.kind === 'behind-source' || x.kind === 'merged-behind');
     if (lag && b.codeLag?.modules.length) {
       const r = await window.bm.desktop.confirm({
-        message: `Ветка ${b.name} отстаёт от кода копируемой БД`,
+        message: t('rebuild.lagQuestion', { branch: b.name }),
         detail: lag.text,
-        buttons: ['Всё равно пересобрать', 'Отмена'],
+        buttons: [t('rebuild.anyway'), t('common.cancel')],
       });
       if (r !== 0) return;
     }
     try {
       await call('builds.rebuild', { branchId: b.id, trigger });
-      notifications.show({ message: `Сборка ${b.name} поставлена в очередь` });
+      notifications.show({ message: t('rebuild.queued', { branch: b.name }) });
     } catch (e) {
-      notifications.show({ color: 'red', title: 'Сборка не запущена', message: errorText(e), autoClose: 12000 });
+      notifications.show({ color: 'red', title: t('rebuild.failed'), message: errorText(e), autoClose: 12000 });
     }
   };
 }

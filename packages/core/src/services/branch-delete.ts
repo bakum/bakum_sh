@@ -13,7 +13,8 @@ import { audit } from './audit';
 import { setAutoAddSkip } from './branch-rows';
 import { bus } from '../events';
 import { notify } from './notify';
-import { isGoneFromRemote, keepReasonOf, KEEP_REASON_TEXT } from './remote-gone';
+import { isGoneFromRemote, keepReasonOf, keepReasonText } from './remote-gone';
+import { t } from '../i18n';
 
 export async function deletePreview(ctx: Ctx, branchId: number) {
   const b = mustBranch(ctx, branchId);
@@ -35,12 +36,12 @@ export async function deletePreview(ctx: Ctx, branchId: number) {
 /** Validates the Delete request (spec 8.10) and queues the job. */
 export async function requestDelete(ctx: Ctx, p: { branchId: number; confirmSlug: string; deleteRemote: boolean; forceDirty: boolean }) {
   const b = mustBranch(ctx, p.branchId);
-  if (p.confirmSlug !== b.slug) throw new BmError('CONFIRM', `Для удаления введите slug ветки: ${b.slug}`);
-  if (p.deleteRemote) throw new BmError('POSTPONED', 'Удаление ветки в origin отложено (docs/decisions.md D44): удалите её на GitHub.');
+  if (p.confirmSlug !== b.slug) throw new BmError('CONFIRM', t('branchDelete.confirm', { slug: b.slug }));
+  if (p.deleteRemote) throw new BmError('POSTPONED', t('branchDelete.remotePostponed'));
   const pv = await deletePreview(ctx, p.branchId);
-  if (pv.protected) throw new BmError('PROTECTED', 'Ветка защищена: снимите защиту (protected) в Settings ветки. Production удалить нельзя.');
+  if (pv.protected) throw new BmError('PROTECTED', t('branchDelete.protected'));
   if (pv.folderBlocked) throw new BmError('FOLDER_WRONG_BRANCH', pv.folderBlocked);
-  if (pv.dirty && !p.forceDirty) throw new BmError('WORKTREE_DIRTY', `В worktree есть незакоммиченные изменения:\n${pv.dirty}\nПодтвердите их потерю отдельно.`);
+  if (pv.dirty && !p.forceDirty) throw new BmError('WORKTREE_DIRTY', t('branchDelete.dirty', { dirty: pv.dirty }));
   return { jobId: getQueue().enqueue('delete_branch', { projectId: b.projectId, branchId: b.id }, { branch: b.name, ...p }) };
 }
 
@@ -56,7 +57,7 @@ export async function deleteBranchExecutor(ctx: Ctx, job: JobRow, jc: JobContext
     }
     const reason = await keepReasonOf(cfg, b);
     if (reason) {
-      jc.log(`${b.name}: not deleted — ${KEEP_REASON_TEXT[reason]}`);
+      jc.log(`${b.name}: not deleted — ${keepReasonText(reason)}`);
       return;
     }
   }
@@ -93,7 +94,7 @@ export async function deleteBranchExecutor(ctx: Ctx, job: JobRow, jc: JobContext
   });
   if (params.remoteGone) {
     const n = all.filter((x) => x.status !== 'dropped').length;
-    notify(ctx, 'branchRemoved', `Ветка ${b.name} удалена`, `Её удалили на GitHub; сборок отброшено: ${n}.`, { route: `/projects/${cfg.id}` });
+    notify(ctx, 'branchRemoved', t('branchDelete.removedTitle', { branch: b.name }), t('branchDelete.removedBody', { n }), { route: `/projects/${cfg.id}` });
   }
   bus.emit({ type: 'branch.changed', projectId: cfg.id, branchId: b.id });
 }

@@ -13,6 +13,7 @@ import * as pg from '../pg';
 import { runtimeState } from '../state';
 import { audit } from './audit';
 import { log } from '../util/logger';
+import { t } from '../i18n';
 
 /** Internal users of the build's database: active, not portal / public (`share`), as odoo.sh lists them. */
 export async function buildUsers(cfg: ProjectConfig, b: BuildRow): Promise<{ id: number; login: string; name: string }[]> {
@@ -26,7 +27,7 @@ export async function buildUsers(cfg: ProjectConfig, b: BuildRow): Promise<{ id:
         ORDER BY lower(COALESCE(p.name, u.login)), u.id`,
     );
   } catch (err) {
-    throw new BmError('DB_FAILED', `Не удалось прочитать пользователей из базы ${b.dbName}: ${(err as Error).message}`);
+    throw new BmError('DB_FAILED', t('connectAs.readUsers', { db: b.dbName, error: (err as Error).message }));
   }
 }
 
@@ -76,23 +77,23 @@ function probe(port: number, host: string, urlPath: string): Promise<{ status: n
  * host that sets it as the browser's cookie and redirects to /web. The password of the user is neither read nor changed.
  */
 export async function connectAs(ctx: Ctx, cfg: ProjectConfig, b: BuildRow, login: string, codeDir: string | null): Promise<{ ok: true }> {
-  if (!b.live || b.status !== 'running') throw new BmError('NOT_RUNNING', 'Сборка не запущена: нажмите Start и повторите');
-  if (!runtimeState.traefik.ok) throw new BmError('NO_TRAEFIK', runtimeState.traefik.error ?? 'Traefik не запущен: проверьте страницу Status');
-  if (!HOST_RE.test(b.host)) throw new BmError('BAD_HOST', `Недопустимый адрес сборки ${b.host}`);
+  if (!b.live || b.status !== 'running') throw new BmError('NOT_RUNNING', t('connectAs.notRunning'));
+  if (!runtimeState.traefik.ok) throw new BmError('NO_TRAEFIK', runtimeState.traefik.error ?? t('connectAs.noTraefik'));
+  if (!HOST_RE.test(b.host)) throw new BmError('BAD_HOST', t('connectAs.badHost', { host: b.host }));
   const c = await serviceContainer(b);
-  if (!c) throw new BmError('NOT_RUNNING', 'Контейнер сборки не найден: запустите сборку (Start)');
+  if (!c) throw new BmError('NOT_RUNNING', t('connectAs.noContainer'));
 
   const argv = ['exec', '-i', '-e', 'BM_CONNECT_LOGIN', c.name, 'odoo', 'shell', ...serverBaseArgs(cfg, codeVars(cfg, codeDir)), '-d', b.dbName, '--no-http'];
   const r = await dockerCli(argv, { input: SESSION_SCRIPT, env: { BM_CONNECT_LOGIN: login }, timeoutMs: 180_000 });
   const out = `${r.stdout}\n${r.stderr}`;
   const err = /BM_CONNECT_ERROR=(\S+)/.exec(out)?.[1];
-  if (err === 'no-user') throw new BmError('NO_USER', `В базе ${b.dbName} нет пользователя с логином «${login}»`);
-  if (err === 'inactive') throw new BmError('NO_USER', `Пользователь «${login}» в базе ${b.dbName} архивирован: войти под ним нельзя`);
+  if (err === 'no-user') throw new BmError('NO_USER', t('connectAs.noUser', { db: b.dbName, login }));
+  if (err === 'inactive') throw new BmError('NO_USER', t('connectAs.inactive', { db: b.dbName, login }));
   const sid = /BM_CONNECT_SID=(\S+)/.exec(out)?.[1];
   if (!sid || !SID_RE.test(sid)) {
     log().warn({ exitCode: r.exitCode, tail: out.trim().split('\n').slice(-15) }, 'connect-as: no session');
     const tail = out.trim().split('\n').slice(-6).join('\n');
-    throw new BmError('ODOO_FAILED', `Odoo не создал сессию (odoo shell, код ${r.exitCode}).\n${tail}`);
+    throw new BmError('ODOO_FAILED', t('connectAs.noSession', { code: r.exitCode, tail }));
   }
 
   const nonce = crypto.randomBytes(16).toString('hex');
@@ -133,7 +134,7 @@ export async function connectAs(ctx: Ctx, cfg: ProjectConfig, b: BuildRow, login
     if (p.status >= 300 && p.status < 400 && p.cookie) break;
     if (Date.now() > until) {
       await removeTraefikDynamic({ name: `${name}.yml` });
-      throw new BmError('NO_TRAEFIK', 'Traefik не подхватил маршрут входа за 20 с: перезапустите приложение (оно обновит Traefik) и повторите');
+      throw new BmError('NO_TRAEFIK', t('connectAs.routeTimeout'));
     }
     await new Promise((res) => setTimeout(res, 300));
   }

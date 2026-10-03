@@ -7,17 +7,12 @@ import { repoDir } from '../git/worktrees';
 import { getQueue, type JobContext } from '../jobs/queue';
 import { branchRows } from './branch-rows';
 import { notify } from './notify';
+import { t } from '../i18n';
 
 /** Why a branch deleted on the remote stays in the app (D50). */
 export type KeepReason = 'production' | 'protected' | 'folder' | 'setting' | 'dirty';
 
-export const KEEP_REASON_TEXT: Record<KeepReason, string> = {
-  production: 'это Production',
-  protected: 'ветка защищена (protected)',
-  folder: 'код сборки берётся из вашей папки',
-  setting: 'выключено «Удалять, если ветку удалили на GitHub»',
-  dirty: 'в worktree есть незакоммиченные изменения',
-};
+export const keepReasonText = (reason: KeepReason): string => t(`remoteGone.${reason}`);
 
 /** A branch gone from the remote: null — delete it with its builds, otherwise the reason to keep it (D50). */
 export function remoteGoneDecision(i: {
@@ -75,8 +70,8 @@ export async function pruneGoneBranches(ctx: Ctx, cfg: ProjectConfig, jc: JobCon
     notify(
       ctx,
       'branchRemoved',
-      `Ветки ${b.name} нет на GitHub`,
-      `Ветка и её сборки оставлены: ${KEEP_REASON_TEXT[reason]}. Если она больше не нужна, удалите её в приложении.`,
+      t('remoteGone.title', { branch: b.name }),
+      t('remoteGone.body', { reason: keepReasonText(reason) }),
       { route: `/projects/${cfg.id}/branches/${b.id}` },
     );
   }

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import { BmError, type ProjectConfig, type SnapshotView } from '@bm/shared';
+import { BmError, locale, type ProjectConfig, type SnapshotView } from '@bm/shared';
 import type { Ctx } from '../context';
 import { builds, snapshots, type BuildRow, type JobRow, type SnapshotRow } from '../db/schema';
 import { getQueue, type JobContext, type JobQueue } from '../jobs/queue';
@@ -23,6 +23,7 @@ import { nowIso } from '../util/time';
 import { branchRow } from './branch-rows';
 import { audit } from './audit';
 import { bus } from '../events';
+import { t } from '../i18n';
 
 /**
  * Snapshots (spec 8.9 Backups, D42): `CREATE DATABASE <db>_snap_<n> TEMPLATE <db>` + a hardlink copy of the filestore
@@ -36,9 +37,9 @@ const PG_NAME_MAX = 63;
 
 function mustLive(ctx: Ctx, branchId: number): BuildRow {
   const br = branchRow(ctx, branchId);
-  if (!br) throw new BmError('NO_BRANCH', 'Ветка не найдена');
+  if (!br) throw new BmError('NO_BRANCH', t('config.noBranch'));
   const live = liveBuild(ctx, branchId);
-  if (!live) throw new BmError('NO_LIVE', `У ветки «${br.name}» нет живой сборки: снапшоты делаются с БД живой сборки.`);
+  if (!live) throw new BmError('NO_LIVE', t('snap.noLive', { branch: br.name }));
   return live;
 }
 
@@ -64,11 +65,11 @@ export function listSnapshots(ctx: Ctx, branchId: number): SnapshotView[] {
 
 function mustSnapshot(ctx: Ctx, id: number): { s: SnapshotRow; live: BuildRow } {
   const s = ctx.db.select().from(snapshots).where(eq(snapshots.id, id)).get();
-  if (!s) throw new BmError('NO_SNAPSHOT', 'Снапшот не найден');
+  if (!s) throw new BmError('NO_SNAPSHOT', t('snap.notFound'));
   const owner = ctx.db.select().from(builds).where(eq(builds.id, s.buildId)).get();
   const live = owner ? liveBuild(ctx, owner.branchId) : undefined;
   if (!live || s.dbName.replace(SNAP_RE, '') !== live.dbName) {
-    throw new BmError('SNAPSHOT_STALE', 'Снапшот относится к БД, которой у ветки больше нет (сборка пересобрана). Его можно только удалить.');
+    throw new BmError('SNAPSHOT_STALE', t('snap.stale'));
   }
   return { s, live };
 }
@@ -79,7 +80,7 @@ async function nextSnapshotName(ctx: Ctx, cfg: ProjectConfig, db: string): Promi
   for (let n = Math.max(0, ...used) + 1; ; n++) {
     const name = `${db}_snap_${n}`;
     if (Buffer.byteLength(name) > PG_NAME_MAX) {
-      throw new BmError('NAME_TOO_LONG', `Имя снапшота ${name} длиннее ${PG_NAME_MAX} символов (ограничение Postgres). Сократите naming.db проекта.`);
+      throw new BmError('NAME_TOO_LONG', t('snap.nameTooLong', { name, max: PG_NAME_MAX }));
     }
     assertSqlIdent(name);
     if (!(await pg.dbExists(cfg.postgres, name))) return name;
@@ -128,7 +129,7 @@ async function withStopped<T>(ctx: Ctx, cfg: ProjectConfig, b: BuildRow, log: (l
   } finally {
     if (c) {
       log(`start ${c.name}`);
-      await docker.getContainer(c.id).start().catch((e) => log(`[warn] не удалось запустить ${c.name}: ${(e as Error).message}`));
+      await docker.getContainer(c.id).start().catch((e) => log(t('snap.startFailed', { name: c.name, error: (e as Error).message })));
       await refreshContainers(ctx).catch(() => {});
     }
   }
@@ -144,18 +145,18 @@ async function copyDbAndFiles(cfg: ProjectConfig, src: string, dst: string, log:
   const to = path.join(cfg.runtime.filestore.hostDir, dst);
   if (fs.existsSync(from)) {
     const r = await copyTree(from, to, cfg.runtime.filestore.copy, log);
-    log(`filestore: ${r.files} файлов (${r.linked ? 'хардлинки' : 'копирование'})`);
+    log(t('snap.filestore', { n: r.files, how: t(r.linked ? 'snap.hardlinks' : 'snap.copying') }));
   } else await fs.promises.mkdir(to, { recursive: true });
 }
 
 /** Job `snapshot`: the build's container is stopped only while the database and the filestore are copied. */
 async function createExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const b = ctx.db.select().from(builds).where(eq(builds.id, job.buildId!)).get();
-  if (!b) throw new BmError('NO_BUILD', 'Сборка не найдена');
+  if (!b) throw new BmError('NO_BUILD', t('common.noBuild'));
   const cfg = ctx.store.require(b.projectId);
   await ensurePostgres(ctx, cfg, jc.log);
   const dbName = await nextSnapshotName(ctx, cfg, b.dbName);
-  const label = (job.params.name as string | undefined)?.trim() || `Снапшот ${new Date().toLocaleString('ru-RU')}`;
+  const label = (job.params.name as string | undefined)?.trim() || t('snap.defaultName', { date: new Date().toLocaleString(locale()) });
   // The row goes first: the registry then owns the new database, and a failure can clean it up (assertOwned).
   const row = insertRow(ctx, b.id, label, dbName, cfg);
   try {
@@ -180,7 +181,7 @@ async function restoreExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
   await ensurePostgres(ctx, cfg, jc.log);
   const reg = () => ownedRegistry(ctx, cfg.id);
   const keep = await nextSnapshotName(ctx, cfg, live.dbName);
-  const keepRow = insertRow(ctx, live.id, `Перед откатом к «${s.name}»`, keep, cfg);
+  const keepRow = insertRow(ctx, live.id, t('snap.beforeRestore', { name: s.name }), keep, cfg);
   const dir = (db: string) => path.join(cfg.runtime.filestore.hostDir, db);
   await withStopped(ctx, cfg, live, jc.log, async () => {
     assertOwned(cfg, { kind: 'db', name: live.dbName }, reg());
@@ -195,7 +196,7 @@ async function restoreExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
     try {
       await copyDbAndFiles(cfg, s.dbName, live.dbName, jc.log);
     } catch (err) {
-      jc.log(`[error] откат не удался, возвращаю прежнюю БД: ${(err as Error).message}`);
+      jc.log(t('snap.restoreFailed', { error: (err as Error).message }));
       await removeDbAndFiles(ctx, cfg, live.dbName, jc.log).catch(() => {});
       await pg.renameDatabase(cfg.postgres, keep, live.dbName);
       if (hadFiles) await fs.promises.rename(dir(keep), dir(live.dbName));
@@ -212,7 +213,7 @@ async function deleteExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<vo
   const s = ctx.db.select().from(snapshots).where(eq(snapshots.id, job.params.snapshotId as number)).get();
   if (!s) return;
   const b = ctx.db.select().from(builds).where(eq(builds.id, s.buildId)).get();
-  if (!b) throw new BmError('NO_BUILD', 'Сборка снапшота не найдена');
+  if (!b) throw new BmError('NO_BUILD', t('snap.noBuild'));
   const cfg = ctx.store.require(b.projectId);
   await ensurePostgres(ctx, cfg, jc.log);
   await removeDbAndFiles(ctx, cfg, s.dbName, jc.log);
@@ -228,7 +229,7 @@ async function deleteExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<vo
  */
 async function exportExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const live = ctx.db.select().from(builds).where(eq(builds.id, job.buildId!)).get();
-  if (!live) throw new BmError('NO_BUILD', 'Сборка не найдена');
+  if (!live) throw new BmError('NO_BUILD', t('common.noBuild'));
   const cfg = ctx.store.require(live.projectId);
   const snapId = job.params.snapshotId as number | null;
   const db = snapId ? mustSnapshot(ctx, snapId).s.dbName : live.dbName;
@@ -241,11 +242,11 @@ async function exportExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<vo
   try {
     const { cmd, env } = dbSubcommand(cfg, ['dump', db, `/bm-out/${tmpName}`]);
     const r = await runOdooOneOff({ composeFile: liveCompose(ctx, live), project: live.composeProject, cmd, env, volumes: [`${toPosix(tmpDir)}:/bm-out`], log: jc.log, signal: jc.signal });
-    assertOdooOk(r, 'Выгрузка (odoo db dump)');
-    if (!fs.existsSync(tmp)) throw new BmError('EXPORT_FAILED', 'odoo db dump завершился, но файл не появился. См. лог задачи.');
+    assertOdooOk(r, t('snap.dumpWhat'));
+    if (!fs.existsSync(tmp)) throw new BmError('EXPORT_FAILED', t('snap.dumpNoFile'));
     fs.mkdirSync(path.dirname(target), { recursive: true });
     await fs.promises.copyFile(tmp, target);
-    jc.log(`сохранено: ${target} (${fs.statSync(target).size} байт)`);
+    jc.log(t('snap.saved', { file: target, size: fs.statSync(target).size }));
   } finally {
     await fs.promises.rm(tmp, { force: true }).catch(() => {});
   }
@@ -273,11 +274,11 @@ export function snapshotHandlers(ctx: Ctx) {
     'snapshots.delete': (p: { snapshotId: number }) => {
       const s = ctx.db.select().from(snapshots).where(eq(snapshots.id, p.snapshotId)).get();
       const b = s ? ctx.db.select().from(builds).where(eq(builds.id, s.buildId)).get() : undefined;
-      if (!s || !b) throw new BmError('NO_SNAPSHOT', 'Снапшот не найден');
+      if (!s || !b) throw new BmError('NO_SNAPSHOT', t('snap.notFound'));
       return enqueue('delete_snapshot', b, { snapshotId: s.id });
     },
     'snapshots.export': (p: { branchId: number; snapshotId?: number; path: string }) => {
-      if (!path.isAbsolute(p.path)) throw new BmError('BAD_PATH', 'Нужен полный путь к файлу .zip');
+      if (!path.isAbsolute(p.path)) throw new BmError('BAD_PATH', t('snap.fullPath'));
       const live = mustLive(ctx, p.branchId);
       if (p.snapshotId) mustSnapshot(ctx, p.snapshotId);
       return enqueue('export_db', live, { snapshotId: p.snapshotId ?? null, path: p.path });

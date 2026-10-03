@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { MainToCore } from '@bm/shared';
+import { setLangSource, type MainToCore } from '@bm/shared';
 import { RpcServer } from './rpc';
 import { bus } from './events';
 import type { CoreHost, PortLike } from './util/port';
@@ -43,6 +43,8 @@ export function startCore(host: CoreHost): void {
       case 'init': {
         const store = new ConfigStore(msg.configDir);
         store.load();
+        // Messages follow app.yaml `language` (D69), also after a hand edit picked up by the watcher.
+        setLangSource(() => store.app.language);
         const dataDir = store.dataDir(msg.dataDirOverride);
         const logsDir = path.join(dataDir, 'logs');
         initLogger(logsDir);

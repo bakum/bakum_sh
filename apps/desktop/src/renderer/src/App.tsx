@@ -15,6 +15,7 @@ import { StatusPage } from './pages/Status';
 import { BranchesPage } from './pages/Branches';
 import { BuildsPage } from './pages/Builds';
 import { AuditPage } from './pages/Audit';
+import { LanguageProvider } from './i18n';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 2000 } },
@@ -30,28 +31,30 @@ export function App() {
       <Notifications position="bottom-right" limit={5} />
       <QueryClientProvider client={queryClient}>
         <EventsProvider>
-          <HashRouter>
-            <RouteMemory />
-            <ErrorBoundary scope="root">
-              <Routes>
-                <Route path="/welcome" element={<Welcome />} />
-                <Route element={<Shell />}>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/projects/new" element={<AddProject />} />
-                  <Route path="/projects/:pid/branches" element={<BranchesPage />} />
-                  <Route path="/projects/:pid/branches/:bid" element={<BranchesPage />} />
-                  <Route path="/projects/:pid/branches/:bid/:tab" element={<BranchesPage />} />
-                  <Route path="/projects/:pid/builds" element={<BuildsPage />} />
-                  <Route path="/projects/:pid/audit" element={<AuditPage />} />
-                  <Route path="/projects/:pid/settings" element={<SettingsPage />} />
-                  <Route path="/projects/:pid/settings/:tab" element={<SettingsPage />} />
-                  <Route path="/settings/app" element={<SettingsPage />} />
-                  <Route path="/status" element={<StatusPage />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Route>
-              </Routes>
-            </ErrorBoundary>
-          </HashRouter>
+          <LanguageProvider>
+            <HashRouter>
+              <RouteMemory />
+              <ErrorBoundary scope="root">
+                <Routes>
+                  <Route path="/welcome" element={<Welcome />} />
+                  <Route element={<Shell />}>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/projects/new" element={<AddProject />} />
+                    <Route path="/projects/:pid/branches" element={<BranchesPage />} />
+                    <Route path="/projects/:pid/branches/:bid" element={<BranchesPage />} />
+                    <Route path="/projects/:pid/branches/:bid/:tab" element={<BranchesPage />} />
+                    <Route path="/projects/:pid/builds" element={<BuildsPage />} />
+                    <Route path="/projects/:pid/audit" element={<AuditPage />} />
+                    <Route path="/projects/:pid/settings" element={<SettingsPage />} />
+                    <Route path="/projects/:pid/settings/:tab" element={<SettingsPage />} />
+                    <Route path="/settings/app" element={<SettingsPage />} />
+                    <Route path="/status" element={<StatusPage />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Route>
+                </Routes>
+              </ErrorBoundary>
+            </HashRouter>
+          </LanguageProvider>
         </EventsProvider>
       </QueryClientProvider>
     </MantineProvider>

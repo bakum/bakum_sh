@@ -4,27 +4,28 @@ import type { BranchView } from '@bm/shared';
 import { useBm } from '../../lib/query';
 import { isMac } from '../../lib/bm';
 import { shellOpen } from '../BranchPage';
+import { t } from '../../i18n';
 
 /** Shell (spec 8.9): external terminal with docker exec bash, odoo shell, psql. */
 export function ShellTab({ branch }: { branch: BranchView }) {
   const live = branch.liveBuild;
   const app = useBm('config.app', {});
-  if (!live) return <Alert color="gray">У ветки нет живой сборки.</Alert>;
+  if (!live) return <Alert color="gray">{t('tab.noLive')}</Alert>;
   const running = live.status === 'running';
   return (
     <Stack>
       <Text size="sm" c="dimmed">
         {isMac
-          ? 'Команды открываются в новом окне Терминала.'
-          : `Терминал: ${app.data?.desktop.terminal ?? 'wt'} (Windows Terminal; если он не установлен — cmd). Настройка — Settings → Приложение.`}
+          ? t('shellTab.mac')
+          : t('shellTab.win', { terminal: app.data?.desktop.terminal ?? 'wt' })}
       </Text>
       <Card withBorder>
         <Stack>
           <Group>
             <Button leftSection={<IconTerminal2 size={14} />} disabled={!running} onClick={() => void shellOpen({ buildId: live.id, target: 'bash' })}>
-              bash в контейнере
+              {t('shellTab.bash')}
             </Button>
-            <Code>docker exec -it &lt;контейнер сборки&gt; bash</Code>
+            <Code>{t('shellTab.bashCmd')}</Code>
           </Group>
           <Group>
             <Button leftSection={<IconBrandPython size={14} />} disabled={!running} onClick={() => void shellOpen({ buildId: live.id, target: 'odoo-shell' })}>
@@ -40,7 +41,7 @@ export function ShellTab({ branch }: { branch: BranchView }) {
           </Group>
         </Stack>
       </Card>
-      {!running && <Alert color="gray">Сборка остановлена: bash и odoo shell доступны после Start.</Alert>}
+      {!running && <Alert color="gray">{t('shellTab.stopped')}</Alert>}
     </Stack>
   );
 }

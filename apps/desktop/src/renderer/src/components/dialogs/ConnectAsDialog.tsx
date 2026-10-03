@@ -5,6 +5,7 @@ import { notifications } from '@mantine/notifications';
 import type { BuildView } from '@bm/shared';
 import { useBm } from '../../lib/query';
 import { call, errorText } from '../../lib/bm';
+import { t } from '../../i18n';
 
 /** «Войти как» (D66, as odoo.sh Connect as): internal users of the build's database, a click opens the build as one. */
 export function ConnectAsDialog({ build, opened, onClose }: { build: BuildView; opened: boolean; onClose: () => void }) {
@@ -22,18 +23,18 @@ export function ConnectAsDialog({ build, opened, onClose }: { build: BuildView; 
       await call('builds.connectAs', { buildId: build.id, login: l });
       onClose();
     } catch (e) {
-      notifications.show({ color: 'red', title: `Не удалось войти как ${l}`, message: errorText(e), autoClose: 12000 });
+      notifications.show({ color: 'red', title: t('connectAs.failed', { login: l }), message: errorText(e), autoClose: 12000 });
     } finally {
       setBusy(null);
     }
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} size="xl" title={`Войти как — внутренние пользователи${users.data ? ` (${all.length})` : ''}`}>
+    <Modal opened={opened} onClose={onClose} size="xl" title={t('connectAs.title', { count: users.data ? ` (${all.length})` : '' })}>
       <Stack gap="sm">
         <Group grow align="flex-start">
           <TextInput
-            placeholder="Поиск по имени или логину"
+            placeholder={t('connectAs.search')}
             leftSection={<IconSearch size={14} />}
             value={filter}
             onChange={(e) => setFilter(e.currentTarget.value)}
@@ -41,7 +42,7 @@ export function ConnectAsDialog({ build, opened, onClose }: { build: BuildView; 
           />
           <Group gap={0} wrap="nowrap">
             <TextInput
-              placeholder="Войти по логину"
+              placeholder={t('connectAs.byLogin')}
               value={login}
               onChange={(e) => setLogin(e.currentTarget.value)}
               onKeyDown={(e) => e.key === 'Enter' && login.trim() && !busy && void connect(login.trim())}
@@ -55,13 +56,12 @@ export function ConnectAsDialog({ build, opened, onClose }: { build: BuildView; 
               onClick={() => void connect(login.trim())}
               style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
             >
-              Войти
+              {t('connectAs.login')}
             </Button>
           </Group>
         </Group>
         <Text size="xs" c="dimmed">
-          Сессию создаёт Odoo сборки (несколько секунд), пароль пользователя не читается и не меняется. Браузер выйдет из
-          текущей сессии на {build.url ?? 'адресе сборки'}.
+          {t('connectAs.hint', { url: build.url ?? t('connectAs.buildAddress') })}
         </Text>
         {users.error && (
           <Alert color="red" variant="light">
@@ -77,8 +77,8 @@ export function ConnectAsDialog({ build, opened, onClose }: { build: BuildView; 
             <Table striped highlightOnHover verticalSpacing={6}>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Имя</Table.Th>
-                  <Table.Th>Логин</Table.Th>
+                  <Table.Th>{t('connectAs.name')}</Table.Th>
+                  <Table.Th>{t('connectAs.loginCol')}</Table.Th>
                   <Table.Th w={110} />
                 </Table.Tr>
               </Table.Thead>
@@ -98,7 +98,7 @@ export function ConnectAsDialog({ build, opened, onClose }: { build: BuildView; 
                         onClick={() => void connect(u.login)}
                         data-testid="connect-as-user"
                       >
-                        Войти
+                        {t('connectAs.login')}
                       </Button>
                     </Table.Td>
                   </Table.Tr>
@@ -107,7 +107,7 @@ export function ConnectAsDialog({ build, opened, onClose }: { build: BuildView; 
                   <Table.Tr>
                     <Table.Td colSpan={3}>
                       <Text size="sm" c="dimmed">
-                        {f ? 'Никого не нашли' : 'В базе нет внутренних пользователей'}
+                        {t(f ? 'connectAs.nobody' : 'connectAs.noUsers')}
                       </Text>
                     </Table.Td>
                   </Table.Tr>

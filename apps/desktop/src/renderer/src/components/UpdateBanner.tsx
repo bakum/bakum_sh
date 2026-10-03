@@ -3,6 +3,7 @@ import { Alert, Anchor, Button, Group, Modal, Progress, ScrollArea, Stack, Text 
 import { notifications } from '@mantine/notifications';
 import type { UpdateState } from '@bm/shared';
 import { isMac } from '../lib/bm';
+import { t, tx } from '../i18n';
 
 /** Update state from main, kept in sync by push events (docs/decisions.md D29). */
 export function useUpdateState(): UpdateState | null {
@@ -17,28 +18,28 @@ export function useUpdateState(): UpdateState | null {
 export async function checkForUpdates(): Promise<void> {
   const s = await window.bm.desktop.update.check();
   if (!s) return;
-  if (s.status === 'none') notifications.show({ color: 'teal', message: `Установлена последняя версия ${s.current}` });
-  else if (s.status === 'error') notifications.show({ color: 'red', message: s.error ?? 'Проверка не удалась', autoClose: 10000 });
+  if (s.status === 'none') notifications.show({ color: 'teal', message: t('upd.upToDate', { current: s.current }) });
+  else if (s.status === 'error') notifications.show({ color: 'red', message: s.error ?? t('upd.checkFailed'), autoClose: 10000 });
 }
 
 export async function installUpdate(): Promise<void> {
   const r = await window.bm.desktop.update.install();
-  if (!r.ok && r.message && r.message !== 'Отменено') notifications.show({ color: 'red', title: 'Обновление', message: r.message, autoClose: 12000 });
+  if (!r.ok && r.message && r.message !== t('upd.cancelled')) notifications.show({ color: 'red', title: t('upd.title'), message: r.message, autoClose: 12000 });
   else if (r.ok && r.message) notifications.show({ message: r.message });
 }
 
 export function ReleaseNotes({ state, opened, onClose }: { state: UpdateState; opened: boolean; onClose: () => void }) {
   return (
-    <Modal opened={opened} onClose={onClose} title={`Что нового в ${state.latest}`} size="lg">
+    <Modal opened={opened} onClose={onClose} title={t('upd.whatsNewIn', { version: state.latest })} size="lg">
       <Stack>
         <ScrollArea.Autosize mah={420}>
           <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-            {state.notes?.trim() || 'Описание релиза пустое.'}
+            {state.notes?.trim() || t('upd.emptyNotes')}
           </Text>
         </ScrollArea.Autosize>
         {state.url && (
           <Anchor size="sm" onClick={() => void window.bm.desktop.openExternal(state.url!)}>
-            Открыть страницу релиза на GitHub
+            {t('upd.releasePage')}
           </Anchor>
         )}
       </Stack>
@@ -59,22 +60,22 @@ export function UpdateBanner() {
     <Alert color="blue" radius={0} py={6} withCloseButton={!busy} onClose={() => setHidden(s.latest)} data-testid="update-banner">
       <Group justify="space-between" wrap="nowrap">
         <Text size="sm">
-          Доступна новая версия <b>{s.latest}</b> (у вас {s.current}).{' '}
-          {s.status === 'downloading' && `Загрузка ${isMac ? 'образа' : 'установщика'}: ${Math.round((s.progress ?? 0) * 100)}%`}
-          {s.status === 'installing' && (isMac ? 'Приложение закрывается, открывается образ…' : 'Приложение закрывается, запускается установщик…')}
+          {tx('upd.banner', { version: s.latest, current: s.current }, { b: (x) => <b>{x}</b> })}{' '}
+          {s.status === 'downloading' && t(isMac ? 'upd.downloadingDmg' : 'upd.downloadingExe', { pct: Math.round((s.progress ?? 0) * 100) })}
+          {s.status === 'installing' && t(isMac ? 'upd.installingMac' : 'upd.installingWin')}
         </Text>
         <Group gap={6} wrap="nowrap">
           {s.status === 'downloading' && <Progress value={(s.progress ?? 0) * 100} w={160} />}
           <Button size="xs" variant="subtle" onClick={() => setNotes(true)}>
-            Что нового
+            {t('upd.whatsNew')}
           </Button>
           {!busy && (
             <Button size="xs" variant="subtle" color="gray" onClick={() => void window.bm.desktop.update.skip()}>
-              Пропустить версию
+              {t('upd.skip')}
             </Button>
           )}
           <Button size="xs" loading={busy} onClick={() => void installUpdate()}>
-            {s.mode === 'portable' ? 'Скачать' : 'Обновить'}
+            {s.mode === 'portable' ? t('upd.download') : t('upd.update')}
           </Button>
         </Group>
       </Group>

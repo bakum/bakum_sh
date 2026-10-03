@@ -3,6 +3,7 @@
  * including fields that only stage 3 or postponed features act upon (D43, D44), so YAML written today stays valid later.
  */
 import { z } from 'zod';
+import { LANGS, st } from './i18n';
 
 /** Two stages (D37): the production branch and everything else. Staging was dropped: it only differed by settings. */
 export const STAGES = ['production', 'development'] as const;
@@ -13,18 +14,13 @@ export const LEVELS = ['app', 'project', 'stage', 'rule', 'branch'] as const;
 export const levelSchema = z.enum(LEVELS);
 export type Level = z.infer<typeof levelSchema>;
 
-export const LEVEL_LABELS: Record<Level, string> = {
-  app: 'по умолчанию',
-  project: 'из проекта',
-  stage: 'из стадии',
-  rule: 'из правила',
-  branch: 'из ветки',
-};
+/** Where an effective value comes from, in the interface language. */
+export const levelLabel = (level: Level): string => st(`scope.${level}`);
 
 /** `backup` (Production only), `fresh`, `copy:production`, `copy:<branch>`. */
 export const databaseSourceSchema = z
   .string()
-  .regex(/^(backup|fresh|copy:[A-Za-z0-9._\/-]+)$/, 'ожидается backup | fresh | copy:production | copy:<ветка>');
+  .regex(/^(backup|fresh|copy:[A-Za-z0-9._\/-]+)$/, { error: () => st('zod.database') });
 
 const moduleListSchema = z.object({ list: z.array(z.string().regex(/^[a-z0-9_]+$/)) }).strict();
 
@@ -163,7 +159,7 @@ export const hookSchema = z
 
 const idSchema = z
   .string()
-  .regex(/^[a-z0-9-]+$/, 'только a-z, 0-9 и «-»')
+  .regex(/^[a-z0-9-]+$/, { error: () => st('zod.projectId') })
   .min(2)
   .max(24);
 
@@ -236,7 +232,7 @@ export const projectConfigSchema = z
             hostDir: z.string().min(1),
             containerDir: z
               .string()
-              .regex(/^\/.*\/filestore$/,'должен заканчиваться на /filestore (родитель — data_dir Odoo)')
+              .regex(/^\/.*\/filestore$/, { error: () => st('zod.filestore') })
               .default('/var/lib/odoo/filestore'),
             copy: z.enum(['hardlink', 'copy']).default('hardlink'),
           })
@@ -314,14 +310,14 @@ export const projectConfigSchema = z
   .strict()
   .superRefine((cfg, ctx) => {
     if (!cfg.repo.path && !(cfg.repo.url && cfg.repo.mirrorDir)) {
-      ctx.addIssue({ code: 'custom', path: ['repo', 'url'], message: 'нужны repo.url и repo.mirrorDir (адрес репозитория и копия приложения)' });
+      ctx.addIssue({ code: 'custom', path: ['repo', 'url'], message: st('zod.repoUrl') });
     }
     // The folder is a per-branch choice: one clone has one checked-out branch.
     for (const s of STAGES) {
-      if (cfg.stages[s]?.folder != null) ctx.addIssue({ code: 'custom', path: ['stages', s, 'folder'], message: 'folder задаётся только в настройках ветки' });
+      if (cfg.stages[s]?.folder != null) ctx.addIssue({ code: 'custom', path: ['stages', s, 'folder'], message: st('zod.folderBranchOnly') });
     }
     cfg.branchRules.forEach((r, i) => {
-      if (r.overrides?.folder != null) ctx.addIssue({ code: 'custom', path: ['branchRules', i, 'overrides', 'folder'], message: 'folder задаётся только в настройках ветки' });
+      if (r.overrides?.folder != null) ctx.addIssue({ code: 'custom', path: ['branchRules', i, 'overrides', 'folder'], message: st('zod.folderBranchOnly') });
     });
   });
 export type ProjectConfig = z.infer<typeof projectConfigSchema>;
@@ -335,6 +331,8 @@ export type NotificationKind = (typeof notificationKinds)[number];
 
 export const appConfigSchema = z
   .object({
+    /** Interface language (D69): the window, notifications, tray, Core messages and job logs, the bm command. */
+    language: z.enum(LANGS).default('uk'),
     dataDir: z.string().default('%LOCALAPPDATA%/Odoo Branch Manager'),
     proxyPort: z.number().int().min(1).max(65535).default(80),
     debugPortRange: z.tuple([z.number().int(), z.number().int()]).default([5700, 5799]),
@@ -357,7 +355,7 @@ export const appConfigSchema = z
         checkOnStart: z.boolean().default(true),
         repository: z
           .string()
-          .regex(/^[\w.-]+\/[\w.-]+$/, 'ожидается owner/repo')
+          .regex(/^[\w.-]+\/[\w.-]+$/, { error: () => st('zod.ownerRepo') })
           .default('bakum/bakum_sh'),
         includePrerelease: z.boolean().default(false),
       })

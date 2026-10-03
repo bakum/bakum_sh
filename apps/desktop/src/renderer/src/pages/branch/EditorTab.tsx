@@ -5,6 +5,7 @@ import type { BranchView } from '@bm/shared';
 import { useBm, useBmMutation } from '../../lib/query';
 import { call, isMac } from '../../lib/bm';
 import { shellOpen } from '../BranchPage';
+import { t, tx } from '../../i18n';
 
 type Source = 'github' | 'folder';
 
@@ -15,8 +16,8 @@ type Source = 'github' | 'folder';
  */
 export function EditorTab({ branch }: { branch: BranchView }) {
   const project = useBm('projects.get', { projectId: branch.projectId });
-  const ensure = useBmMutation('branches.ensureWorktree', { success: 'Worktree создан' });
-  const save = useBmMutation('branches.setOverrides', { success: 'Источник кода сохранён. Нажмите «Применить» или Rebuild, чтобы сборка взяла код оттуда.' });
+  const ensure = useBmMutation('branches.ensureWorktree', { success: t('editor.worktreeCreated') });
+  const save = useBmMutation('branches.setOverrides', { success: t('editor.saved') });
   const [source, setSource] = useState<Source>(branch.folder ? 'folder' : 'github');
   const [folder, setFolder] = useState(branch.folder ?? '');
   const suggested = project.data?.config?.repo.localFolder ?? '';
@@ -40,7 +41,7 @@ export function EditorTab({ branch }: { branch: BranchView }) {
       <Card withBorder>
         <Stack gap="xs">
           <Group justify="space-between">
-            <Text fw={600}>Откуда берётся код</Text>
+            <Text fw={600}>{t('editor.source')}</Text>
             {dev && (
               <SegmentedControl
                 value={source}
@@ -49,35 +50,32 @@ export function EditorTab({ branch }: { branch: BranchView }) {
                   if (v === 'folder' && !folder) setFolder(suggested);
                 }}
                 data={[
-                  { value: 'github', label: 'С GitHub' },
-                  { value: 'folder', label: 'Из моей папки' },
+                  { value: 'github', label: t('editor.github') },
+                  { value: 'folder', label: t('editor.folder') },
                 ]}
               />
             )}
           </Group>
           {source === 'github' ? (
             <Text size="sm" c="dimmed">
-              Сборка берёт код ветки с GitHub: приложение держит свою копию репозитория и отдельную папку ветки. Правьте код у себя, коммитьте и делайте
-              push — приложение подхватит коммит при следующем обновлении. Ваш репозиторий приложение не трогает.
-              {!dev && ' Свою папку можно подключить у веток Development.'}
+              {t('editor.githubHint')}
+              {!dev && t('editor.devOnly')}
             </Text>
           ) : (
             <>
               <Text size="sm" c="dimmed">
-                Сборка монтирует вашу папку как есть: Restart показывает правки Python без коммита, новый коммит в папке запускает обновление сборки.
-                Приложение только читает папку и ничего в ней не меняет. Если в папке открыта другая ветка, сборка блокируется (работает только Stop) до
-                возврата на {branch.name}.
+                {t('editor.folderHint', { branch: branch.name })}
               </Text>
               {branch.folder && branch.folderBranch && folder.trim() === branch.folder && (
                 <Text size="sm" c={branch.folderBlocked ? 'red' : 'teal'} data-testid="folder-branch">
-                  Сейчас в папке открыта ветка <Code>{branch.folderBranch}</Code>
-                  {branch.folderBlocked ? ` — не ${branch.name}: сборка заблокирована.` : '.'}
+                  {tx('editor.openBranch', { open: branch.folderBranch }, { code: (x) => <Code>{x}</Code> })}
+                  {branch.folderBlocked ? t('editor.blocked', { branch: branch.name }) : '.'}
                 </Text>
               )}
               <Group align="flex-end">
                 <TextInput
                   style={{ flex: 1 }}
-                  label="Папка вашего клона (корень репозитория)"
+                  label={t('editor.cloneFolder')}
                   placeholder="E:\work\my-addons"
                   value={folder}
                   onChange={(e) => setFolder(e.currentTarget.value)}
@@ -86,11 +84,11 @@ export function EditorTab({ branch }: { branch: BranchView }) {
                   variant="default"
                   leftSection={<IconFolder size={14} />}
                   onClick={async () => {
-                    const p = await window.bm.desktop.selectDirectory('Папка вашего клона репозитория');
+                    const p = await window.bm.desktop.selectDirectory(t('editor.chooseClone'));
                     if (p) setFolder(p);
                   }}
                 >
-                  Выбрать…
+                  {t('repo.choose')}
                 </Button>
               </Group>
             </>
@@ -98,7 +96,7 @@ export function EditorTab({ branch }: { branch: BranchView }) {
           {dev && changed && (
             <Group justify="flex-end">
               <Button loading={save.isPending} disabled={source === 'folder' && !folder.trim()} onClick={() => void apply(source === 'folder' ? folder.trim() : null)}>
-                Сохранить
+                {t('common.save')}
               </Button>
             </Group>
           )}
@@ -108,9 +106,9 @@ export function EditorTab({ branch }: { branch: BranchView }) {
       {!branch.codeDir ? (
         <Alert color="gray">
           <Group justify="space-between">
-            <Text size="sm">Папка ветки создаётся при первой сборке. Можно создать её сейчас, чтобы посмотреть код.</Text>
+            <Text size="sm">{t('editor.noWorktree')}</Text>
             <Button loading={ensure.isPending} onClick={() => ensure.mutate({ branchId: branch.id })}>
-              Создать worktree
+              {t('editor.createWorktree')}
             </Button>
           </Group>
         </Alert>
@@ -118,18 +116,17 @@ export function EditorTab({ branch }: { branch: BranchView }) {
         <Card withBorder>
           <Stack>
             <Text size="sm">
-              Код ветки: <Code>{branch.codeDir}</Code>{' '}
-              {branch.folder ? '(ваша папка)' : '(папка приложения на коммите с GitHub — правки здесь не нужны, они мешают следующей сборке)'}
+              {t('editor.codeDir')} <Code>{branch.codeDir}</Code> {t(branch.folder ? 'editor.yourFolder' : 'editor.appFolder')}
             </Text>
             <Group>
               <Button leftSection={<IconBrandVscode size={14} />} onClick={() => void shellOpen({ branchId: branch.id, target: 'editor' })}>
-                Открыть в VS Code
+                {t('editor.vscode')}
               </Button>
               <Button variant="default" leftSection={<IconCursorText size={14} />} onClick={() => void shellOpen({ branchId: branch.id, target: 'editor-cursor' })}>
-                Открыть в Cursor
+                {t('editor.cursor')}
               </Button>
               <Button variant="default" leftSection={<IconFolderOpen size={14} />} onClick={() => void shellOpen({ branchId: branch.id, target: 'explorer' })}>
-                {isMac ? 'Открыть в Finder' : 'Открыть в Проводнике'}
+                {t(isMac ? 'editor.finder' : 'editor.explorer')}
               </Button>
             </Group>
           </Stack>

@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Group, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { checkForUpdates, installUpdate, useUpdateState } from './UpdateBanner';
+import { t } from '../i18n';
+import { fmtDate } from '../lib/format';
 
 export const COPYRIGHT_HOLDER = 'Bakum Viacheslav';
 
@@ -14,7 +16,7 @@ export function useBuildInfo() {
 export function AppFooter() {
   const info = useBuildInfo().data;
   const year = info ? new Date(info.buildDate).getFullYear() : new Date().getFullYear();
-  const full = info ? `Odoo Branch Manager ${info.version} (${info.commit}), сборка ${new Date(info.buildDate).toLocaleString('ru-RU')}` : '';
+  const full = info ? t('footer.full', { version: info.version, commit: info.commit, date: fmtDate(info.buildDate) }) : '';
   return (
     <Group
       justify="space-between"
@@ -24,17 +26,17 @@ export function AppFooter() {
       style={{ flex: '0 0 24px', borderTop: '1px solid var(--mantine-color-default-border)', background: 'var(--mantine-color-default)' }}
       data-testid="app-footer"
     >
-      <Tooltip label={`${full}. Нажмите, чтобы скопировать`} disabled={!info}>
+      <Tooltip label={t('footer.clickToCopy', { full })} disabled={!info}>
         <UnstyledButton
           onClick={() => {
             if (!info) return;
             void window.bm.desktop.copy(full);
-            notifications.show({ message: 'Версия скопирована' });
+            notifications.show({ message: t('footer.copied') });
           }}
         >
           <Text size="xs" c="dimmed">
             Odoo Branch Manager {info ? `v${info.version} · ${info.commit}` : ''}
-            {info?.profile ? ` · профиль ${info.profile}` : ''}
+            {info?.profile ? t('footer.profile', { profile: info.profile }) : ''}
           </Text>
         </UnstyledButton>
       </Tooltip>
@@ -55,7 +57,7 @@ function FooterUpdateLink() {
   return (
     <UnstyledButton onClick={() => void (available ? installUpdate() : checkForUpdates())} data-testid="footer-update">
       <Text size="xs" c={available ? 'blue' : 'dimmed'} td="underline">
-        {s.status === 'checking' ? 'Проверка обновлений…' : available ? `Доступна версия ${s.latest} — обновить` : 'Проверить обновления'}
+        {s.status === 'checking' ? t('footer.checking') : available ? t('footer.available', { version: s.latest }) : t('footer.check')}
       </Text>
     </UnstyledButton>
   );

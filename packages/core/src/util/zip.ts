@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import zlib from 'node:zlib';
 import yauzl from 'yauzl';
 import { isInside } from './paths';
+import { t } from '../i18n';
 
 /**
  * A zip archive read on the host (D61): the entries come from the central directory (ZIP64 included — dump.sql of a
@@ -33,7 +34,7 @@ export function openZip(file: string): Promise<ZipReader> {
         resolve({
           entries,
           open: async (entry) => {
-            if (entry.isEncrypted()) throw new Error(`${entry.fileName}: запись зашифрована`);
+            if (entry.isEncrypted()) throw new Error(t('zip.encrypted', { name: entry.fileName }));
             const src = await zf.openReadStreamPromise(entry);
             const check = crcCheck(entry.crc32, entry.fileName);
             src.on('error', (e) => check.destroy(e));
@@ -55,7 +56,7 @@ function crcCheck(expected: number, name: string): Transform {
       cb(null, chunk);
     },
     flush(cb) {
-      cb(crc >>> 0 === expected >>> 0 ? null : new Error(`${name}: не совпадает контрольная сумма (CRC-32), архив повреждён`));
+      cb(crc >>> 0 === expected >>> 0 ? null : new Error(t('zip.crc', { name })));
     },
   });
 }
@@ -63,7 +64,7 @@ function crcCheck(expected: number, name: string): Transform {
 /** Unpacks one entry to `root/rel`; a path leading outside `root` is refused. */
 export async function extractEntry(zip: ZipReader, entry: yauzl.Entry, root: string, rel: string): Promise<void> {
   const target = path.resolve(root, rel);
-  if (!isInside(root, target)) throw new Error(`${entry.fileName}: путь ведёт за пределы ${root}`);
+  if (!isInside(root, target)) throw new Error(t('zip.outside', { name: entry.fileName, root }));
   await fs.promises.mkdir(path.dirname(target), { recursive: true });
   await pipeline(await zip.open(entry), fs.createWriteStream(target));
 }

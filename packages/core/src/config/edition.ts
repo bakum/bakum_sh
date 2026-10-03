@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { OdooEdition, ProjectConfig } from '@bm/shared';
+import { t } from '../i18n';
 
 const hasWebEnterprise = (dir: string): boolean => {
   try {
@@ -19,15 +20,15 @@ export function odooEdition(cfg: ProjectConfig): OdooEdition {
   const r = cfg.runtime;
   if (r.enterprise) {
     const m = r.mounts.find((x) => x.container === r.enterprise);
-    return { kind: 'enterprise', source: m?.host ?? null, note: `аддоны Enterprise в ${r.enterprise}; в новые чистые БД ставится web_enterprise` };
+    return { kind: 'enterprise', source: m?.host ?? null, note: t('edition.enterprise', { dir: r.enterprise }) };
   }
   const m = r.mounts.find((x) => hasWebEnterprise(x.host));
   if (m) {
     return {
       kind: 'enterprise',
       source: m.host,
-      note: `аддоны Enterprise смонтированы в ${m.container}. БД из бэкапа прода — Enterprise, как на проде; в новые чистые БД web_enterprise сам не ставится (runtime.enterprise не задан)`,
+      note: t('edition.mounted', { dir: m.container }),
     };
   }
-  return { kind: 'community', source: null, note: 'в монтированиях нет аддонов Enterprise (web_enterprise)' };
+  return { kind: 'community', source: null, note: t('edition.community') };
 }

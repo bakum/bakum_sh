@@ -17,6 +17,7 @@ import { runtimeState } from '../state';
 import { audit } from '../services/audit';
 import { nowIso } from '../util/time';
 import { pickBackup } from './backups';
+import { t } from '../i18n';
 
 export interface BuildRequest {
   trigger: BuildTrigger;
@@ -31,7 +32,7 @@ export interface BuildRequest {
  */
 export async function requestBuildChecked(ctx: Ctx, branchId: number, req: BuildRequest): Promise<number> {
   const b = branchRow(ctx, branchId);
-  if (!b) throw new BmError('NO_BRANCH', 'Ветка не найдена');
+  if (!b) throw new BmError('NO_BRANCH', t('config.noBranch'));
   const cfg = ctx.store.require(b.projectId);
   const scope = resolveBranchScope(cfg, b.name, b.stage, b.overrides).scope;
   await assertFolderOnBranch(b, scope);
@@ -51,7 +52,7 @@ export function productionFromBackup(cfg: ProjectConfig, stage: Stage, database:
 /** Synchronous part: creates the Build row and enqueues its job. */
 export function requestBuild(ctx: Ctx, branchId: number, req: BuildRequest): number {
   const b = branchRow(ctx, branchId);
-  if (!b) throw new BmError('NO_BRANCH', 'Ветка не найдена');
+  if (!b) throw new BmError('NO_BRANCH', t('config.noBranch'));
   const cfg = ctx.store.require(b.projectId);
   assertNotLegacy(cfg);
   const active = ctx.db
@@ -59,7 +60,7 @@ export function requestBuild(ctx: Ctx, branchId: number, req: BuildRequest): num
     .from(builds)
     .where(and(eq(builds.branchId, branchId), inArray(builds.status, ['queued', 'building'])))
     .get();
-  if (active) throw new BmError('BUILD_ACTIVE', `У ветки «${b.name}» уже идёт сборка #${active.number}. Дождитесь её или отмените.`);
+  if (active) throw new BmError('BUILD_ACTIVE', t('request.active', { branch: b.name, number: active.number }));
 
   const scope = resolveBranchScope(cfg, b.name, b.stage, b.overrides).scope;
   const live = liveBuild(ctx, branchId);
@@ -68,9 +69,9 @@ export function requestBuild(ctx: Ctx, branchId: number, req: BuildRequest): num
 
   const limits = ctx.store.app.limits;
   if (kind === 'new' && !live && runtimeState.runningBuilds >= limits.maxRunningBuilds) {
-    const text = `Живых сборок уже ${runtimeState.runningBuilds} при лимите ${limits.maxRunningBuilds} (maxRunningBuilds).`;
-    if (limits.enforce) throw new BmError('LIMIT', `${text} Остановите или отбросьте ненужные сборки.`);
-    ctx.toMain({ kind: 'notify', notifType: 'limit', title: 'Лимит живых сборок', body: text });
+    const text = t('request.limit', { running: runtimeState.runningBuilds, limit: limits.maxRunningBuilds });
+    if (limits.enforce) throw new BmError('LIMIT', t('request.limitEnforced', { text }));
+    ctx.toMain({ kind: 'notify', notifType: 'limit', title: t('request.limitTitle'), body: text });
   }
 
   const n = (ctx.db.select({ m: max(builds.number) }).from(builds).where(eq(builds.branchId, branchId)).get()?.m ?? 0) + 1;
@@ -79,7 +80,7 @@ export function requestBuild(ctx: Ctx, branchId: number, req: BuildRequest): num
   const vars = { project: cfg.id, branch: b.name, slug: b.slug, slug_, build: n, stage: b.stage, ...parsed };
   const host = assertHost(renderTemplate(cfg.naming.host, vars));
   const composeProject = renderTemplate(cfg.naming.composeProject, vars);
-  if (!/^[a-z0-9][a-z0-9_-]*$/.test(composeProject)) throw new BmError('BAD_NAME', `Недопустимое имя compose-проекта «${composeProject}»`);
+  if (!/^[a-z0-9][a-z0-9_-]*$/.test(composeProject)) throw new BmError('BAD_NAME', t('request.badCompose', { name: composeProject }));
 
   let dbName: string;
   let dbSource: string;
@@ -89,21 +90,21 @@ export function requestBuild(ctx: Ctx, branchId: number, req: BuildRequest): num
   } else {
     dbName = assertSqlIdent(renderTemplate(cfg.naming.db, vars));
     if (b.stage === 'production' && scope.database.startsWith('copy:')) {
-      throw new BmError('BAD_CONFIG', 'Production не может копировать БД другой ветки: укажите database: backup или fresh');
+      throw new BmError('BAD_CONFIG', t('request.prodCopy'));
     }
     if (productionFromBackup(cfg, b.stage, scope.database, req.backupPath)) {
-      if (b.stage !== 'production') throw new BmError('BAD_CONFIG', 'database: backup допустима только для Production');
+      if (b.stage !== 'production') throw new BmError('BAD_CONFIG', t('request.backupProdOnly'));
       const file = req.backupPath ?? pickBackup(cfg)?.path;
       if (!file) {
         throw new BmError(
           'NO_BACKUP',
-          `Не найден бэкап прода: папка ${cfg.production.backups.dir ?? '(не задана)'}, шаблон ${cfg.production.backups.pattern}. Положите файл .zip в папку или выберите его во вкладке Backups.`,
+          t('request.noBackup', { dir: cfg.production.backups.dir ?? t('request.dirNotSet'), pattern: cfg.production.backups.pattern }),
         );
       }
       if (!/\.(zip|dump)$/i.test(file)) {
-        throw new BmError('BAD_BACKUP', `Файл ${path.basename(file)} не подходит: нужен бэкап Odoo (.zip) или дамп pg_dump -Fc с расширением .dump.`);
+        throw new BmError('BAD_BACKUP', t('request.badBackup', { file: path.basename(file) }));
       }
-      if (!fs.existsSync(file)) throw new BmError('NO_BACKUP', `Файл бэкапа не найден: ${file}`);
+      if (!fs.existsSync(file)) throw new BmError('NO_BACKUP', t('request.backupMissing', { file }));
       dbSource = `backup:${path.basename(file)}`;
     } else {
       // database: backup without a backups folder → fresh (productionFromBackup).

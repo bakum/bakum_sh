@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Alert, Button, Code, CopyButton, Group, ScrollArea, Stack, Text } from '@mantine/core';
+import { t } from '../i18n';
 
 interface Props {
   children: ReactNode;
@@ -37,34 +38,30 @@ export class ErrorBoundary extends Component<Props, State> {
   override render(): ReactNode {
     const { error, stack } = this.state;
     if (!error) return this.props.children;
-    const details = `${error.stack ?? `${error.name}: ${error.message}`}\n\nКомпоненты:${stack}`;
+    const details = `${error.stack ?? `${error.name}: ${error.message}`}\n\n${t('boundary.components')}${stack}`;
     return (
       <Stack p="md" maw={960} data-testid="error-boundary">
-        <Alert color="red" variant="light" title={this.props.scope === 'page' ? 'Страница завершилась с ошибкой' : 'Окно завершилось с ошибкой'}>
+        <Alert color="red" variant="light" title={t(this.props.scope === 'page' ? 'boundary.page' : 'boundary.window')}>
           <Stack gap="xs">
             <Text size="sm">
               {error.message || error.name}
             </Text>
             <Text size="sm" c="dimmed">
-              Это ошибка приложения, задачи и сборки она не затрагивает.{' '}
-              {this.props.scope === 'page'
-                ? 'Попробуйте ещё раз, откройте другой раздел или перезагрузите окно.'
-                : 'Перезагрузите окно.'}{' '}
-              Если повторяется — скопируйте подробности в issue.
+              {t('boundary.notJobs')} {t(this.props.scope === 'page' ? 'boundary.tryPage' : 'boundary.tryWindow')} {t('boundary.issue')}
             </Text>
             <Group gap="xs">
               {this.props.scope === 'page' && (
                 <Button size="xs" variant="default" onClick={() => this.setState({ error: null, stack: '' })}>
-                  Попробовать ещё раз
+                  {t('boundary.retry')}
                 </Button>
               )}
               <Button size="xs" variant="default" onClick={() => window.location.reload()}>
-                Перезагрузить окно
+                {t('boundary.reload')}
               </Button>
               <CopyButton value={details}>
                 {({ copied, copy }) => (
                   <Button size="xs" variant="subtle" onClick={copy}>
-                    {copied ? 'Скопировано' : 'Скопировать подробности'}
+                    {copied ? t('common.copied') : t('boundary.copyDetails')}
                   </Button>
                 )}
               </CopyButton>

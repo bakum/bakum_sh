@@ -1,4 +1,5 @@
 import { docker } from './client';
+import { t } from '../i18n';
 
 const ANON_LABEL = 'com.docker.volume.anonymous';
 
@@ -24,13 +25,13 @@ export async function removeUnusedVolumes(names: string[], log: (line: string) =
     if (!(await docker.getVolume(name).inspect().catch(() => null))) continue;
     const users = await docker.listContainers({ all: true, filters: { volume: [name] } });
     if (users.length) {
-      log(`том ${name.slice(0, 12)} подключён к ${users.map((u) => (u.Names[0] ?? '').replace(/^\//, '')).join(', ')} — не удаляется`);
+      log(t('volumes.inUse', { name: name.slice(0, 12), users: users.map((u) => (u.Names[0] ?? '').replace(/^\//, '')).join(', ') }));
       continue;
     }
     log(`docker volume rm ${name.slice(0, 12)}`);
     await docker
       .getVolume(name)
       .remove()
-      .catch((e: Error) => log(`том ${name.slice(0, 12)} не удалён: ${e.message}`));
+      .catch((e: Error) => log(t('volumes.removeFailed', { name: name.slice(0, 12), error: e.message })));
   }
 }

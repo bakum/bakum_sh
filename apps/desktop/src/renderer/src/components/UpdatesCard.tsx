@@ -1,19 +1,22 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Badge, Button, Card, Group, Stack, Text, Title } from '@mantine/core';
 import { checkForUpdates, installUpdate, ReleaseNotes, useUpdateState } from './UpdateBanner';
 import { fmtDate } from '../lib/format';
 import { isMac } from '../lib/bm';
+import { t, tx } from '../i18n';
 
-const STATUS: Record<string, string> = {
-  idle: 'не проверялось',
-  checking: 'проверка…',
-  none: 'установлена последняя версия',
-  available: 'доступно обновление',
-  downloading: isMac ? 'загрузка образа…' : 'загрузка установщика…',
-  ready: isMac ? 'образ скачан' : 'установщик скачан',
-  installing: 'установка…',
-  error: 'ошибка проверки',
-};
+const statusText = (s: string): string =>
+  ({
+    idle: t('updates.idle'),
+    checking: t('updates.checking'),
+    none: t('updates.none'),
+    available: t('updates.available'),
+    downloading: t(isMac ? 'updates.downloadingDmg' : 'updates.downloadingExe'),
+    ready: t(isMac ? 'updates.readyDmg' : 'updates.readyExe'),
+    installing: t('updates.installing'),
+    error: t('updates.error'),
+  })[s] ?? s;
+const bold = { b: (x: ReactNode) => <b>{x}</b> };
 
 /** Settings → Приложение → Обновления: manual check and install. */
 export function UpdatesCard() {
@@ -26,20 +29,20 @@ export function UpdatesCard() {
     <Card withBorder>
       <Stack gap="xs">
         <Group justify="space-between">
-          <Title order={5}>Обновления</Title>
+          <Title order={5}>{t('updates.title')}</Title>
           <Badge variant="light" color={s.status === 'error' ? 'red' : canInstall ? 'blue' : 'gray'}>
-            {STATUS[s.status] ?? s.status}
+            {statusText(s.status)}
           </Badge>
         </Group>
         <Text size="sm">
-          Установлена версия <b>{s.current}</b>
+          {tx('updates.installed', { current: s.current }, bold)}
           {s.latest && s.latest !== s.current ? (
             <>
-              , последняя — <b>{s.latest}</b>
-              {s.publishedAt ? ` от ${fmtDate(s.publishedAt)}` : ''}
+              {tx('updates.latest', { latest: s.latest }, bold)}
+              {s.publishedAt ? t('updates.of', { date: fmtDate(s.publishedAt) }) : ''}
             </>
           ) : null}
-          . Последняя проверка: {fmtDate(s.checkedAt)}.
+          {t('updates.lastCheck', { date: fmtDate(s.checkedAt) })}
         </Text>
         {s.error && (
           <Text size="sm" c="red">
@@ -48,12 +51,12 @@ export function UpdatesCard() {
         )}
         {s.mode === 'dev' && (
           <Text size="xs" c="dimmed">
-            Приложение запущено из исходников: проверка работает, установка обновлений — только в установленной версии.
+            {t('updates.dev')}
           </Text>
         )}
         {s.mode === 'portable' && (
           <Text size="xs" c="dimmed">
-            Portable-версия: новая версия скачивается со страницы релиза.
+            {t('updates.portable')}
           </Text>
         )}
         <Group>
@@ -67,23 +70,19 @@ export function UpdatesCard() {
             }}
             data-testid="check-updates"
           >
-            Проверить обновления
+            {t('updates.check')}
           </Button>
           {canInstall && (
             <>
               <Button variant="subtle" onClick={() => setNotes(true)}>
-                Что нового в {s.latest}
+                {t('updates.whatsNew', { version: s.latest })}
               </Button>
-              <Button onClick={() => void installUpdate()}>{s.mode === 'portable' ? 'Скачать' : `Обновить до ${s.latest}`}</Button>
+              <Button onClick={() => void installUpdate()}>{s.mode === 'portable' ? t('upd.download') : t('updates.updateTo', { version: s.latest })}</Button>
             </>
           )}
         </Group>
         <Text size="xs" c="dimmed">
-          Приложение сверяется с релизами GitHub-репозитория из настройки updates.repository.{' '}
-          {isMac
-            ? 'При обновлении образ .dmg скачивается и проверяется, затем приложение полностью закрывается и открывает его: перетащите приложение в «Программы» с заменой.'
-            : 'При обновлении установщик скачивается и проверяется, затем приложение полностью закрывается и запускает его.'}{' '}
-          Контейнеры сборок, базы и настройки не затрагиваются.
+          {t('updates.about')} {t(isMac ? 'updates.howMac' : 'updates.howWin')} {t('updates.untouched')}
         </Text>
       </Stack>
       <ReleaseNotes state={s} opened={notes} onClose={() => setNotes(false)} />

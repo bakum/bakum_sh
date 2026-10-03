@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Checkbox, Code, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
 import type { BranchView } from '@bm/shared';
 import { useBm, useBmMutation } from '../../lib/query';
+import { t } from '../../i18n';
 
 /** Delete (spec 8.10): confirmation by typing the slug; a dirty worktree needs a separate confirmation. */
 export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch: BranchView; onClose: () => void }) {
@@ -10,7 +11,7 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
   const [slug, setSlug] = useState('');
   const [forceDirty, setForceDirty] = useState(false);
   const preview = useBm('branches.deletePreview', { branchId: branch.id }, { enabled: open });
-  const del = useBmMutation('branches.delete', { success: 'Ветка удаляется' });
+  const del = useBmMutation('branches.delete', { success: t('delBranch.deleting') });
   useEffect(() => {
     if (open) {
       setSlug('');
@@ -19,10 +20,10 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
   }, [open]);
   const p = preview.data;
   return (
-    <Modal opened={open} onClose={onClose} title={`Удалить ветку ${branch.name}`} size="lg">
+    <Modal opened={open} onClose={onClose} title={t('delBranch.title', { branch: branch.name })} size="lg">
       <Stack>
         {p?.protected ? (
-          <Alert color="orange">Ветка защищена (protected). Снимите защиту в Settings ветки, чтобы удалить её.</Alert>
+          <Alert color="orange">{t('delBranch.protected')}</Alert>
         ) : p?.folderBlocked ? (
           <Alert color="red" data-testid="delete-folder-blocked">
             {p.folderBlocked}
@@ -30,21 +31,20 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
         ) : (
           <>
             <Text size="sm">
-              Будут отброшены все сборки ветки ({p?.builds ?? '…'}): БД, filestore и контейнеры. Worktree будет удалён. История остаётся в Audit
-              Logs. Ветка на GitHub и ваша папка с кодом не трогаются: если ветка больше не нужна, удалите её на GitHub сами.
+              {t('delBranch.what', { n: p?.builds ?? '…' })}
             </Text>
             {p?.dirty && (
-              <Alert color="red" title="В worktree есть незакоммиченные изменения">
+              <Alert color="red" title={t('delBranch.dirty')}>
                 <Code block>{p.dirty}</Code>
-                <Checkbox mt="xs" label="Я понимаю, что эти изменения будут потеряны" checked={forceDirty} onChange={(e) => setForceDirty(e.currentTarget.checked)} />
+                <Checkbox mt="xs" label={t('delBranch.dirtyOk')} checked={forceDirty} onChange={(e) => setForceDirty(e.currentTarget.checked)} />
               </Alert>
             )}
-            <TextInput label={`Для подтверждения введите slug: ${branch.slug}`} value={slug} onChange={(e) => setSlug(e.currentTarget.value)} />
+            <TextInput label={t('delBranch.typeSlug', { slug: branch.slug })} value={slug} onChange={(e) => setSlug(e.currentTarget.value)} />
           </>
         )}
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
-            Отмена
+            {t('common.cancel')}
           </Button>
           <Button
             color="red"
@@ -62,7 +62,7 @@ export function DeleteDialog({ open, branch, onClose }: { open: boolean; branch:
               )
             }
           >
-            Удалить
+            {t('common.delete')}
           </Button>
         </Group>
       </Stack>

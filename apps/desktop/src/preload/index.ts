@@ -43,7 +43,8 @@ ipcRenderer.on('bm:port', (e) => {
   };
   port.start();
   if (reconnect) {
-    for (const p of pending.values()) p.reject(Object.assign(new Error('Core был перезапущен, повторите действие'), { code: 'CORE_RESTARTED' }));
+    // The renderer shows this in the interface language by the code (lib/bm.ts errorText).
+    for (const p of pending.values()) p.reject(Object.assign(new Error('Core restarted, try again'), { code: 'CORE_RESTARTED' }));
     pending.clear();
     queue.length = 0;
     // Re-establish live subscriptions on the new Core.

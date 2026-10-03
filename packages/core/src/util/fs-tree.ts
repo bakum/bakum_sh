@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { t } from '../i18n';
 
 /** Hardlinks (or copies) a directory tree on the host: Odoo attachments are immutable (spec 8.3 step 4, D19). */
 export async function copyTree(src: string, dst: string, mode: 'hardlink' | 'copy', log: (l: string) => void): Promise<{ files: number; linked: boolean }> {
@@ -17,7 +18,7 @@ export async function copyTree(src: string, dst: string, mode: 'hardlink' | 'cop
             await fs.promises.link(sp, dp);
           } catch (err) {
             if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
-            log(`хардлинки не поддерживаются (${(err as Error).message}) — копирование`);
+            log(t('fsTree.noHardlinks', { error: (err as Error).message }));
             linked = false;
             await fs.promises.copyFile(sp, dp);
           }

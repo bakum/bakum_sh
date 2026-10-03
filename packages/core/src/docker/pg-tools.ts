@@ -6,6 +6,7 @@ import { BmError, type ProjectConfig } from '@bm/shared';
 import { dockerCli, isStdinClosed, type RunResult } from './client';
 import { externalPgContainer } from './postgres';
 import { toPosix } from '../util/paths';
+import { t } from '../i18n';
 
 /**
  * Postgres client tools (`pg_dump`, `pg_restore`) run in a one-off container of the server's own image, in the project
@@ -88,7 +89,7 @@ export async function copyDatabaseByDump(o: Omit<PgToolOpts, 'script' | 'args' |
     script: 'set -e; d=/tmp/bm-copy; rm -rf "$d"; pg_dump -Fd -j 4 -Z 1 -f "$d" "$1"; pg_restore --no-owner --no-acl --exit-on-error -j 4 -d "$2" "$d"; rm -rf "$d"',
     args: [o.src, o.dst],
   });
-  if (r.exitCode !== 0) throw new BmError('PG_DUMP', `Копирование ${o.src} → ${o.dst} через pg_dump не удалось: ${tail(r)}`);
+  if (r.exitCode !== 0) throw new BmError('PG_DUMP', t('pgTools.dumpFailed', { src: o.src, dst: o.dst, error: tail(r) }));
 }
 
 /**
@@ -138,7 +139,7 @@ export async function restoreSqlStream(
         await pipeline(src, progress, stdin);
       } catch (err) {
         if (isStdinClosed(err)) throw err;
-        throw new BmError('BACKUP_READ', `Не удалось прочитать ${o.name} из архива: ${(err as Error).message}`);
+        throw new BmError('BACKUP_READ', t('pgTools.readFailed', { name: o.name, error: (err as Error).message }));
       }
     },
   });

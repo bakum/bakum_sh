@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@ta
 import { notifications } from '@mantine/notifications';
 import type { MethodName, MethodParams, MethodResult } from '@bm/shared';
 import { call, errorText } from './bm';
+import { t } from '../i18n';
 
 export function useBm<K extends MethodName>(
   method: K,
@@ -15,7 +16,7 @@ export function useBm<K extends MethodName>(
   });
 }
 
-/** Mutation with a Russian error toast by default. */
+/** Mutation with an error toast by default. */
 export function useBmMutation<K extends MethodName>(method: K, opts: { success?: string; silentError?: boolean } = {}) {
   const qc = useQueryClient();
   return useMutation<MethodResult<K>, Error, MethodParams<K>>({
@@ -25,12 +26,12 @@ export function useBmMutation<K extends MethodName>(method: K, opts: { success?:
       void qc.invalidateQueries();
     },
     onError: (e) => {
-      if (!opts.silentError) notifications.show({ color: 'red', title: 'Ошибка', message: errorText(e), autoClose: 12000 });
+      if (!opts.silentError) notifications.show({ color: 'red', title: t('common.error'), message: errorText(e), autoClose: 12000 });
     },
   });
 }
 
-export const DOCKER_DOWN_HINT = 'Docker Desktop не запущен: запустите его кнопкой «Запустить» вверху окна.';
+export const dockerDownHint = (): string => t('common.dockerDown');
 
 /** Docker state from system.status (the same query as the header indicator); true until the first answer. */
 export function useDockerOk(): boolean {

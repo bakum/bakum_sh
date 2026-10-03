@@ -8,6 +8,7 @@ import { getQueue, type JobContext } from '../jobs/queue';
 import { audit } from './audit';
 import { requestFetch } from './fetch';
 import { toPosix } from '../util/paths';
+import { t } from '../i18n';
 
 /**
  * Access to a remote repository before it is cloned (docs/decisions.md D31). Credentials are never stored by the app:
@@ -28,10 +29,7 @@ export async function probeRepo(url: string, interactive = false): Promise<RepoP
       ok: false,
       problem: 'no-helper',
       message:
-        'В Git не настроено хранилище учётных данных (credential.helper), поэтому войти в приватный репозиторий нельзя. ' +
-        (process.platform === 'darwin'
-          ? 'Выполните `git config --global credential.helper osxkeychain` (Связка ключей macOS) или установите Git Credential Manager.'
-          : 'Установите Git for Windows с Git Credential Manager или выполните `git config --global credential.helper manager`.'),
+        t('repo.noHelper') + t(process.platform === 'darwin' ? 'repo.noHelperMac' : 'repo.noHelperWin'),
       branches: [],
       defaultBranch: null,
     };
@@ -44,7 +42,7 @@ export async function probeRepo(url: string, interactive = false): Promise<RepoP
  * clone URL so the helper returns exactly this credential. A token that does not open the repository is rejected again.
  */
 export async function saveToken(url: string, username: string, token: string): Promise<RepoProbe> {
-  if (!url.startsWith('https://')) throw new BmError('BAD_URL', 'Токен подходит только для https-адреса. Для SSH нужен ключ.');
+  if (!url.startsWith('https://')) throw new BmError('BAD_URL', t('repo.tokenHttpsOnly'));
   const helper = await git.credentialHelper(url);
   if (!helper) return probeRepo(url);
   const withUser = git.withUser(url, username);
@@ -52,7 +50,7 @@ export async function saveToken(url: string, username: string, token: string): P
   const p = await probeRepo(withUser);
   if (!p.ok) {
     await git.credentialReject(withUser, username, token);
-    return { ...p, message: `Токен не подошёл: ${p.message ?? ''}`.trim() };
+    return { ...p, message: t('repo.tokenRejected', { error: p.message ?? '' }).trim() };
   }
   return p;
 }
@@ -61,7 +59,7 @@ export async function saveToken(url: string, username: string, token: string): P
 export async function loginProject(ctx: Ctx, projectId: string): Promise<RepoProbe> {
   const cfg = ctx.store.require(projectId);
   const url = cfg.repo.url ?? (cfg.repo.path ? await git.remoteUrl(cfg.repo.path, cfg.repo.remote) : null);
-  if (!url) throw new BmError('NO_REMOTE', `У репозитория нет remote «${cfg.repo.remote}»`);
+  if (!url) throw new BmError('NO_REMOTE', t('repo.noRemote', { remote: cfg.repo.remote }));
   const p = await probeRepo(url, true);
   if (p.ok) requestFetch(ctx, projectId);
   return p;
@@ -86,8 +84,8 @@ export function defaultCloneDir(ctx: Ctx, url: string, suffix = ''): string {
  */
 export function requestClone(ctx: Ctx, p: { url: string; dir?: string; branch?: string; shallow: boolean; mirror: boolean }): { jobId: number; dir: string } {
   const dir = p.mirror ? defaultCloneDir(ctx, p.url, '.git') : p.dir ? path.resolve(p.dir) : null;
-  if (!dir || (!p.mirror && !path.isAbsolute(p.dir!))) throw new BmError('BAD_DIR', 'Укажите полный путь к папке');
-  if (fs.existsSync(dir) && fs.readdirSync(dir).length) throw new BmError('DIR_NOT_EMPTY', `Папка ${dir} уже существует и не пуста. Выберите другую.`);
+  if (!dir || (!p.mirror && !path.isAbsolute(p.dir!))) throw new BmError('BAD_DIR', t('repo.fullPath'));
+  if (fs.existsSync(dir) && fs.readdirSync(dir).length) throw new BmError('DIR_NOT_EMPTY', t('repo.dirExists', { dir }));
   const params = { url: p.url, dir: toPosix(dir), branch: p.branch ?? null, shallow: p.shallow, mirror: p.mirror };
   audit(ctx, { action: p.mirror ? 'repo.mirror' : 'repo.clone', target: p.url, params });
   return { jobId: getQueue().enqueue('clone', {}, params), dir: toPosix(dir) };
@@ -97,11 +95,11 @@ export function requestClone(ctx: Ctx, p: { url: string; dir?: string; branch?: 
 export async function cloneExecutor(_ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
   const p = job.params as { url: string; dir: string; branch: string | null; shallow: boolean; mirror?: boolean };
   const existed = fs.existsSync(p.dir);
-  if (existed && fs.readdirSync(p.dir).length) throw new BmError('DIR_NOT_EMPTY', `Папка ${p.dir} не пуста`);
+  if (existed && fs.readdirSync(p.dir).length) throw new BmError('DIR_NOT_EMPTY', t('repo.dirNotEmpty', { dir: p.dir }));
   fs.mkdirSync(path.dirname(p.dir), { recursive: true });
   try {
     if (p.mirror) {
-      jc.log(`копия репозитория приложения: git init --bare ${p.dir} + git fetch ${p.url}`);
+      jc.log(t('repo.mirrorInit', { dir: p.dir, url: p.url }));
       await git.initMirror(p.url, p.dir, { onLine: jc.log, signal: jc.signal });
     } else {
       jc.log(`git clone ${p.branch ? `--branch ${p.branch} --single-branch ` : ''}${p.shallow ? '--depth 1 ' : ''}${p.url} ${p.dir}`);
@@ -112,5 +110,5 @@ export async function cloneExecutor(_ctx: Ctx, job: JobRow, jc: JobContext): Pro
     else for (const f of fs.readdirSync(p.dir)) fs.rmSync(path.join(p.dir, f), { recursive: true, force: true });
     throw err;
   }
-  jc.log('готово');
+  jc.log(t('repo.done'));
 }

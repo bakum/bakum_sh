@@ -1,4 +1,5 @@
 import { BmError } from '@bm/shared';
+import { t } from '../i18n';
 
 /** Template variables (spec 9.2). */
 export const TEMPLATE_VARS = [
@@ -34,11 +35,11 @@ export function templateVariables(tpl: string): string[] {
 export function renderTemplate(tpl: string, vars: TemplateVars): string {
   return tpl.replace(VAR_RE, (whole, name: string) => {
     if (!(TEMPLATE_VARS as readonly string[]).includes(name)) {
-      throw new BmError('TEMPLATE_UNKNOWN_VAR', `Шаблон «${tpl}»: неизвестная переменная ${whole}. Допустимые: ${TEMPLATE_VARS.map((v) => `{${v}}`).join(', ')}`);
+      throw new BmError('TEMPLATE_UNKNOWN_VAR', t('tpl.unknownVar', { tpl, name: whole, vars: TEMPLATE_VARS.map((v) => `{${v}}`).join(', ') }));
     }
     const v = vars[name as TemplateVar];
     if (v === undefined || v === null || v === '') {
-      throw new BmError('TEMPLATE_MISSING_VAR', `Шаблон «${tpl}»: переменная ${whole} здесь не определена`);
+      throw new BmError('TEMPLATE_MISSING_VAR', t('tpl.missingVar', { tpl, name: whole }));
     }
     return String(v);
   });
@@ -57,9 +58,9 @@ export function renderDeep<T>(value: T, vars: TemplateVars): T {
 export const SQL_IDENT_RE = /^[a-z0-9_]+$/;
 
 /** Every database name built by the app goes through this check (spec 11). */
-export function assertSqlIdent(name: string, what = 'имя БД'): string {
+export function assertSqlIdent(name: string, what: 'db' | 'srcDb' | 'dbUser' = 'db'): string {
   if (!SQL_IDENT_RE.test(name) || name.length > 63) {
-    throw new BmError('BAD_IDENTIFIER', `Недопустимое ${what} «${name}»: разрешены только a-z, 0-9, «_», до 63 символов. Проверьте шаблон naming.db.`);
+    throw new BmError('BAD_IDENTIFIER', t('tpl.badIdent', { what: t(`tpl.what.${what}`), name }));
   }
   return name;
 }
@@ -68,7 +69,7 @@ export const HOST_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z
 
 export function assertHost(host: string): string {
   if (!HOST_RE.test(host) || host.length > 253) {
-    throw new BmError('BAD_HOST', `Недопустимое имя хоста «${host}». Проверьте шаблон naming.host.`);
+    throw new BmError('BAD_HOST', t('tpl.badHost', { host }));
   }
   return host;
 }

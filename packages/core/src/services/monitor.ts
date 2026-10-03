@@ -11,6 +11,7 @@ import * as pg from '../pg';
 import { treeSize } from '../util/fs-tree';
 import { log } from '../util/logger';
 import { lifecycleState } from '../builds/lifecycle-state';
+import { t } from '../i18n';
 
 /**
  * Monitor (spec 8.9, D45): CPU / RAM of running live builds sampled every 30 s into an in-memory ring (the last hour,
@@ -81,7 +82,7 @@ export function stopMonitor(): void {
 
 export async function monitorView(ctx: Ctx, buildId: number): Promise<MonitorView> {
   const b = ctx.db.select().from(builds).where(eq(builds.id, buildId)).get();
-  if (!b) throw new BmError('NO_BUILD', 'Сборка не найдена');
+  if (!b) throw new BmError('NO_BUILD', t('common.noBuild'));
   const cfg = ctx.store.require(b.projectId);
   const br = ctx.db.select().from(branches).where(eq(branches.id, b.branchId)).get();
   const scope = br ? resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope : null;

@@ -42,13 +42,14 @@ import { projectDeletePreview, requestProjectDelete } from './services/project-d
 import { pgMigratePreview, requestPgMigrate } from './services/pg-migrate';
 import { readLogs } from './services/logs';
 import { cleanupOrphans } from './reconcile';
+import { t } from './i18n';
 
 /** All RPC methods of Core. */
 export function registerHandlers(ctx: Ctx): void {
   ctx.rpc.register({
     'system.ping': () => ({ pong: true, pid: process.pid, startedAt: ctx.startedAt }),
     'system.state': () => appState(ctx),
-    'system.completeFirstRun': (p) => completeFirstRun(ctx, p.proxyPort),
+    'system.completeFirstRun': (p) => completeFirstRun(ctx, p.proxyPort, p.language),
     'system.status': (p) => systemStatus(ctx, !!p.refresh),
     'system.startDocker': () => startDockerDesktop(ctx),
 
@@ -122,7 +123,7 @@ export function registerHandlers(ctx: Ctx): void {
     'jobs.list': (p) => listJobs(ctx, p),
     'jobs.get': (p) => {
       const r = ctx.db.select().from(jobs).where(eq(jobs.id, p.jobId)).get();
-      if (!r) throw new BmError('NO_JOB', 'Задача не найдена');
+      if (!r) throw new BmError('NO_JOB', t('queue.noJob'));
       return jobView(r);
     },
     'jobs.cancel': (p) => {

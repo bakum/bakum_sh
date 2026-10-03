@@ -22,6 +22,7 @@ import { createEmpty, dbFingerprint, dbSize, dropDatabase, listDatabases, pgPing
 import { runtimeState } from '../state';
 import { audit } from './audit';
 import { onProjectConfigChanged } from './projects';
+import { t } from '../i18n';
 
 /**
  * «Перевести на свой Postgres»: a project on an external Postgres (usually `db` of the user's own compose stack) moves
@@ -61,16 +62,16 @@ async function targetImage(cfg: ProjectConfig, container: ExternalPgContainer | 
 }
 
 function blocker(ctx: Ctx, cfg: ProjectConfig, selfJobId = 0): string | null {
-  if (cfg.postgres.mode !== 'external') return 'Проект уже работает на своём Postgres приложения.';
-  if (isLegacyProject(cfg)) return 'Проект старой схемы: удалите его и добавьте заново.';
-  if (!cfg.postgres.password) return 'Не задан пароль Postgres (Settings → Postgres).';
-  if (!runtimeState.docker.ok) return 'Docker недоступен: запустите Docker Desktop.';
+  if (cfg.postgres.mode !== 'external') return t('migrate.alreadyManaged');
+  if (isLegacyProject(cfg)) return t('migrate.legacy');
+  if (!cfg.postgres.password) return t('migrate.noPassword');
+  if (!runtimeState.docker.ok) return t('migrate.dockerDown');
   const active = ctx.db
     .select()
     .from(jobs)
     .where(and(eq(jobs.projectId, cfg.id), eq(jobs.type, 'migrate_postgres'), inArray(jobs.status, ['queued', 'running']), ne(jobs.id, selfJobId)))
     .get();
-  if (active) return `Перевод уже идёт (задача ${active.id}).`;
+  if (active) return t('migrate.running', { id: active.id });
   return null;
 }
 
@@ -90,7 +91,7 @@ export async function pgMigratePreview(ctx: Ctx, projectId: string): Promise<PgM
   const databases = await Promise.all(names.map(async (name) => ({ name, sizeBytes: version ? await dbSize(pg, name) : null })));
   const image = version ? await targetImage(cfg, container, version, names) : (container?.image ?? pg.image);
   let b = blocker(ctx, cfg);
-  if (!b && !version && !container) b = `Postgres ${pg.host}:${pg.port} недоступен, а его контейнер не найден: ${error}`;
+  if (!b && !version && !container) b = t('migrate.unreachable', { host: pg.host, port: pg.port, error });
   return {
     blocker: b,
     source: { host: pg.host, port: pg.port, container: container?.name ?? null, version, error },
@@ -134,9 +135,9 @@ async function copyDatabase(src: ProjectConfig['postgres'], dst: ProjectConfig['
   if (restore.exitCode !== 0) throw new BmError('PG_RESTORE', `pg_restore ${db}: ${tail(restore)}`);
   const a = await dbFingerprint(src, db);
   const b = await dbFingerprint(dst, db);
-  if (a.tables !== b.tables) throw new BmError('PG_VERIFY', `${db}: таблиц ${a.tables} в исходной БД и ${b.tables} в копии`);
-  if (a.modules !== b.modules) throw new BmError('PG_VERIFY', `${db}: установленных модулей ${a.modules} в исходной БД и ${b.modules} в копии`);
-  jc.log(`${db}: скопирована за ${Math.round((Date.now() - t0) / 1000)} с`);
+  if (a.tables !== b.tables) throw new BmError('PG_VERIFY', t('migrate.tables', { db, a: a.tables, b: b.tables }));
+  if (a.modules !== b.modules) throw new BmError('PG_VERIFY', t('migrate.modules', { db, a: a.modules, b: b.modules }));
+  jc.log(t('migrate.copied', { db, s: Math.round((Date.now() - t0) / 1000) }));
 }
 
 /** Job `migrate_postgres` (runs alone in its project: see EXCLUSIVE in the queue). */
@@ -158,8 +159,8 @@ export async function pgMigrateExecutor(ctx: Ctx, job: JobRow, jc: JobContext): 
     postgres: { ...src, mode: 'managed', image, port, protectedContainers: [...new Set([...src.protectedContainers, name])] },
     runtime: { ...cfg.runtime, network },
   };
-  jc.log(`Источник: ${src.host}:${src.port}, PostgreSQL ${version}; баз для копирования: ${dbs.length}`);
-  jc.log(`Свой Postgres: ${name} (${image}), 127.0.0.1:${port}, сеть ${network}`);
+  jc.log(t('migrate.source', { host: src.host, port: src.port, version, n: dbs.length }));
+  jc.log(t('migrate.target', { name, image, port, network }));
 
   const live = liveBuilds(ctx, cfg.id);
   const running: BuildRow[] = [];
@@ -168,7 +169,7 @@ export async function pgMigrateExecutor(ctx: Ctx, job: JobRow, jc: JobContext): 
     await ensureManagedPostgres(ctx, target, jc.log);
     const dstVersion = await pgPing(target.postgres);
     if (parseInt(dstVersion, 10) < parseInt(version, 10)) {
-      throw new BmError('PG_VERSION', `PostgreSQL ${dstVersion} в ${name} старше источника ${version}: укажите образ не ниже`);
+      throw new BmError('PG_VERSION', t('migrate.olderVersion', { dst: dstVersion, name, src: version }));
     }
     // Odoo writes to its database: live builds are stopped so each copy is consistent.
     for (const x of live) {
@@ -193,12 +194,12 @@ export async function pgMigrateExecutor(ctx: Ctx, job: JobRow, jc: JobContext): 
     const next = ctx.store.putProject(doc.toString(), { expectId: cfg.id });
     switched = true;
     onProjectConfigChanged(ctx, cfg, next);
-    jc.log(`Настройки проекта: postgres.mode managed, порт ${port}, сеть ${network}`);
+    jc.log(t('migrate.settings', { port, network }));
   } catch (err) {
     if (switched) throw err;
     // A cancelled job still rolls back: the steps below must not see its aborted signal.
     const calm: JobContext = { ...jc, signal: new AbortController().signal };
-    jc.log(`Откат: ${(err as Error).message}`);
+    jc.log(t('migrate.rollback', { error: (err as Error).message }));
     await removeManagedPostgres(ctx, target, jc.log).catch((e) => jc.log(`${name}: ${(e as Error).message}`));
     for (const x of running) await compose(ctx, x, ['start'], calm).catch((e) => jc.log(`${x.composeProject}: ${(e as Error).message}`));
     throw err;
@@ -210,7 +211,7 @@ export async function pgMigrateExecutor(ctx: Ctx, job: JobRow, jc: JobContext): 
     try {
       const hash = await writeLiveCompose(ctx, x, jc.log);
       const start = running.includes(x);
-      jc.log(`${x.composeProject}: пересоздание в сети ${network}${start ? '' : ' (без запуска)'}`);
+      jc.log(t(start ? 'migrate.recreate' : 'migrate.recreateNoStart', { project: x.composeProject, network }));
       await compose(ctx, x, start ? ['up', '-d', '--remove-orphans'] : ['up', '--no-start', '--remove-orphans'], jc);
       ctx.db.update(builds).set({ configHash: hash }).where(eq(builds.id, x.id)).run();
     } catch (err) {
@@ -221,6 +222,6 @@ export async function pgMigrateExecutor(ctx: Ctx, job: JobRow, jc: JobContext): 
   await refreshContainers(ctx).catch(() => {});
   audit(ctx, { projectId: cfg.id, action: 'project.pgMigrate', target: name, params: { image, port, network, databases: dbs } });
   const source = (await externalPgContainer(cfg))?.name ?? `${src.host}:${src.port}`;
-  jc.log(`Готово. Базы в прежнем Postgres (${source}) не тронуты — удалите их вручную, когда убедитесь, что ветки работают.`);
-  if (failed.length) throw new BmError('COMPOSE', `Базы перенесены, но не пересоздались сборки: ${failed.join(', ')}. Нажмите у них «Применить».`);
+  jc.log(t('migrate.done', { source }));
+  if (failed.length) throw new BmError('COMPOSE', t('migrate.composeFailed', { builds: failed.join(', ') }));
 }

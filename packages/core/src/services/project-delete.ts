@@ -18,6 +18,7 @@ import { bus } from '../events';
 import { invalidateGitCache } from './branches';
 import { localWatcher } from './watch-local';
 import { isInside, samePath, toPosix } from '../util/paths';
+import { t } from '../i18n';
 
 type Log = (line: string) => void;
 
@@ -54,7 +55,7 @@ export function projectDeletePreview(ctx: Ctx, projectId: string): ProjectDelete
     databases: [...new Set(rows.map((b) => b.dbName))],
     filestores: [...new Set(rows.map((b) => toPosix(path.join(cfg.runtime.filestore.hostDir, b.dbName))))].filter((p) => fs.existsSync(p)),
     worktrees: brs.map((b) => b.worktreePath).filter((p): p is string => !!p),
-    postgres: cfg.postgres.mode === 'managed' ? `контейнер ${managedPgName(cfg.id)}, том ${managedPgVolume(cfg.id)} и сеть ${cfg.runtime.network}` : null,
+    postgres: cfg.postgres.mode === 'managed' ? t('projectDelete.managedPg', { container: managedPgName(cfg.id), volume: managedPgVolume(cfg.id), network: cfg.runtime.network }) : null,
     image: cfg.runtime.build ? cfg.runtime.image : null,
     folders: ownFolders(ctx, cfg),
     settingsFile: toPosix(ctx.store.get(projectId)!.path),
@@ -68,7 +69,7 @@ export function projectDeletePreview(ctx: Ctx, projectId: string): ProjectDelete
 
 export function requestProjectDelete(ctx: Ctx, projectId: string, confirm: string) {
   ctx.store.require(projectId);
-  if (confirm !== projectId) throw new BmError('CONFIRM', `Для удаления введите id проекта: ${projectId}`);
+  if (confirm !== projectId) throw new BmError('CONFIRM', t('projectDelete.confirm', { id: projectId }));
   return { jobId: getQueue().enqueue('delete_project', { projectId }, {}) };
 }
 
@@ -88,7 +89,7 @@ async function dropLeftovers(ctx: Ctx, cfg: ProjectConfig, log: Log): Promise<vo
       log(`DROP DATABASE ${db}`);
       await dropDatabase(cfg.postgres, db);
     } catch (err) {
-      log(`БД ${db}: ${(err as Error).message}`);
+      log(t('projectDelete.dbError', { db, error: (err as Error).message }));
     }
   }
   for (const db of [...all.flatMap((b) => [b.dbName, `${b.dbName}_test`]), ...snaps.map((s) => s.dbName)]) {
@@ -108,16 +109,16 @@ async function dropLeftovers(ctx: Ctx, cfg: ProjectConfig, log: Log): Promise<vo
 async function removeOwnFolder(ctx: Ctx, cfg: ProjectConfig, dir: string, log: Log): Promise<void> {
   if (!fs.existsSync(dir)) return;
   for (const own of [cfg.repo.path, cfg.repo.localFolder]) {
-    if (own && (samePath(dir, own) || isInside(dir, own) || isInside(own, dir))) throw new BmError('NOT_OWNED', `«${dir}» — ваш репозиторий, его приложение не удаляет`);
+    if (own && (samePath(dir, own) || isInside(dir, own) || isInside(own, dir))) throw new BmError('NOT_OWNED', t('projectDelete.ownRepo', { dir }));
   }
   if (cfg.repo.mirrorDir && samePath(dir, cfg.repo.mirrorDir)) {
     assertOwned(cfg, { kind: 'mirror', path: dir, reposRoot: reposRoot(ctx) }, ownedRegistry(ctx, cfg.id));
   } else if (samePath(dir, path.join(cfg.repo.worktreesDir, cfg.id))) {
     // Worktrees were removed one by one above; only an empty (or git-pruned) folder is expected here.
     const rest = fs.readdirSync(dir);
-    if (rest.length) throw new BmError('NOT_EMPTY', `В ${dir} остались папки: ${rest.join(', ')}. Удалите их вручную, если они не нужны.`);
+    if (rest.length) throw new BmError('NOT_EMPTY', t('projectDelete.notEmpty', { dir, rest: rest.join(', ') }));
   } else if (!isInside(ctx.dataDir, dir) && !isInside(ctx.logsDir, dir)) {
-    throw new BmError('NOT_OWNED', `«${dir}» вне папок приложения`);
+    throw new BmError('NOT_OWNED', t('projectDelete.outside', { dir }));
   }
   log(`rm ${toPosix(dir)}`);
   await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 3 });
@@ -152,7 +153,7 @@ export async function deleteProjectExecutor(ctx: Ctx, job: JobRow, jc: JobContex
   await removeProjectImage(cfg, jc.log);
 
   for (const dir of ownFolders(ctx, cfg)) {
-    await removeOwnFolder(ctx, cfg, dir, jc.log).catch((e) => jc.log(`папка: ${(e as Error).message}`));
+    await removeOwnFolder(ctx, cfg, dir, jc.log).catch((e) => jc.log(t('projectDelete.folderError', { error: (e as Error).message })));
   }
   const otherJobs = ctx.db
     .select()
@@ -160,7 +161,7 @@ export async function deleteProjectExecutor(ctx: Ctx, job: JobRow, jc: JobContex
     .where(and(eq(jobs.projectId, cfg.id), ne(jobs.id, job.id)))
     .all();
   for (const j of otherJobs) fs.rmSync(jobLogFile(ctx, j), { force: true });
-  jc.log(`логи задач: ${otherJobs.length}`);
+  jc.log(t('projectDelete.jobLogs', { n: otherJobs.length }));
 
   const buildIds = ctx.db.select({ id: builds.id }).from(builds).where(eq(builds.projectId, cfg.id)).all().map((b) => b.id);
   if (buildIds.length) ctx.db.delete(snapshots).where(inArray(snapshots.buildId, buildIds)).run();

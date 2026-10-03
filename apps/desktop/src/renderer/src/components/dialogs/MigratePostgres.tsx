@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Code, Group, List, Modal, ScrollArea, Stack, Text } from '@mantine/core';
 import { useBm, useBmMutation } from '../../lib/query';
 import { fmtBytes } from '../../lib/format';
+import { t, tx } from '../../i18n';
 
 const DONE = ['success', 'failed', 'cancelled', 'interrupted'];
 
@@ -40,41 +41,44 @@ export function MigratePostgresCard({ projectId, external }: { projectId: string
         <Card withBorder mb="md">
           <Group justify="space-between" wrap="nowrap">
             <Text size="sm">
-              Ветки работают на внешнем Postgres (обычно <Code>db</Code> вашего compose-проекта): если его остановить или удалить, сборки не
-              запустятся. Свой Postgres приложения не зависит от вашего стенда.
+              {tx('migrate.external', {}, { code: (x) => <Code>{x}</Code> })}
             </Text>
             <Button variant="light" onClick={() => setOpen(true)} style={{ flexShrink: 0 }}>
-              Перевести на свой Postgres…
+              {t('migrate.button')}
             </Button>
           </Group>
         </Card>
       )}
-      <Modal opened={open} onClose={close} title="Перевести проект на свой Postgres" size="lg">
+      <Modal opened={open} onClose={close} title={t('migrate.title')} size="lg">
         <Stack>
-          {!jobId && !d && <Text size="sm">Проверка…</Text>}
+          {!jobId && !d && <Text size="sm">{t('migrate.checking')}</Text>}
           {!jobId && d && (
             <>
               <Text size="sm">
-                <b>Сейчас:</b> {d.source.host}:{d.source.port}
+                <b>{t('migrate.now')}</b> {d.source.host}:{d.source.port}
                 {d.source.container && (
                   <>
-                    , контейнер <Code>{d.source.container}</Code>
+                    {t('migrate.container')}
+                    <Code>{d.source.container}</Code>
                   </>
                 )}
                 {d.source.version ? `, PostgreSQL ${d.source.version}` : ''}
               </Text>
               {d.source.error && (
                 <Alert color="yellow" variant="light">
-                  Postgres недоступен{d.source.container ? ` — задача сначала запустит контейнер ${d.source.container}` : ''}: {d.source.error}
+                  {t('migrate.unavailable', { start: d.source.container ? t('migrate.willStart', { name: d.source.container }) : '', error: d.source.error })}
                 </Alert>
               )}
               <Text size="sm">
-                <b>Будет:</b> контейнер <Code>{d.target.container}</Code> (образ <Code>{d.target.image}</Code>), порт 127.0.0.1:{d.target.port ?? '—'}, сеть{' '}
-                <Code>{d.target.network}</Code>
+                {tx(
+                  'migrate.target',
+                  { container: d.target.container, image: d.target.image, port: d.target.port ?? '—', network: d.target.network },
+                  { b: (x) => <b>{x}</b>, code: (x) => <Code>{x}</Code> },
+                )}
               </Text>
               <Stack gap={2}>
                 <Text size="sm" fw={600}>
-                  Базы для копирования (pg_dump → pg_restore): {d.databases.length}
+                  {t('migrate.databases', { n: d.databases.length })}
                   {total ? `, ${fmtBytes(total)}` : ''}
                 </Text>
                 {!!d.databases.length && (
@@ -89,20 +93,19 @@ export function MigratePostgresCard({ projectId, external }: { projectId: string
               </Stack>
               {!!d.builds.length && (
                 <Text size="sm">
-                  <b>Живые сборки</b> ({d.builds.join(', ')}) на время копирования останавливаются и пересоздаются в сети {d.target.network}.
+                  {tx('migrate.liveBuilds', { builds: d.builds.join(', '), network: d.target.network }, { b: (x) => <b>{x}</b> })}
                 </Text>
               )}
               <Alert color="blue" variant="light">
-                Базы в прежнем Postgres не удаляются. Если что-то пойдёт не так, настройки проекта не меняются, а новый контейнер удаляется. Остальные
-                задачи проекта ждут окончания перевода.
+                {t('migrate.safe')}
               </Alert>
               {d.blocker && <Alert color="red">{d.blocker}</Alert>}
               <Group justify="flex-end">
                 <Button variant="default" onClick={close}>
-                  Отмена
+                  {t('common.cancel')}
                 </Button>
                 <Button disabled={!!d.blocker} loading={start.isPending} onClick={() => start.mutate({ projectId }, { onSuccess: (r) => setJobId(r.jobId) })}>
-                  Перевести
+                  {t('migrate.go')}
                 </Button>
               </Group>
             </>
@@ -112,22 +115,22 @@ export function MigratePostgresCard({ projectId, external }: { projectId: string
               {job.data?.status === 'failed' && <Alert color="red">{job.data.error}</Alert>}
               {job.data?.status === 'success' && (
                 <Alert color="teal" variant="light">
-                  Проект работает на своём Postgres.
+                  {t('migrate.done')}
                 </Alert>
               )}
               <ScrollArea h={280} type="auto" bg="var(--mantine-color-gray-light)" p={6} style={{ borderRadius: 4 }}>
                 <Text component="pre" size="xs" ff="monospace" m={0}>
-                  {(jlog.data?.lines ?? []).join('\n') || 'ожидание…'}
+                  {(jlog.data?.lines ?? []).join('\n') || t('migrate.waiting')}
                 </Text>
               </ScrollArea>
               <Group justify="flex-end">
                 {running && (
                   <Button color="red" variant="light" loading={cancel.isPending} onClick={() => cancel.mutate({ jobId })}>
-                    Отменить
+                    {t('migrate.cancelJob')}
                   </Button>
                 )}
                 <Button variant="default" onClick={close}>
-                  {running ? 'Скрыть' : 'Закрыть'}
+                  {running ? t('migrate.hide') : t('common.close')}
                 </Button>
               </Group>
             </>

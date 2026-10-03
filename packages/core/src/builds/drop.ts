@@ -14,6 +14,7 @@ import { bus } from '../events';
 import { audit } from '../services/audit';
 import { containerStates } from '../docker/state';
 import { nowIso } from '../util/time';
+import { t } from '../i18n';
 
 type Log = (line: string) => void;
 
@@ -72,7 +73,7 @@ export async function dropBuildResources(ctx: Ctx, cfg: ProjectConfig, b: BuildR
     .where(and(eq(builds.dbName, b.dbName), ne(builds.id, b.id), ne(builds.status, 'dropped')))
     .all();
   if (sharing.length) {
-    log(`БД ${b.dbName} используется сборками ${sharing.map((s) => `#${s.number}`).join(', ')} — не удаляется`);
+    log(t('drop.dbShared', { db: b.dbName, builds: sharing.map((s) => `#${s.number}`).join(', ') }));
   } else {
     for (const db of [b.dbName, `${b.dbName}_test`]) {
       if (await dbExists(cfg.postgres, db).catch(() => false)) {
@@ -87,7 +88,7 @@ export async function dropBuildResources(ctx: Ctx, cfg: ProjectConfig, b: BuildR
     for (const s of snaps) {
       if (await dbExists(cfg.postgres, s.dbName).catch(() => false)) {
         assertOwned(cfg, { kind: 'db', name: s.dbName }, reg);
-        log(`DROP DATABASE ${s.dbName} (снапшот «${s.name}»)`);
+        log(t('drop.snapshotDb', { db: s.dbName, name: s.name }));
         await dropDatabase(cfg.postgres, s.dbName);
       }
     }

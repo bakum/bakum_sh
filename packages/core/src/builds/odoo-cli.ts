@@ -6,6 +6,7 @@ import { renderTemplate, type TemplateVars } from '../config/templates';
 import { addonsDirsOfCode } from '../modules';
 import { OdooLogParser, type OdooLogSummary } from '../odoo-log';
 import { toPosix } from '../util/paths';
+import { t } from '../i18n';
 
 /**
  * `{addonsPath}` (D48): the module folders of the build's own code as seen in the container, comma-separated —
@@ -17,8 +18,7 @@ export function addonsPathVar(cfg: ProjectConfig, codeDir: string | null): strin
   if (!dirs.length) {
     throw new BmError(
       'NO_MODULES',
-      `В коде ${toPosix(codeDir)} нет модулей Odoo (__manifest__.py) в папках repo.moduleRoots (${cfg.repo.moduleRoots.join(', ') || 'весь репозиторий'}), ` +
-        'поэтому {addonsPath} пуст. Проверьте moduleRoots в настройках проекта или уберите {addonsPath} из runtime.command.',
+      t('odooCli.noModules', { dir: toPosix(codeDir), roots: cfg.repo.moduleRoots.join(', ') || t('odooCli.wholeRepo') }),
     );
   }
   const mount = cfg.runtime.repoMount.replace(/\/+$/, '');
@@ -170,5 +170,5 @@ export async function runOdooOneOff(opts: {
 export function assertOdooOk(r: OneOffResult, what: string): void {
   if (r.summary.criticals === 0 && (r.exitCode === 0 || testsFailed(r.summary.tests))) return;
   const detail = r.summary.problems.slice(0, 3).join('\n') || r.tail.slice(-8).join('\n');
-  throw new BmError('ODOO_FAILED', `${what}: Odoo завершился с ошибкой (код ${r.exitCode}).\n${detail}\nПолный вывод — в build.log (вкладка Logs).`);
+  throw new BmError('ODOO_FAILED', t('odooCli.failed', { what, code: r.exitCode, detail }));
 }

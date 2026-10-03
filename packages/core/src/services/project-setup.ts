@@ -7,6 +7,7 @@ import { buildImage, ensureImage } from '../docker/image';
 import { audit } from './audit';
 import { runtimeState } from '../state';
 import { log } from '../util/logger';
+import { t } from '../i18n';
 
 /** A new «Odoo in Docker» project prepares its runtime right away: Postgres container and the Odoo image (D30). */
 export function requestSetup(ctx: Ctx, projectId: string): number | null {
@@ -20,13 +21,13 @@ export async function setupProjectExecutor(ctx: Ctx, job: JobRow, jc: JobContext
   const cfg = ctx.store.require(job.projectId!);
   await ensureManagedPostgres(ctx, cfg, jc.log);
   await ensureImage(cfg, cfg.runtime.image, jc.log, jc.signal);
-  jc.log(`проект ${cfg.id} готов к сборкам`);
+  jc.log(t('setup.ready', { id: cfg.id }));
 }
 
 /** «Собрать образ» (Settings → Рантайм): `docker build` of runtime.build now, to check the Dockerfile (D46). */
 export function requestImageBuild(ctx: Ctx, projectId: string): { jobId: number } {
   const cfg = ctx.store.require(projectId);
-  if (!cfg.runtime.build) throw new BmError('NO_BUILD_CONFIG', 'В настройках проекта не задан runtime.build (сборка образа из Dockerfile)');
+  if (!cfg.runtime.build) throw new BmError('NO_BUILD_CONFIG', t('setup.noBuild'));
   return { jobId: getQueue().enqueue('build_image', { projectId }) };
 }
 

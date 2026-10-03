@@ -4,19 +4,20 @@ import { Alert, Button, Code, CopyButton, Group, List, Modal, Stack, Text, TextI
 import type { BranchView } from '@bm/shared';
 import { useBm, useBmMutation } from '../../lib/query';
 import { errorCode, errorText, isMac, type BmCallError } from '../../lib/bm';
+import { t, tx } from '../../i18n';
 
 /** Fork (spec 8.10, D33): the new branch is created on GitHub from the live build commit (or the branch head) → Development → build. */
 export function ForkDialog({ open, branch, onClose }: { open: boolean; branch: BranchView; onClose: () => void }) {
   const nav = useNavigate();
   const [name, setName] = useState('');
   const preview = useBm('branches.forkName', { projectId: branch.projectId, name }, { enabled: open && !!name });
-  const fork = useBmMutation('branches.fork', { success: 'Ветка создана, сборка поставлена в очередь', silentError: true });
+  const fork = useBmMutation('branches.fork', { success: t('fork.created'), silentError: true });
   useEffect(() => {
     if (open) setName('');
     fork.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-  const from = branch.liveBuild?.commitSha ? `коммита живой сборки ${branch.liveBuild.commitSha.slice(0, 7)}` : `последнего коммита ${branch.name}`;
+  const from = branch.liveBuild?.commitSha ? t('fork.fromLive', { sha: branch.liveBuild.commitSha.slice(0, 7) }) : t('fork.fromHead', { branch: branch.name });
   const run = (interactive: boolean) =>
     fork.mutate(
       { branchId: branch.id, name: preview.data!.name, interactive },
@@ -28,10 +29,10 @@ export function ForkDialog({ open, branch, onClose }: { open: boolean; branch: B
       },
     );
   return (
-    <Modal opened={open} onClose={onClose} title={`Fork от ${branch.name}`} size={fork.error ? 'lg' : 'md'}>
+    <Modal opened={open} onClose={onClose} title={t('fork.title', { branch: branch.name })} size={fork.error ? 'lg' : 'md'}>
       <Stack>
         <TextInput
-          label="Имя новой ветки"
+          label={t('fork.name')}
           placeholder="test999"
           value={name}
           onChange={(e) => {
@@ -42,18 +43,17 @@ export function ForkDialog({ open, branch, onClose }: { open: boolean; branch: B
         />
         {preview.data && (
           <Text size="sm">
-            Ветка <b>{preview.data.name}</b> будет создана в репозитории на GitHub от {from}. Её создаёт Git этого компьютера от имени
-            учётной записи GitHub, под которой он вошёл; этой учётной записи нужна роль Write или выше.
+            {tx('fork.preview', { name: preview.data.name, from }, { b: (x) => <b>{x}</b> })}
           </Text>
         )}
         {preview.data?.error && <Alert color="red">{preview.data.error}</Alert>}
         {fork.error && <ForkError error={fork.error} busy={fork.isPending} onLogin={() => run(true)} />}
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
-            Отмена
+            {t('common.cancel')}
           </Button>
           <Button disabled={!preview.data?.valid} loading={fork.isPending} onClick={() => run(false)}>
-            Создать ветку
+            {t('fork.create')}
           </Button>
         </Group>
       </Stack>
@@ -75,7 +75,7 @@ function Cmd({ cmd }: { cmd: string }) {
       <CopyButton value={cmd}>
         {({ copied, copy }) => (
           <Button size="compact-xs" variant="subtle" onClick={copy}>
-            {copied ? 'Скопировано' : 'Копировать'}
+            {copied ? t('common.copied') : t('common.copy')}
           </Button>
         )}
       </CopyButton>
@@ -90,32 +90,35 @@ function ForkError({ error, busy, onLogin }: { error: Error; busy: boolean; onLo
   const loginButton = login && (
     <Group>
       <Button size="xs" variant="light" loading={busy} onClick={onLogin}>
-        Войти и повторить
+        {t('fork.loginRetry')}
       </Button>
     </Group>
   );
   const token = d.urlUser && (
     <List.Item>
-      Проект подключён по токену (пользователь <Code>{d.urlUser}</Code> в адресе репозитория). Токену нужен доступ к этому репозиторию с
-      правом Contents — Read and write. Создайте такой токен на GitHub и замените им пароль записи{' '}
-      <Code>{isMac ? `github.com (${d.urlUser})` : `git:https://${d.urlUser}@github.com`}</Code>{' '}
-      {isMac ? 'в приложении «Связка ключей» (тип «пароль интернета»).' : 'в «Диспетчере учётных данных Windows» → «Учётные данные Windows».'}
+      {tx(
+        'fork.tokenProject',
+        {
+          user: d.urlUser,
+          cred: isMac ? `github.com (${d.urlUser})` : `git:https://${d.urlUser}@github.com`,
+          where: t(isMac ? 'fork.whereMac' : 'fork.whereWin'),
+        },
+        { code: (x) => <Code>{x}</Code> },
+      )}
     </List.Item>
   );
   return (
-    <Alert color="red" title="Ветка не создана" data-testid="fork-error">
+    <Alert color="red" title={t('fork.notCreated')} data-testid="fork-error">
       <Stack gap="xs">
         <Text size="sm">{errorText(error).replace(/^git push: /, '')}</Text>
         {d.problem === 'auth' && (
           <>
             <Text size="sm">
-              Git на этом компьютере не вошёл в GitHub или вход устарел. Для публичного репозитория fetch работает и без входа, а создать
-              ветку — нет.
+              {t('fork.authNote')}
             </Text>
             {d.https ? (
               <Text size="sm">
-                Нажмите «Войти и повторить»: откроется окно Git Credential Manager. Войдите учётной записью с ролью Write в этом
-                репозитории.
+                {t('fork.authHttps')}
               </Text>
             ) : null}
             {loginButton}
@@ -125,23 +128,19 @@ function ForkError({ error, busy, onLogin }: { error: Error; busy: boolean; onLo
           <>
             <List size="sm" spacing={4}>
               <List.Item>
-                Попросите администратора репозитория выдать {d.account ? <b>{d.account}</b> : 'вашей учётной записи'} роль Write (GitHub →
-                репозиторий → Settings → Collaborators and teams).
+                {tx('fork.askAdmin', { who: d.account ? <b>{d.account}</b> : t('fork.yourAccount') })}
               </List.Item>
               {d.https && (
                 <List.Item>
-                  Или войдите другой учётной записью: выполните в терминале
+                  {t('fork.otherAccount')}
                   <Cmd cmd={d.account ? `git credential-manager github logout ${d.account}` : 'git credential-manager github list'} />
-                  {d.account
-                    ? 'и нажмите «Войти и повторить».'
-                    : 'Команда покажет, под кем вошёл Git; выйдите командой git credential-manager github logout <учётная запись> и нажмите «Войти и повторить».'}
+                  {t(d.account ? 'fork.thenLogin' : 'fork.whoSigned')}
                 </List.Item>
               )}
               {token}
               {!d.urlUser && !d.account && (
                 <List.Item>
-                  Если Git вошёл по fine-grained токену, ему нужен доступ к этому репозиторию с правом Contents — Read and write. Токены
-                  для репозиториев организации может потребоваться одобрить её владельцу.
+                  {t('fork.fineGrained')}
                 </List.Item>
               )}
             </List>
@@ -150,11 +149,10 @@ function ForkError({ error, busy, onLogin }: { error: Error; busy: boolean; onLo
         )}
         {d.problem === 'rules' && (
           <Text size="sm">
-            Выберите другое имя ветки или попросите администратора разрешить такие ветки (GitHub → репозиторий → Settings → Rules или
-            Branches).
+            {t('fork.rules')}
           </Text>
         )}
-        {d.problem === 'network' && <Text size="sm">Проверьте подключение к интернету, прокси или VPN и повторите.</Text>}
+        {d.problem === 'network' && <Text size="sm">{t('fork.network')}</Text>}
       </Stack>
     </Alert>
   );

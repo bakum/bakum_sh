@@ -5,5 +5,6 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     environment: 'node',
     pool: 'forks',
+    setupFiles: ['test/setup.ts'],
   },
 });

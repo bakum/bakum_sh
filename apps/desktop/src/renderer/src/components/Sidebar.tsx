@@ -21,6 +21,7 @@ import type { BranchesList, BranchView, Stage, UnassignedBranch } from '@bm/shar
 import { StatusDot } from './StatusDot';
 import { fmtAgo } from '../lib/format';
 import classes from './Sidebar.module.css';
+import { t } from '../i18n';
 
 const STAGES: { key: Stage; title: string }[] = [
   { key: 'production', title: 'PRODUCTION' },
@@ -87,12 +88,12 @@ export function Sidebar(props: {
         <TextInput
           size="xs"
           style={{ flex: 1 }}
-          placeholder="Filter branches…"
+          placeholder={t('sidebar.filter')}
           leftSection={<IconSearch size={14} />}
           value={filter}
           onChange={(e) => setFilter(e.currentTarget.value)}
         />
-        <Tooltip label={`Fetch (последний: ${fmtAgo(props.lastFetchAt)})`}>
+        <Tooltip label={t('sidebar.fetch', { ago: fmtAgo(props.lastFetchAt) })}>
           <ActionIcon variant="default" size="md" onClick={props.actions.onFetch} aria-label="Fetch">
             {props.fetching ? <Loader size={14} /> : <IconRefresh size={16} />}
           </ActionIcon>
@@ -118,7 +119,7 @@ export function Sidebar(props: {
                 <Group gap={4}>
                   {showHidden ? <IconEyeOff size={14} /> : <IconEye size={14} />}
                   <Text size="xs" c="dimmed">
-                    {showHidden ? `Не показывать скрытые (${hiddenCount})` : `Показать скрытые (${hiddenCount})`}
+                    {t(showHidden ? 'sidebar.hideHidden' : 'sidebar.showHidden', { n: hiddenCount })}
                   </Text>
                 </Group>
               </UnstyledButton>
@@ -129,10 +130,10 @@ export function Sidebar(props: {
               <Group gap={4}>
                 {showUnassigned ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
                 <Text size="xs" fw={700} c="dimmed">
-                  НЕ ДОБАВЛЕНЫ ({props.data?.unassigned.length ?? 0})
+                  {t('sidebar.unassigned', { n: props.data?.unassigned.length ?? 0 })}
                 </Text>
                 {!!props.data?.ignoredCount && (
-                  <Tooltip label="Не показаны: правило веток stage: ignore">
+                  <Tooltip label={t('sidebar.ignored')}>
                     <Badge size="xs" variant="light" color="gray">
                       ignore {props.data.ignoredCount}
                     </Badge>
@@ -173,8 +174,8 @@ function StageGroup(props: {
           {props.title}
         </Text>
         {props.onPlus && (
-          <Tooltip label="Добавить существующую ветку с GitHub">
-            <ActionIcon size="sm" onClick={props.onPlus} aria-label={`Добавить в ${props.title}`}>
+          <Tooltip label={t('sidebar.addExisting')}>
+            <ActionIcon size="sm" onClick={props.onPlus} aria-label={t('sidebar.addTo', { stage: props.title })}>
               <IconPlus size={14} />
             </ActionIcon>
           </Tooltip>
@@ -182,7 +183,7 @@ function StageGroup(props: {
       </Group>
       {!props.items.length && (
         <Text size="xs" c="dimmed" px="md" py={4}>
-          {props.stage === 'production' ? 'нет ветки' : 'перетащите ветку сюда'}
+          {t(props.stage === 'production' ? 'sidebar.noBranch' : 'sidebar.dropHere')}
         </Text>
       )}
       {props.items.map((b) => (
@@ -267,18 +268,18 @@ function BranchRowItem({ b, selected, onSelect, onContext }: { b: BranchView; se
             </Menu.Item>
           ))}
         <Menu.Item onClick={() => onContext(b, 'editor')}>VS Code</Menu.Item>
-        <Menu.Item onClick={() => onContext(b, 'logs')}>Логи</Menu.Item>
+        <Menu.Item onClick={() => onContext(b, 'logs')}>{t('sidebar.logs')}</Menu.Item>
         {b.stage !== 'production' && (
           <>
             <Menu.Divider />
             <Menu.Item onClick={() => onContext(b, 'production')}>→ Production</Menu.Item>
             {b.hidden ? (
               <Menu.Item leftSection={<IconEye size={14} />} onClick={() => onContext(b, 'show')}>
-                Показать
+                {t('sidebar.show')}
               </Menu.Item>
             ) : (
               <Menu.Item leftSection={<IconEyeOff size={14} />} onClick={() => onContext(b, 'hide')}>
-                Скрыть
+                {t('sidebar.hide')}
               </Menu.Item>
             )}
           </>
@@ -298,8 +299,8 @@ function UnassignedRow({ u, onAdd }: { u: UnassignedBranch; onAdd: (stage: Stage
       <Text size="sm" truncate style={{ flex: 1 }} c="dimmed">
         {u.name}
       </Text>
-      <Tooltip label={`Добавить в ${stage}`}>
-        <ActionIcon size="sm" onClick={() => onAdd(stage)} aria-label={`Добавить ${u.name}`}>
+      <Tooltip label={t('sidebar.addTo', { stage })}>
+        <ActionIcon size="sm" onClick={() => onAdd(stage)} aria-label={t('sidebar.add', { name: u.name })}>
           <IconPlus size={14} />
         </ActionIcon>
       </Tooltip>

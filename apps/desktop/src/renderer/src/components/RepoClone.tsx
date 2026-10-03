@@ -4,6 +4,7 @@ import { IconCheck, IconFolder, IconLogin, IconKey } from '@tabler/icons-react';
 import type { RepoProbe } from '@bm/shared';
 import { useBm, useBmMutation } from '../lib/query';
 import { isMac } from '../lib/bm';
+import { t, tx } from '../i18n';
 
 const DONE = ['success', 'failed', 'cancelled', 'interrupted'];
 
@@ -62,8 +63,8 @@ export function RepoClone(props: {
       <Group align="flex-end">
         <TextInput
           style={{ flex: 1 }}
-          label="Адрес репозитория"
-          placeholder={props.placeholder ?? 'https://github.com/owner/repo.git или git@github.com:owner/repo.git'}
+          label={t('repo.url')}
+          placeholder={props.placeholder ?? t('repo.urlPlaceholder')}
           value={url}
           disabled={running}
           onChange={(e) => {
@@ -72,20 +73,20 @@ export function RepoClone(props: {
           }}
         />
         <Button disabled={!url.trim() || running} loading={probeM.isPending} onClick={() => probeM.mutate({ url: url.trim() }, { onSuccess: accept })}>
-          Проверить доступ
+          {t('repo.check')}
         </Button>
       </Group>
 
       {probe?.ok && (
         <Alert color="teal" variant="light" icon={<IconCheck size={16} />}>
-          Доступ есть: веток {probe.branches.length}
-          {probe.defaultBranch ? `, основная — ${probe.defaultBranch}` : ''}.
-          {branchMissing && <Text size="sm" c="orange">Ветки {props.branch} в репозитории нет — клонировать нечего.</Text>}
+          {t('repo.ok', { n: probe.branches.length })}
+          {probe.defaultBranch ? t('repo.default', { branch: probe.defaultBranch }) : ''}.
+          {branchMissing && <Text size="sm" c="orange">{t('repo.noBranch', { branch: props.branch })}</Text>}
         </Alert>
       )}
 
       {probe && !probe.ok && (
-        <Alert color={probe.problem === 'network' ? 'orange' : 'red'} variant="light" title="Нет доступа">
+        <Alert color={probe.problem === 'network' ? 'orange' : 'red'} variant="light" title={t('repo.noAccess')}>
           <Stack gap="xs">
             <Text size="sm">{probe.message}</Text>
             {(probe.problem === 'auth' || probe.problem === 'denied') && probe.https && (
@@ -98,25 +99,25 @@ export function RepoClone(props: {
                     disabled={busy && !loginM.isPending}
                     onClick={() => loginM.mutate({ url: probe.url }, { onSuccess: accept })}
                   >
-                    Войти через браузер
+                    {t('repo.browserLogin')}
                   </Button>
                   <Text size="xs" c="dimmed">
-                    Откроется окно Git Credential Manager; учётные данные сохранит {isMac ? 'Связка ключей' : 'Windows'}.
+                    {t(isMac ? 'repo.gcmMac' : 'repo.gcmWin')}
                   </Text>
                 </Group>
                 <Text size="sm" fw={600} mt={4}>
-                  Или токен доступа
+                  {t('repo.orToken')}
                 </Text>
                 <Text size="xs" c="dimmed">
-                  GitHub → Settings → Developer settings → Personal access tokens: fine-grained, доступ к этому репозиторию, Contents — Read-only (для Fork, который создаёт ветки на GitHub, — Read and write).{' '}
+                  {t('repo.tokenHow')}{' '}
                   <Anchor size="xs" onClick={() => void window.bm.desktop.openExternal('https://github.com/settings/personal-access-tokens/new')}>
-                    Создать токен
+                    {t('repo.createToken')}
                   </Anchor>
-                  . Токен передаётся в Git ({isMac ? 'Связка ключей macOS' : 'хранилище учётных данных Windows'}), приложение его не сохраняет.
+                  {t(isMac ? 'repo.tokenStoreMac' : 'repo.tokenStoreWin')}
                 </Text>
                 <Group align="flex-end" gap="xs">
-                  <PasswordInput style={{ flex: 1 }} size="xs" label="Токен" value={token} onChange={(e) => setToken(e.currentTarget.value)} />
-                  <TextInput w={160} size="xs" label="Пользователь" value={username} onChange={(e) => setUsername(e.currentTarget.value)} />
+                  <PasswordInput style={{ flex: 1 }} size="xs" label={t('repo.token')} value={token} onChange={(e) => setToken(e.currentTarget.value)} />
+                  <TextInput w={160} size="xs" label={t('repo.user')} value={username} onChange={(e) => setUsername(e.currentTarget.value)} />
                   <Button
                     size="xs"
                     variant="light"
@@ -135,14 +136,14 @@ export function RepoClone(props: {
                       )
                     }
                   >
-                    Сохранить токен
+                    {t('repo.saveToken')}
                   </Button>
                 </Group>
               </>
             )}
             {(probe.problem === 'ssh-key' || probe.problem === 'host-key') && (
               <Text size="xs" c="dimmed">
-                Для SSH-адреса нужны ключ в ssh-agent и ключ хоста в known_hosts. Проще — https-адрес со входом через браузер.
+                {t('repo.sshHint')}
               </Text>
             )}
           </Stack>
@@ -152,7 +153,7 @@ export function RepoClone(props: {
       {probe?.ok && props.mirror && (
         <Group justify="space-between">
           <Text size="sm" c="dimmed">
-            Приложение сделает свою копию репозитория в своей папке и будет брать из неё код сборок. Ваши клоны оно не трогает.
+            {t('repo.mirrorHint')}
           </Text>
           <Button
             disabled={running || job.data?.status === 'success'}
@@ -169,31 +170,31 @@ export function RepoClone(props: {
               )
             }
           >
-            Загрузить
+            {t('repo.load')}
           </Button>
         </Group>
       )}
 
       {probe?.ok && !props.mirror && !branchMissing && (
         <Group align="flex-end">
-          <TextInput style={{ flex: 1 }} label="Куда клонировать" value={dir} disabled={running || job.data?.status === 'success'} onChange={(e) => setDir(e.currentTarget.value)} />
+          <TextInput style={{ flex: 1 }} label={t('repo.cloneTo')} value={dir} disabled={running || job.data?.status === 'success'} onChange={(e) => setDir(e.currentTarget.value)} />
           <Button
             variant="default"
             leftSection={<IconFolder size={14} />}
             disabled={running}
             onClick={async () => {
-              const parent = await window.bm.desktop.selectDirectory('Папка, в которую положить клон');
+              const parent = await window.bm.desktop.selectDirectory(t('repo.cloneParent'));
               if (parent) setDir(`${parent.replace(/[\\/]+$/, '')}/${repoName(url)}${props.suffix ?? ''}`);
             }}
           >
-            Выбрать…
+            {t('repo.choose')}
           </Button>
           <Button
             disabled={!dir || running || job.data?.status === 'success'}
             loading={cloneM.isPending || running}
             onClick={() => cloneM.mutate({ url: probe.url, dir, branch: props.branch, shallow: !!props.shallow, mirror: false }, { onSuccess: (r) => setJobId(r.jobId) })}
           >
-            Клонировать
+            {t('repo.clone')}
           </Button>
         </Group>
       )}
@@ -207,12 +208,12 @@ export function RepoClone(props: {
           )}
           {job.data?.status === 'success' && (
             <Text size="sm" c="teal">
-              {props.mirror ? 'Загружено' : 'Клонировано'} в <Code>{dir}</Code>
+              {tx(props.mirror ? 'repo.loadedTo' : 'repo.clonedTo', { dir }, { code: (x) => <Code>{x}</Code> })}
             </Text>
           )}
           <ScrollArea h={120} type="auto" bg="var(--mantine-color-gray-light)" p={6} style={{ borderRadius: 4 }}>
             <Text component="pre" size="xs" ff="monospace" m={0}>
-              {(jlog.data?.lines ?? []).join('\n') || 'ожидание…'}
+              {(jlog.data?.lines ?? []).join('\n') || t('migrate.waiting')}
             </Text>
           </ScrollArea>
         </Stack>

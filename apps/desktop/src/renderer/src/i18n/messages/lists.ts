@@ -1,0 +1,46 @@
+import type { Entry } from '@bm/shared';
+
+/** Audit Logs and Builds pages. */
+export default {
+  'list.filtered': { uk: '{n} за фільтром', ru: '{n} по фильтру', en: '{n} filtered' },
+  'list.total': { uk: '{n} усього', ru: '{n} всего', en: '{n} in total' },
+  'list.from': { uk: 'З', ru: 'С', en: 'From' },
+  'list.to': { uk: 'По', ru: 'По', en: 'To' },
+  'list.reset': { uk: 'Скинути', ru: 'Сбросить', en: 'Reset' },
+
+  'audit.groups': { uk: 'Групи', ru: 'Группы', en: 'Groups' },
+  'audit.actions': { uk: 'Дії', ru: 'Действия', en: 'Actions' },
+  'audit.noChanges': { uk: '(без змін)', ru: '(без изменений)', en: '(no changes)' },
+  'audit.params': { uk: 'Параметри', ru: 'Параметры', en: 'Parameters' },
+  'audit.settingsChanges': { uk: 'Зміни налаштувань', ru: 'Изменения настроек', en: 'Settings changes' },
+  'audit.noDetails': { uk: 'Подробиць немає.', ru: 'Подробностей нет.', en: 'No details.' },
+  'audit.about': {
+    uk: 'Усі дії застосунку й користувача щодо проєкту. Рядок розкривається: параметри дії та зміни налаштувань (паролі приховано).',
+    ru: 'Все действия приложения и пользователя по проекту. Строка раскрывается: параметры действия и изменения настроек (пароли скрыты).',
+    en: 'All actions of the app and the user on the project. A row expands: the action parameters and settings changes (passwords hidden).',
+  },
+  'audit.action': { uk: 'Дія', ru: 'Действие', en: 'Action' },
+  'audit.search': { uk: 'Об’єкт або параметри', ru: 'Объект или параметры', en: 'Object or parameters' },
+  'audit.result': { uk: 'Підсумок', ru: 'Итог', en: 'Result' },
+  'audit.error': { uk: 'помилка', ru: 'ошибка', en: 'error' },
+  'audit.appToo': { uk: 'І дії застосунку (app.yaml, оновлення)', ru: 'И действия приложения (app.yaml, обновления)', en: 'Also app actions (app.yaml, updates)' },
+  'audit.when': { uk: 'Коли', ru: 'Когда', en: 'When' },
+  'audit.object': { uk: 'Об’єкт', ru: 'Объект', en: 'Object' },
+  'audit.app': { uk: 'застосунок', ru: 'приложение', en: 'app' },
+  'audit.noneFiltered': { uk: 'Немає записів за цим фільтром.', ru: 'Нет записей по этому фильтру.', en: 'No records match this filter.' },
+  'audit.none': { uk: 'Записів ще немає.', ru: 'Записей ещё нет.', en: 'No records yet.' },
+
+  'builds.branch': { uk: 'Гілка', ru: 'Ветка', en: 'Branch' },
+  'builds.stage': { uk: 'Стадія', ru: 'Стадия', en: 'Stage' },
+  'builds.status': { uk: 'Статус', ru: 'Статус', en: 'Status' },
+  'builds.trigger': { uk: 'Тригер', ru: 'Триггер', en: 'Trigger' },
+  'builds.tests': { uk: 'Тести', ru: 'Тесты', en: 'Tests' },
+  'builds.testsFailed': { uk: 'Тести впали', ru: 'Тесты упали', en: 'Tests failed' },
+  'builds.testsPassed': { uk: 'Тести пройшли', ru: 'Тесты прошли', en: 'Tests passed' },
+  'builds.testsNone': { uk: 'Тести не запускалися', ru: 'Тесты не запускались', en: 'No tests run' },
+  'builds.commit': { uk: 'Коміт', ru: 'Коммит', en: 'Commit' },
+  'builds.duration': { uk: 'Тривалість', ru: 'Длительность', en: 'Duration' },
+  'builds.start': { uk: 'Початок', ru: 'Начало', en: 'Started' },
+  'builds.noneFiltered': { uk: 'Немає збірок за цим фільтром.', ru: 'Нет сборок по этому фильтру.', en: 'No builds match this filter.' },
+  'builds.none': { uk: 'Збірок ще не було.', ru: 'Сборок ещё не было.', en: 'No builds yet.' },
+} satisfies Record<string, Entry>;

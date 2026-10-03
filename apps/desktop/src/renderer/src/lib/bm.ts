@@ -1,4 +1,5 @@
 import type { MethodName, MethodParams, MethodResult } from '@bm/shared';
+import { t } from '../i18n';
 
 export interface BmCallError extends Error {
   code?: string;
@@ -12,7 +13,8 @@ export async function call<K extends MethodName>(method: K, params: MethodParams
   throw Object.assign(new Error(r.error.message), { code: r.error.code, details: r.error.details }) as BmCallError;
 }
 
-export const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+export const errorText = (e: unknown): string =>
+  errorCode(e) === 'CORE_RESTARTED' ? t('shell.coreRestartedRetry') : e instanceof Error ? e.message : String(e);
 export const errorCode = (e: unknown): string | undefined => (e as BmCallError | null)?.code;
 
 /** macOS host (D67): Finder, Terminal.app, Keychain instead of Explorer, Windows Terminal, Credential Manager. */

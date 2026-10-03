@@ -13,6 +13,7 @@ import {
 import type { z } from 'zod';
 import type { PortLike } from './util/port';
 import { log } from './util/logger';
+import { t } from './i18n';
 
 export type Handler<K extends MethodName> = (params: MethodParamsParsed<K>) => Promise<MethodResult<K>> | MethodResult<K>;
 export type Handlers = { [K in MethodName]?: Handler<K> };
@@ -40,7 +41,7 @@ export class RpcServer {
   async call<K extends MethodName>(method: K, params: unknown): Promise<MethodResult<K>> {
     const def = methods[method];
     const handler = this.handlers[method] as Handler<K> | undefined;
-    if (!def || !handler) throw new BmError('NO_METHOD', `Метод ${method} не реализован`);
+    if (!def || !handler) throw new BmError('NO_METHOD', t('rpc.notImplemented', { method }));
     const parsed = def.params.parse(params ?? {}) as MethodParamsParsed<K>;
     return handler(parsed);
   }
@@ -59,7 +60,7 @@ export class RpcServer {
       if (!msg || typeof msg !== 'object') return;
       if (msg.kind === 'req') {
         try {
-          if (!(msg.method in methods)) throw new BmError('NO_METHOD', `Неизвестный метод ${msg.method}`);
+          if (!(msg.method in methods)) throw new BmError('NO_METHOD', t('rpc.unknownMethod', { method: msg.method }));
           const result = await this.call(msg.method as MethodName, msg.params);
           send({ kind: 'res', id: msg.id, ok: true, result });
         } catch (err) {
@@ -72,7 +73,7 @@ export class RpcServer {
         const schema = subscriptionTopics[topic];
         const th = this.topics[topic] as TopicHandler<Topic> | undefined;
         if (!schema || !th) {
-          send({ kind: 'res', id: msg.id, ok: false, error: { code: 'NO_TOPIC', message: `Нет подписки ${msg.topic}` } });
+          send({ kind: 'res', id: msg.id, ok: false, error: { code: 'NO_TOPIC', message: t('rpc.noTopic', { topic: msg.topic }) } });
           return;
         }
         try {

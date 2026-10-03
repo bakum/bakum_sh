@@ -21,26 +21,14 @@ import { IconBell, IconBrandDocker, IconGitBranch, IconMoon, IconSun } from '@ta
 import { useBm, useBmMutation } from '../lib/query';
 import { EditionBadge } from './EditionBadge';
 import { useCoreEvents } from '../lib/events';
-import { fmtAgo } from '../lib/format';
+import { fmtAgo, fmtTime, jobLabel } from '../lib/format';
 import { HEADER_BG } from '../theme';
 import classes from './Shell.module.css';
 import { AppFooter } from './AppFooter';
 import { UpdateBanner } from './UpdateBanner';
 import { ErrorBoundary } from './ErrorBoundary';
+import { t } from '../i18n';
 
-const JOB_LABELS: Record<string, string> = {
-  build: 'Сборка',
-  start: 'Запуск',
-  stop: 'Остановка',
-  restart: 'Перезапуск',
-  drop: 'Отбросить',
-  delete_branch: 'Удаление ветки',
-  import_backup: 'Импорт бэкапа',
-  fetch: 'Fetch',
-  apply_config: 'Применить конфигурацию',
-  modules: 'Модули',
-  tests: 'Тесты',
-};
 
 export function Shell() {
   const { pid } = useParams();
@@ -51,7 +39,7 @@ export function Shell() {
   const jobs = useBm('jobs.list', { active: true }, { refetchInterval: 5000 });
   const { coreRestartedAt } = useCoreEvents();
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const startDocker = useBmMutation('system.startDocker', { success: 'Docker Desktop запускается…' });
+  const startDocker = useBmMutation('system.startDocker', { success: t('shell.dockerStarting') });
   const { setColorScheme } = useMantineColorScheme();
   const scheme = useComputedColorScheme('light');
 
@@ -92,21 +80,21 @@ export function Shell() {
           <Select
             size="xs"
             w={220}
-            placeholder="Проект"
+            placeholder={t('shell.project')}
             value={current ?? null}
-            data={[...(projects.data ?? []).map((p) => ({ value: p.id, label: p.name })), { value: '__new', label: '+ Добавить проект…' }]}
+            data={[...(projects.data ?? []).map((p) => ({ value: p.id, label: p.name })), { value: '__new', label: t('shell.addProject') }]}
             onChange={(v) => {
               if (v === '__new') nav('/projects/new');
               else if (v) nav(`/projects/${v}/branches`);
             }}
             allowDeselect={false}
             comboboxProps={{ withinPortal: true }}
-            aria-label="Проект"
+            aria-label={t('shell.project')}
           />
           <Popover width={360} position="bottom-end" shadow="md">
             <Popover.Target>
               <Indicator disabled={!activeJobs.length} label={activeJobs.length} size={16} color="orange">
-                <ActionIcon c="white" size="lg" aria-label="Задачи и уведомления">
+                <ActionIcon c="white" size="lg" aria-label={t('shell.jobs')}>
                   <IconBell size={20} />
                 </ActionIcon>
               </Indicator>
@@ -114,20 +102,20 @@ export function Shell() {
             <Popover.Dropdown>
               <Stack gap={6}>
                 <Text fw={600} size="sm">
-                  Активные задачи
+                  {t('shell.activeJobs')}
                 </Text>
                 {!activeJobs.length && (
                   <Text size="sm" c="dimmed">
-                    Нет активных задач
+                    {t('shell.noJobs')}
                   </Text>
                 )}
                 {activeJobs.map((j) => (
                   <Group key={j.id} justify="space-between" wrap="nowrap">
                     <Text size="sm">
-                      {JOB_LABELS[j.type] ?? j.type} {j.params.branch ? `· ${String(j.params.branch)}` : ''}
+                      {jobLabel(j.type)} {j.params.branch ? `· ${String(j.params.branch)}` : ''}
                     </Text>
                     <Badge size="xs" color={j.status === 'running' ? 'orange' : 'gray'}>
-                      {j.status === 'running' ? 'идёт' : 'в очереди'} {fmtAgo(j.createdAt)}
+                      {t(j.status === 'running' ? 'shell.running' : 'shell.queued')} {fmtAgo(j.createdAt)}
                     </Badge>
                   </Group>
                 ))}
@@ -140,7 +128,7 @@ export function Shell() {
               <Box className={classes.dot} style={{ background: dockerOk ? '#40c057' : '#fa5252' }} />
             </Group>
           </Tooltip>
-          <ActionIcon c="white" onClick={() => setColorScheme(scheme === 'dark' ? 'light' : 'dark')} aria-label="Тема">
+          <ActionIcon c="white" onClick={() => setColorScheme(scheme === 'dark' ? 'light' : 'dark')} aria-label={t('shell.theme')}>
             {scheme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
           </ActionIcon>
         </Group>
@@ -150,10 +138,10 @@ export function Shell() {
         <Alert color="red" radius={0} py={6} title={null}>
           <Group justify="space-between">
             <Text size="sm">
-              Docker Desktop не запущен — сборки не работают, их состояние неизвестно. Rebuild и другие задачи сборок ждут в очереди и начнутся сами, когда Docker запустится.
+              {t('shell.dockerDown')}
             </Text>
             <Button color="red" loading={startDocker.isPending} onClick={() => startDocker.mutate({})}>
-              Запустить
+              {t('shell.start')}
             </Button>
           </Group>
         </Alert>
@@ -161,8 +149,7 @@ export function Shell() {
       {coreRestartedAt && dismissed !== coreRestartedAt && (
         <Alert color="orange" radius={0} py={6} withCloseButton onClose={() => setDismissed(coreRestartedAt)}>
           <Text size="sm">
-            Core был перезапущен в {new Date(coreRestartedAt).toLocaleTimeString('ru-RU')}. Состояние согласовано с Docker и
-            реестром; прерванные задачи отмечены как interrupted.
+            {t('shell.coreRestarted', { time: fmtTime(coreRestartedAt) })}
           </Text>
         </Alert>
       )}

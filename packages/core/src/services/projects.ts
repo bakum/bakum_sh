@@ -11,6 +11,7 @@ import { audit, lineDiff } from './audit';
 import { ensureBranchRow, relayoutProductionBranch } from './branch-rows';
 import { nowIso } from '../util/time';
 import { odooEdition } from '../config/edition';
+import { t } from '../i18n';
 
 export const PASSWORD_MASK = '********';
 
@@ -47,7 +48,7 @@ export function summaries(ctx: Ctx): ProjectSummary[] {
 
 export function summary(ctx: Ctx, id: string): ProjectSummary {
   const e = ctx.store.get(id);
-  if (!e) throw new BmError('NO_PROJECT', `Проект «${id}» не найден`);
+  if (!e) throw new BmError('NO_PROJECT', t('projects.notFound', { id }));
   const row = ctx.db.select().from(projects).where(eq(projects.id, id)).get();
   return {
     id,
@@ -85,7 +86,7 @@ function unmask(text: string, previousPassword: string | null): string {
 
 export function getProject(ctx: Ctx, id: string) {
   const e = ctx.store.get(id);
-  if (!e) throw new BmError('NO_PROJECT', `Проект «${id}» не найден`);
+  if (!e) throw new BmError('NO_PROJECT', t('projects.notFound', { id }));
   const cfg = e.config;
   return {
     summary: summary(ctx, id),
@@ -115,9 +116,9 @@ export async function checkPostgres(yaml: string): Promise<{ ok: boolean; text: 
   const doc = YAML.parseDocument(yaml);
   fillPassword(doc);
   const parsed = projectConfigSchema.safeParse(doc.toJS());
-  if (!parsed.success) return { ok: false, text: `Настройки не прошли проверку: ${parsed.error.issues[0]?.message ?? ''}` };
+  if (!parsed.success) return { ok: false, text: t('projects.checkFailed', { error: parsed.error.issues[0]?.message ?? '' }) };
   const pg = parsed.data.postgres;
-  if (pg.mode === 'managed') return { ok: true, text: 'Postgres поднимет приложение' };
+  if (pg.mode === 'managed') return { ok: true, text: t('projects.managedPg') };
   try {
     const v = await pgPing(pg);
     return { ok: true, text: `${pg.host}:${pg.port}, PostgreSQL ${v}` };
@@ -129,7 +130,7 @@ export async function checkPostgres(yaml: string): Promise<{ ok: boolean; text: 
 export function createProject(ctx: Ctx, yaml: string): ProjectSummary {
   const doc = YAML.parseDocument(yaml);
   fillPassword(doc);
-  const text = `# Настройки проекта Odoo Branch Manager. Правка файла подхватывается автоматически.\n${doc.toString()}`;
+  const text = `${t('projects.yamlHeader')}\n${doc.toString()}`;
   const cfg = ctx.store.putProject(text, { create: true });
   syncProjectRows(ctx);
   audit(ctx, { projectId: cfg.id, action: 'project.create', target: cfg.id, params: { repo: cfg.repo.url ?? null } });
@@ -161,7 +162,7 @@ export function onProjectConfigChanged(ctx: Ctx, prev: ProjectConfig | null, cfg
 
 export function setEnabled(ctx: Ctx, id: string, enabled: boolean): ProjectSummary {
   const e = ctx.store.get(id);
-  if (!e?.config) throw new BmError('NO_PROJECT', `Проект «${id}» не найден или его настройки с ошибкой`);
+  if (!e?.config) throw new BmError('NO_PROJECT', t('projects.notFoundOrBroken', { id }));
   const doc = YAML.parseDocument(e.text);
   doc.set('enabled', enabled);
   const cfg = ctx.store.putProject(doc.toString(), { expectId: id });

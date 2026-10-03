@@ -11,6 +11,7 @@ import { notify } from './notify';
 import { audit } from './audit';
 import { bus } from '../events';
 import { log } from '../util/logger';
+import { t } from '../i18n';
 
 /**
  * New production backups (spec 8.4): `production.backups.dir` of every enabled project is watched; a new file matching
@@ -93,8 +94,8 @@ export class BackupWatcher {
     notify(
       this.ctx,
       'newBackup',
-      `Найден новый бэкап прода: ${cfg.name}`,
-      cfg.production.backups.autoImport ? `${name} — импорт запущен` : `${name} — импорт во вкладке Backups`,
+      t('backup.foundTitle', { project: cfg.name }),
+      t(cfg.production.backups.autoImport ? 'backup.importStarted' : 'backup.importInTab', { name }),
       { route: prod ? `/projects/${id}/branches/${prod.id}/backups` : `/projects/${id}/branches` },
     );
     bus.emit({ type: 'project.changed', projectId: id });
@@ -102,7 +103,7 @@ export class BackupWatcher {
     requestBuildChecked(this.ctx, prod.id, { trigger: 'import_backup', kind: 'new', backupPath: file.replace(/\\/g, '/') }).catch((err) => {
       log().warn({ err, project: id, file: name }, 'backup auto-import failed');
       audit(this.ctx, { projectId: id, action: 'backup.autoImport', target: name, result: 'failed', params: { error: (err as Error).message } });
-      notify(this.ctx, 'buildFailed', `Автоимпорт бэкапа не запущен: ${cfg.name}`, `${name}: ${(err as Error).message}`, {
+      notify(this.ctx, 'buildFailed', t('backup.autoImportFailed', { project: cfg.name }), `${name}: ${(err as Error).message}`, {
         route: `/projects/${id}/branches/${prod.id}/backups`,
       });
     });

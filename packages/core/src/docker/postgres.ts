@@ -11,6 +11,7 @@ import { excludedPortRanges, inPortRanges, listeningPorts } from '../util/ports'
 import { log } from '../util/logger';
 import { onProjectConfigChanged } from '../services/projects';
 import { audit } from '../services/audit';
+import { t } from '../i18n';
 
 /**
  * `postgres.mode: managed` (docs/decisions.md D30): the app runs one Postgres container per project, `bm-<project>-db`,
@@ -61,7 +62,7 @@ export async function allocatePgPort(ctx: Ctx): Promise<number> {
   const reserved = await excludedPortRanges().catch(() => []);
   const taken = new Set(ctx.store.list().map((e) => e.config?.postgres.port));
   for (let p = PORT_FROM; p <= PORT_TO; p++) if (!busy.has(p) && !taken.has(p) && !inPortRanges(p, reserved)) return p;
-  throw new BmError('NO_PORT', `Нет свободного порта для Postgres в диапазоне ${PORT_FROM}–${PORT_TO}`);
+  throw new BmError('NO_PORT', t('mpg.noPort', { from: PORT_FROM, to: PORT_TO }));
 }
 
 /** Creates the project network (when missing), labelled as the app's own. */
@@ -69,14 +70,14 @@ export async function ensureNetwork(cfg: ProjectConfig, say: (l: string) => void
   if (await networkExists(cfg.runtime.network)) return false;
   say(`docker network create ${cfg.runtime.network}`);
   const r = await dockerCli(['network', 'create', '--label', 'bm.managed=network', '--label', `bm.pg-project=${cfg.id}`, cfg.runtime.network]);
-  if (r.exitCode !== 0 && !(await networkExists(cfg.runtime.network))) throw new BmError('DOCKER', `Не удалось создать сеть ${cfg.runtime.network}: ${r.stderr.trim()}`);
+  if (r.exitCode !== 0 && !(await networkExists(cfg.runtime.network))) throw new BmError('DOCKER', t('mpg.network', { network: cfg.runtime.network, error: r.stderr.trim() }));
   return true;
 }
 
 /** `docker pull` with the progress lines of each layer thinned out (the first image download may take minutes). */
 export async function pullImage(image: string, say: (l: string) => void, signal?: AbortSignal): Promise<void> {
   if (await imageExists(image)) return;
-  say(`docker pull ${image} (первая загрузка может занять несколько минут)`);
+  say(t('mpg.pull', { image }));
   let last = 0;
   const r = await dockerCli(['pull', image], {
     timeoutMs: 1_800_000,
@@ -87,7 +88,7 @@ export async function pullImage(image: string, say: (l: string) => void, signal?
       say(l);
     },
   });
-  if (r.exitCode !== 0) throw new BmError('DOCKER_PULL', `Не удалось скачать образ ${image}: ${(r.stderr || r.stdout).trim().split('\n').pop()}`);
+  if (r.exitCode !== 0) throw new BmError('DOCKER_PULL', t('mpg.pullFailed', { image, error: (r.stderr || r.stdout).trim().split('\n').pop() }));
 }
 
 const inFlight = new Map<string, Promise<void>>();
@@ -113,10 +114,10 @@ async function movePgPort(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void
   const saved = e?.config?.postgres;
   // A config that is not the saved one (migration to managed checks its target port itself) is not rewritten.
   if (!e || saved?.mode !== 'managed' || saved.port !== cfg.postgres.port) {
-    throw new BmError('PORT_RESERVED', `Порт ${cfg.postgres.port} для Postgres зарезервирован Windows (netsh interface ipv4 show excludedportrange protocol=tcp). Укажите другой postgres.port в настройках проекта.`);
+    throw new BmError('PORT_RESERVED', t('mpg.portReserved', { port: cfg.postgres.port }));
   }
   const port = await allocatePgPort(ctx);
-  say(`Порт ${cfg.postgres.port} зарезервирован Windows (Hyper-V / WSL), Docker не может его опубликовать: Postgres переезжает на 127.0.0.1:${port}`);
+  say(t('mpg.portMoved', { port: cfg.postgres.port, newPort: port }));
   const doc = YAML.parseDocument(e.text);
   doc.setIn(['postgres', 'port'], port);
   const next = ctx.store.putProject(doc.toString(), { expectId: cfg.id });
@@ -127,8 +128,8 @@ async function movePgPort(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void
 }
 
 async function doEnsure(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void): Promise<void> {
-  if (!cfg.postgres.password) throw new BmError('PG_NO_PASSWORD', 'У managed Postgres нет пароля (postgres.password в настройках проекта).');
-  if (!runtimeState.docker.ok) throw new BmError('DOCKER_DOWN', 'Docker недоступен: запустите Docker Desktop');
+  if (!cfg.postgres.password) throw new BmError('PG_NO_PASSWORD', t('mpg.noPassword'));
+  if (!runtimeState.docker.ok) throw new BmError('DOCKER_DOWN', t('mpg.dockerDown'));
   const reserved = await excludedPortRanges().catch(() => []);
   if (inPortRanges(cfg.postgres.port, reserved)) cfg = await movePgPort(ctx, cfg, say);
   const pg = cfg.postgres;
@@ -142,7 +143,7 @@ async function doEnsure(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void):
   if (!upToDate) {
     if (bound !== String(pg.port)) {
       const busy = await listeningPorts().catch(() => new Set<number>());
-      if (busy.has(pg.port)) throw new BmError('PORT_BUSY', `Порт ${pg.port} для Postgres занят другим процессом. Укажите другой postgres.port в настройках проекта.`);
+      if (busy.has(pg.port)) throw new BmError('PORT_BUSY', t('mpg.portBusy', { port: pg.port }));
     }
     await pullImage(pg.image, say);
     const file = composeFile(ctx, cfg.id);
@@ -152,7 +153,7 @@ async function doEnsure(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void):
     // Same compose config with an unpublished port: compose would keep the container as it is.
     const recreate = existing?.State.Running && bound === String(pg.port) && !published ? ['--force-recreate'] : [];
     const r = await dockerCli(['compose', '-p', name, '-f', file, 'up', '-d', '--remove-orphans', ...recreate], { timeoutMs: 180_000, onLine: say });
-    if (r.exitCode !== 0) throw new BmError('DOCKER', `Postgres не запустился: ${(r.stderr || r.stdout).trim()}`);
+    if (r.exitCode !== 0) throw new BmError('DOCKER', t('mpg.notStarted', { error: (r.stderr || r.stdout).trim() }));
   }
   // Ready = accepts connections from the host (the first start initialises the data directory).
   const deadline = Date.now() + 90_000;
@@ -162,12 +163,12 @@ async function doEnsure(ctx: Ctx, cfg: ProjectConfig, say: (l: string) => void):
       runtimeState.postgres.set(cfg.id, { ok: true, text: `${pg.host}:${pg.port}, PostgreSQL ${v} (managed)` });
       break;
     } catch (err) {
-      if (Date.now() > deadline) throw new BmError('PG_CONNECT', `Postgres ${name} не отвечает: ${(err as Error).message}`);
+      if (Date.now() > deadline) throw new BmError('PG_CONNECT', t('mpg.noAnswer', { name, error: (err as Error).message }));
       await new Promise((res) => setTimeout(res, 1500));
     }
   }
   if (created || !upToDate) await ensureTraefik(ctx);
-  if (!upToDate) say(`Postgres ${name} работает на 127.0.0.1:${pg.port}`);
+  if (!upToDate) say(t('mpg.runningOn', { name, port: pg.port }));
 }
 
 export interface ExternalPgContainer {
@@ -215,11 +216,11 @@ async function ensureExternalPostgres(cfg: ProjectConfig, say: (l: string) => vo
   const c = await externalPgContainer(cfg);
   if (!c) throw first;
   if (!c.running) {
-    say(`Postgres ${pg.host}:${pg.port} недоступен: запускаю контейнер ${c.name} (docker start)`);
+    say(t('mpg.starting', { host: pg.host, port: pg.port, name: c.name }));
     try {
       await docker.getContainer(c.id).start();
     } catch (err) {
-      throw new BmError('PG_START', `Не удалось запустить контейнер Postgres ${c.name}: ${(err as Error).message}`);
+      throw new BmError('PG_START', t('mpg.startFailed', { name: c.name, error: (err as Error).message }));
     }
   }
   const deadline = Date.now() + 90_000;
@@ -227,10 +228,10 @@ async function ensureExternalPostgres(cfg: ProjectConfig, say: (l: string) => vo
     try {
       const v = await pgPing(pg);
       runtimeState.postgres.set(cfg.id, { ok: true, text: `${pg.host}:${pg.port}, PostgreSQL ${v}` });
-      say(`Postgres ${c.name} работает`);
+      say(t('mpg.running', { name: c.name }));
       return;
     } catch (err) {
-      if (Date.now() > deadline) throw new BmError('PG_CONNECT', `Postgres ${c.name} не отвечает: ${(err as Error).message}`);
+      if (Date.now() > deadline) throw new BmError('PG_CONNECT', t('mpg.noAnswer', { name: c.name, error: (err as Error).message }));
       await new Promise((res) => setTimeout(res, 1500));
     }
   }
@@ -253,7 +254,7 @@ export async function removeManagedPostgres(ctx: Ctx, cfg: ProjectConfig, say: (
   if (r.exitCode !== 0) {
     const c = await docker.getContainer(name).inspect().catch(() => null);
     if (c && c.Config.Labels?.['bm.managed'] === 'postgres' && c.Config.Labels['bm.pg-project'] === cfg.id) {
-      await docker.getContainer(name).remove({ force: true, v: true }).catch((e) => say(`контейнер: ${(e as Error).message}`));
+      await docker.getContainer(name).remove({ force: true, v: true }).catch((e) => say(t('mpg.containerError', { error: (e as Error).message })));
     }
     await docker.getVolume(managedPgVolume(cfg.id)).remove().catch(() => {});
   }
@@ -262,7 +263,7 @@ export async function removeManagedPostgres(ctx: Ctx, cfg: ProjectConfig, say: (
   if (net && net.Labels?.['bm.managed'] === 'network' && net.Labels['bm.pg-project'] === cfg.id) {
     await docker.getNetwork(cfg.runtime.network).disconnect({ Container: TRAEFIK_PROJECT, Force: true }).catch(() => {});
     say(`docker network rm ${cfg.runtime.network}`);
-    await docker.getNetwork(cfg.runtime.network).remove().catch((e) => say(`сеть: ${(e as Error).message}`));
+    await docker.getNetwork(cfg.runtime.network).remove().catch((e) => say(t('mpg.networkError', { error: (e as Error).message })));
   }
   runtimeState.postgres.delete(cfg.id);
   log().info({ project: cfg.id }, 'managed postgres removed');

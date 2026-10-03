@@ -21,6 +21,11 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   artifactName: Odoo-Branch-Manager-Setup-${version}.${ext}
+  # D70: the installer and uninstaller speak the app's language (app.yaml `language`), Ukrainian on a fresh install;
+  # resources/installer.nsh picks it and adds the Ukrainian texts electron-builder lacks.
+  multiLanguageInstaller: true
+  installerLanguages: [uk_UA, ru_RU, en_US]
+  language: "1058"
 portable:
   artifactName: Odoo-Branch-Manager-Portable-${version}.${ext}
 mac:

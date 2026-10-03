@@ -3,6 +3,7 @@ import type { Writable } from 'node:stream';
 import { execa } from 'execa';
 import { BmError } from '@bm/shared';
 import { dockerSocketPath } from '../util/platform';
+import { t } from '../i18n';
 
 /** Local Docker Desktop engine only: named pipe on Windows, unix socket on macOS (D67). */
 export const docker = new Docker({ socketPath: dockerSocketPath() });
@@ -72,7 +73,7 @@ export async function dockerCli(
     : null;
   const r = await sub;
   await fed;
-  if (r.isCanceled) throw new BmError('CANCELLED', 'Операция отменена');
+  if (r.isCanceled) throw new BmError('CANCELLED', t('docker.cancelled'));
   if (feedErr) throw feedErr;
   return { exitCode: r.exitCode ?? -1, stdout: String(r.stdout ?? ''), stderr: String(r.stderr ?? '') };
 }

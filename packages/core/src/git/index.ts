@@ -3,6 +3,7 @@ import path from 'node:path';
 import { execa } from 'execa';
 import { BmError, type CommitInfo, type GitBranchInfo } from '@bm/shared';
 import { toPosix } from '../util/paths';
+import { t } from '../i18n';
 
 /**
  * Background git calls never ask anything: no terminal prompt, no Git Credential Manager window (D31).
@@ -11,14 +12,11 @@ import { toPosix } from '../util/paths';
  */
 const QUIET_ENV = { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', LC_ALL: 'C' };
 
-export const GIT_MISSING_TEXT =
-  process.platform === 'darwin'
-    ? 'Git не найден. Установите его командой `xcode-select --install` в Терминале (или `brew install git`) и перезапустите приложение.'
-    : 'Git не найден. Установите Git for Windows (https://git-scm.com/download/win) и перезапустите приложение.';
+export const gitMissingText = (): string => t(process.platform === 'darwin' ? 'git.missingMac' : 'git.missingWin');
 
 /** execa (reject: false) returns the spawn error as the result: `code: 'ENOENT'` when git.exe is not on PATH. */
 function assertGitFound(r: unknown): void {
-  if ((r as { code?: unknown } | null)?.code === 'ENOENT') throw new BmError('GIT_MISSING', GIT_MISSING_TEXT);
+  if ((r as { code?: unknown } | null)?.code === 'ENOENT') throw new BmError('GIT_MISSING', gitMissingText());
 }
 
 /**
@@ -43,7 +41,7 @@ async function git(
   assertGitFound(r);
   if (r.exitCode !== 0 && !opts.allowFail) {
     const msg = (r.stderr || r.stdout || '').toString().trim();
-    throw new BmError('GIT', `git ${args[0]}: ${msg || `код ${r.exitCode}`}`, { args, exitCode: r.exitCode });
+    throw new BmError('GIT', `git ${args[0]}: ${msg || t('git.exitCode', { code: r.exitCode })}`, { args, exitCode: r.exitCode });
   }
   return (r.stdout ?? '').toString();
 }
@@ -106,7 +104,7 @@ export async function fetch(repo: string, remote: string): Promise<void> {
   if (r.exitCode === 0) return;
   const stderr = String(r.stderr || r.stdout || (r.timedOut ? 'timed out' : ''));
   const c = classifyRemoteError(stderr);
-  const text = c.problem === 'auth' || c.problem === 'denied' ? `нет доступа к репозиторию. ${c.message}` : c.problem === 'other' ? stderr.trim() : c.message;
+  const text = c.problem === 'auth' || c.problem === 'denied' ? t('git.noAccess', { message: c.message }) : c.problem === 'other' ? stderr.trim() : c.message;
   throw new BmError('GIT', text, { problem: c.problem });
 }
 
@@ -123,24 +121,24 @@ export function classifyRemoteError(stderr: string): { problem: RemoteProblem; m
   const s = stderr.trim();
   const last = s.split('\n').filter(Boolean).slice(-3).join('\n');
   if (/Host key verification failed/i.test(s)) {
-    return { problem: 'host-key', message: 'Хост SSH ещё не известен. Один раз выполните в терминале `ssh -T git@github.com` (или другой хост) и подтвердите ключ.' };
+    return { problem: 'host-key', message: t('git.hostKey') };
   }
   if (/Permission denied \(publickey/i.test(s)) {
-    return { problem: 'ssh-key', message: 'SSH-ключ не принят: добавьте публичный ключ в аккаунт GitHub или используйте https-адрес.' };
+    return { problem: 'ssh-key', message: t('git.sshKey') };
   }
   if (/could not read (Username|Password)|terminal prompts disabled|Authentication failed|invalid username or password|HTTP Basic: Access denied|\b401\b/i.test(s)) {
-    return { problem: 'auth', message: 'Нужен вход: репозиторий приватный, а сохранённых учётных данных нет или они устарели.' };
+    return { problem: 'auth', message: t('git.auth') };
   }
   if (/Repository not found|not found|\b403\b|\b404\b|access denied|not authorized/i.test(s)) {
     return {
       problem: 'denied',
-      message: 'Репозиторий не найден или у этой учётной записи нет к нему доступа. Проверьте адрес, войдите другим аккаунтом или сохраните токен с доступом к репозиторию.',
+      message: t('git.notFound'),
     };
   }
   if (/Could not resolve host|unable to access|Connection (timed out|refused)|Failed to connect|timed out/i.test(s)) {
-    return { problem: 'network', message: `Нет соединения с сервером репозитория: ${last}` };
+    return { problem: 'network', message: t('git.network', { error: last }) };
   }
-  return { problem: 'other', message: last || 'git завершился с ошибкой' };
+  return { problem: 'other', message: last || t('git.failed') };
 }
 
 /**
@@ -257,7 +255,7 @@ export async function clone(
   if (opts.shallow) args.push('--depth', '1');
   args.push('--', url, dir);
   const r = await runWithProgress(os.homedir(), args, opts);
-  if (r.isCanceled) throw new BmError('CANCELLED', 'Клонирование отменено');
+  if (r.isCanceled) throw new BmError('CANCELLED', t('git.cloneCancelled'));
   if (r.exitCode !== 0) {
     const c = classifyRemoteError(r.stderr);
     throw new BmError('GIT_CLONE', `git clone: ${c.message}`, { problem: c.problem });
@@ -279,7 +277,7 @@ export async function initMirror(
   await git(dir, ['remote', 'add', remote, url]);
   await git(dir, ['config', `remote.${remote}.fetch`, `+refs/heads/*:refs/remotes/${remote}/*`]);
   const r = await runWithProgress(dir, ['fetch', '--progress', '--no-tags', remote], opts);
-  if (r.isCanceled) throw new BmError('CANCELLED', 'Загрузка отменена');
+  if (r.isCanceled) throw new BmError('CANCELLED', t('git.fetchCancelled'));
   if (r.exitCode !== 0) {
     const c = classifyRemoteError(r.stderr);
     throw new BmError('GIT_CLONE', `git fetch: ${c.message}`, { problem: c.problem });
@@ -289,7 +287,7 @@ export async function initMirror(
 /** Top level, remote and its URL of a folder (the user's clone); read-only. */
 export async function folderRemoteUrl(dir: string): Promise<{ top: string; remote: string | null; url: string | null }> {
   const top = await topLevel(dir);
-  if (!top) throw new BmError('NOT_A_REPO', `Папка «${dir}» не является git-репозиторием.`);
+  if (!top) throw new BmError('NOT_A_REPO', t('wt.notRepo', { dir }));
   const list = await remotes(top);
   const remote = list.includes('origin') ? 'origin' : (list[0] ?? null);
   let url = remote ? await remoteUrl(top, remote) : null;
@@ -317,17 +315,17 @@ export function classifyPushError(out: string): { problem: PushProblem; account:
       problem: 'denied',
       account: who,
       message: who
-        ? `У учётной записи GitHub «${who}» нет права на запись в репозиторий.`
-        : 'Нет права на запись в репозиторий у учётной записи или токена, с которыми вошёл Git.',
+        ? t('git.deniedTo', { who })
+        : t('git.denied'),
     };
   }
   // Repository rules / branch protection: «GH013: Repository rule violations», «[remote rejected] … (push declined …)».
   if (/GH013|rule violations|protected branch|push declined|pre-receive hook declined/i.test(out)) {
-    return { problem: 'rules', account: null, message: 'Правила репозитория на GitHub не разрешают создать ветку с таким именем.' };
+    return { problem: 'rules', account: null, message: t('git.rules') };
   }
   // --porcelain: «!\trefs/heads/x\t[rejected] (stale info)» when the branch already exists.
   if (/already exists|\[rejected\]|stale info|non-fast-forward/i.test(out)) {
-    return { problem: 'exists', account: null, message: 'Ветка с таким именем уже есть в репозитории.' };
+    return { problem: 'exists', account: null, message: t('git.exists') };
   }
   const c = classifyRemoteError(out);
   return { problem: c.problem, account: null, message: c.message };
@@ -352,7 +350,7 @@ export async function pushNewBranch(mirror: string, remote: string, sha: string,
   // --porcelain puts the per-ref status («[rejected] (stale info)») on stdout, the transport errors on stderr.
   const out = [r.stdout, r.stderr, r.timedOut ? 'timed out' : ''].map((x) => String(x ?? '')).filter(Boolean).join('\n');
   const c = classifyPushError(out);
-  if (c.problem === 'exists') throw new BmError('BRANCH_EXISTS', `Ветка «${name}» уже есть в репозитории. Выполните fetch.`);
+  if (c.problem === 'exists') throw new BmError('BRANCH_EXISTS', t('git.branchExists', { name }));
   const text = c.problem === 'other' ? String(r.stderr || out).trim() : c.message;
   // For the hints: sign-in window only helps https; a user name in the URL means a token saved by the wizard.
   const url = await remoteUrl(mirror, remote).catch(() => null);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Button, Group, Modal, Select, Stack, Text } from '@mantine/core';
 import type { BranchView } from '@bm/shared';
 import { useBmMutation } from '../../lib/query';
+import { t } from '../../i18n';
 
 /**
  * Merge (spec 8.10): PR head=<source> → base=<target>. Creating the PR through `gh` is postponed (D44):
@@ -16,13 +17,13 @@ export function MergeDialog({ value, branches, onClose }: { value: { source: Bra
   return (
     <Modal opened onClose={onClose} title={`Merge: ${value.source.name}`}>
       <Stack>
-        <Select label="Влить в ветку" data={options} value={target} onChange={setTarget} searchable />
+        <Select label={t('merge.into')} data={options} value={target} onChange={setTarget} searchable />
         <Alert color="gray" variant="light">
-          Откроется страница сравнения на GitHub, где можно создать PR. Локальный merge и push приложение не выполняет.
+          {t('merge.hint')}
         </Alert>
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
-            Отмена
+            {t('common.cancel')}
           </Button>
           <Button
             disabled={!target}
@@ -39,7 +40,7 @@ export function MergeDialog({ value, branches, onClose }: { value: { source: Bra
               )
             }
           >
-            Открыть compare на GitHub
+            {t('merge.open')}
           </Button>
         </Group>
         <Text size="xs" c="dimmed">

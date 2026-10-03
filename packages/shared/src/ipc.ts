@@ -3,6 +3,7 @@
  * Params are zod schemas and are validated inside Core; results are typed via phantom generics.
  */
 import { z } from 'zod';
+import { LANGS, st } from './i18n';
 import { branchScopeSchema, levelSchema, stageSchema, type ProjectConfig, type AppConfig } from './config';
 import type {
   AppStateView,
@@ -36,7 +37,7 @@ function m<R>() {
 const empty = z.object({}).strict();
 const projectId = z.string().regex(/^[a-z0-9-]+$/);
 const id = z.number().int().positive();
-const isoTime = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z$/, 'ожидается время ISO в UTC');
+const isoTime = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z$/, { error: () => st('zod.isoTime') });
 /**
  * https://host/owner/repo(.git), git@host:owner/repo(.git), ssh://… or file:///<disk>/<path> (a local or network bare
  * repository); no credentials inside the URL except a user name.
@@ -46,7 +47,7 @@ const repoUrl = z
   .trim()
   .regex(
     /^(https:\/\/([\w.-]+@)?[\w.-]+(:\d+)?\/[\w./~-]+|ssh:\/\/[\w.-]+@[\w.-]+(:\d+)?\/[\w./~-]+|[\w.-]+@[\w.-]+:[\w./~-]+|file:\/\/\/?[\w.:/~ -]+)$/,
-    'ожидается https://…, git@…:owner/repo.git или file:///…',
+    { error: () => st('zod.gitUrl') },
   );
 
 /** Everything «Удалить проект…» removes (full cleanup, D34). */
@@ -119,7 +120,7 @@ export const methods = {
   'system.ping': m<{ pong: true; pid: number; startedAt: string }>()(empty),
   'system.state': m<AppStateView>()(empty),
   'system.status': m<SystemStatus>()(z.object({ refresh: z.boolean().optional() }).strict()),
-  'system.completeFirstRun': m<{ ok: true }>()(z.object({ proxyPort: z.number().int().optional() }).strict()),
+  'system.completeFirstRun': m<{ ok: true }>()(z.object({ proxyPort: z.number().int().optional(), language: z.enum(LANGS).optional() }).strict()),
   'system.startDocker': m<{ ok: true }>()(empty),
   'system.cleanupOrphans': m<{ removed: number; errors: string[] }>()(
     z.object({ items: z.array(z.object({ kind: z.string(), name: z.string(), projectId: z.string().nullable() })) }).strict(),
@@ -270,7 +271,7 @@ export const methods = {
   'snapshots.restore': m<JobRef>()(z.object({ snapshotId: id }).strict()),
   'snapshots.delete': m<JobRef>()(z.object({ snapshotId: id }).strict()),
   /** Odoo backup `.zip` (`odoo db dump`) of the live database or of a snapshot, written to `path` (chosen in a dialog). */
-  'snapshots.export': m<JobRef>()(z.object({ branchId: id, snapshotId: id.optional(), path: z.string().min(1).regex(/\.zip$/i, 'нужен файл .zip') }).strict()),
+  'snapshots.export': m<JobRef>()(z.object({ branchId: id, snapshotId: id.optional(), path: z.string().min(1).regex(/\.zip$/i, { error: () => st('zod.zipFile') }) }).strict()),
 
   'git.fetch': m<{ jobs: number[] }>()(z.object({ projectId: projectId.optional() }).strict()),
 

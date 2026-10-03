@@ -16,6 +16,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { t } from '../i18n';
 
 export type FieldType = 'text' | 'number' | 'switch' | 'select' | 'tags' | 'textarea' | 'password' | 'keyvalue';
 
@@ -24,10 +25,12 @@ export interface FieldDef {
   label: string;
   type: FieldType;
   options?: string[];
+  /** Shown instead of the stored value in a select. */
+  optionLabels?: Record<string, string>;
   description?: string;
   /** Not available yet: shown disabled with the stage badge. */
   /** Not acted upon yet: the field is shown disabled with this badge. */
-  stage?: 'этап 2' | 'этап 3' | 'отложено';
+  stage?: 'stage2' | 'stage3' | 'postponed';
   /** Optional field: an empty value removes the key (value comes from the upper level). */
   inherit?: string;
   nullable?: boolean;
@@ -137,13 +140,13 @@ export function YamlForm(props: {
       ))}
       <Group justify="flex-end">
         <Text size="sm" c="dimmed">
-          {dirty.length ? `Изменено полей: ${dirty.length}` : 'Нет изменений'}
+          {dirty.length ? t('form.changed', { n: dirty.length }) : t('form.noChanges')}
         </Text>
         <Button variant="default" disabled={!dirty.length} onClick={() => setValues(initial)}>
-          Отменить
+          {t('common.revert')}
         </Button>
         <Button disabled={!dirty.length} loading={props.saving} onClick={() => void save()}>
-          Сохранить
+          {t('common.save')}
         </Button>
       </Group>
     </Stack>
@@ -157,12 +160,12 @@ function Field({ f, value, onChange }: { f: FieldDef; value: unknown; onChange: 
       <span>{f.label}</span>
       {f.stage && (
         <Badge size="xs" variant="light" color="gray">
-          {f.stage}
+          {t(`form.${f.stage}`)}
         </Badge>
       )}
     </Group>
   );
-  const desc = [f.description, f.inherit !== undefined ? `пусто — ${f.inherit}` : null].filter(Boolean).join('; ');
+  const desc = [f.description, f.inherit !== undefined ? t('form.empty', { inherit: f.inherit }) : null].filter(Boolean).join('; ');
   switch (f.type) {
     case 'number':
       return <NumberInput label={label} description={desc} disabled={disabled} value={value as number | string} onChange={onChange} />;
@@ -179,14 +182,14 @@ function Field({ f, value, onChange }: { f: FieldDef; value: unknown; onChange: 
           description={desc}
           disabled={disabled}
           clearable={f.inherit !== undefined}
-          data={f.options ?? []}
+          data={f.options?.map((o) => ({ value: o, label: f.optionLabels?.[o] ?? o })) ?? []}
           value={(value as string) || null}
           onChange={(v) => onChange(v ?? '')}
         />
       );
     case 'tags':
     case 'keyvalue':
-      return <TagsInput label={label} description={desc || (f.type === 'keyvalue' ? 'КЛЮЧ=значение' : undefined)} disabled={disabled} value={value as string[]} onChange={onChange} />;
+      return <TagsInput label={label} description={desc || (f.type === 'keyvalue' ? t('form.keyValue') : undefined)} disabled={disabled} value={value as string[]} onChange={onChange} />;
     case 'textarea':
       return <Textarea label={label} description={desc} disabled={disabled} autosize minRows={2} value={value as string} onChange={(e) => onChange(e.currentTarget.value)} />;
     case 'password':

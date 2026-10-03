@@ -1,9 +1,12 @@
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Anchor, Button, Card, Center, Code, Group, List, Stack, Stepper, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Button, Card, Center, Code, Group, List, SegmentedControl, Stack, Stepper, Text, Title } from '@mantine/core';
 import { IconGitBranch } from '@tabler/icons-react';
 import { useBm, useBmMutation } from '../lib/query';
 import { isMac } from '../lib/bm';
 import { COPYRIGHT_HOLDER, useBuildInfo } from '../components/AppFooter';
+import { LANG_NAMES, LANGS, type Lang } from '@bm/shared';
+import { t, tx, useLang } from '../i18n';
 
 /** First-run wizard (spec 7): explains what the app does, writes app.yaml, then goes to "add project". */
 export function Welcome() {
@@ -12,77 +15,80 @@ export function Welcome() {
   const status = useBm('system.status', { refresh: true }, { refetchInterval: 5000 });
   const finish = useBmMutation('system.completeFirstRun');
   const build = useBuildInfo().data;
+  const { lang, setLang } = useLang();
+  const code = { code: (x: ReactNode) => <Code>{x}</Code> };
 
   return (
     <Center h="100vh" bg="var(--mantine-color-gray-light)">
       <Card w={760} shadow="md" padding="xl" radius="md" withBorder>
         <Stack>
-          <Group gap="sm">
-            <IconGitBranch size={32} color="#714b67" />
-            <Title order={2}>Odoo Branch Manager</Title>
+          <Group gap="sm" justify="space-between">
+            <Group gap="sm">
+              <IconGitBranch size={32} color="#714b67" />
+              <Title order={2}>Odoo Branch Manager</Title>
+            </Group>
+            <SegmentedControl
+              size="xs"
+              value={lang}
+              onChange={(v) => setLang(v as Lang)}
+              data={LANGS.map((l) => ({ value: l, label: LANG_NAMES[l] }))}
+              aria-label={t('shell.language')}
+              data-testid="welcome-language"
+            />
           </Group>
-          <Text>
-            Локальный odoo.sh: ветки git-репозитория раскладываются по стадиям Production / Development, на каждую
-            ветку собирается своя сборка Odoo (контейнер + БД + код) и открывается по адресу <Code>http://&lt;ветка&gt;.localhost</Code>.
-          </Text>
+          <Text>{tx('welcome.intro', { url: t('welcome.urlSample') }, code)}</Text>
           <Stepper active={0} size="sm">
-            <Stepper.Step label="Приложение" description="папки и порт" />
-            <Stepper.Step label="Проект" description="репозиторий" />
-            <Stepper.Step label="Сборки" description="ветки и стадии" />
+            <Stepper.Step label={t('welcome.stepApp')} description={t('welcome.stepAppDesc')} />
+            <Stepper.Step label={t('welcome.stepProject')} description={t('welcome.stepProjectDesc')} />
+            <Stepper.Step label={t('welcome.stepBuilds')} description={t('welcome.stepBuildsDesc')} />
           </Stepper>
           <List size="sm" spacing={4}>
             <List.Item>
-              Настройки: <Code>{state.data?.configDir ?? '…'}</Code>
+              {t('welcome.settings')} <Code>{state.data?.configDir ?? '…'}</Code>
             </List.Item>
             <List.Item>
-              Данные, реестр и логи: <Code>{state.data?.dataDir ?? '…'}</Code>
+              {t('welcome.data')} <Code>{state.data?.dataDir ?? '…'}</Code>
             </List.Item>
             <List.Item>
-              Docker: {status.data ? (status.data.docker.ok ? status.data.docker.text : 'не запущен — запустите Docker Desktop') : '…'}
+              Docker: {status.data ? (status.data.docker.ok ? status.data.docker.text : t('welcome.dockerDown')) : '…'}
             </List.Item>
             <List.Item>Git: {status.data ? status.data.git.text : '…'}</List.Item>
-            <List.Item>
-              Сборки доступны через Traefik на порту 80, а если он занят — на 8080. Приложение само не открывает сетевых портов.
-            </List.Item>
+            <List.Item>{t('welcome.ports')}</List.Item>
           </List>
           {status.data && !status.data.git.ok && (
-            <Alert color="red" variant="light" title="Нужен Git">
+            <Alert color="red" variant="light" title={t('welcome.needGit')}>
               {isMac ? (
-                <>
-                  Приложение работает с репозиторием через git. Установите его командой <Code>xcode-select --install</Code> в Терминале
-                  (или <Code>brew install git</Code>) и перезапустите приложение.
-                </>
+                tx('welcome.gitMac', {}, code)
               ) : (
                 <>
-                  Приложение работает с репозиторием через Git for Windows.{' '}
+                  {t('welcome.gitWin')}{' '}
                   <Anchor size="sm" onClick={() => void window.bm.desktop.openExternal('https://git-scm.com/download/win')}>
-                    Скачать Git for Windows
+                    {t('welcome.gitDownload')}
                   </Anchor>
-                  , установите с настройками по умолчанию (вместе с Git Credential Manager) и перезапустите приложение.
+                  {t('welcome.gitInstall')}
                 </>
               )}
             </Alert>
           )}
           {status.data && !status.data.docker.ok && (
-            <Alert color="orange" variant="light" title="Нужен Docker Desktop">
-              Сборки Odoo работают в Docker.{' '}
+            <Alert color="orange" variant="light" title={t('welcome.needDocker')}>
+              {t('welcome.dockerRuns')}{' '}
               <Anchor size="sm" onClick={() => void window.bm.desktop.openExternal('https://www.docker.com/products/docker-desktop/')}>
-                Установите Docker Desktop
+                {t('welcome.dockerInstall')}
               </Anchor>{' '}
-              {isMac ? '(Apple Silicon)' : '(WSL2)'} или запустите его, если он уже установлен.
+              {isMac ? '(Apple Silicon)' : '(WSL2)'} {t('welcome.dockerOrStart')}
             </Alert>
           )}
           <Alert color="blue" variant="light">
-            Приложение работает только с локальным Docker и Postgres. С настоящим продом оно не соединяется: зеркало прода собирается из
-            файла бэкапа.
+            {t('welcome.localOnly')}
           </Alert>
           <Group justify="flex-end">
             <Button
               size="sm"
               loading={finish.isPending}
-              onClick={() => finish.mutate({}, { onSuccess: () => nav('/projects/new', { replace: true }) })}
+              onClick={() => finish.mutate({ language: lang }, { onSuccess: () => nav('/projects/new', { replace: true }) })}
             >
-              Далее: добавить проект
+              {t('welcome.next')}
             </Button>
           </Group>
           <Text size="xs" c="dimmed" ta="center">

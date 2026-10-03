@@ -4,6 +4,7 @@ import type { Ctx } from '../context';
 import { auditLog } from '../db/schema';
 import { nowIso } from '../util/time';
 import { log } from '../util/logger';
+import { t } from '../i18n';
 
 export function audit(
   ctx: Ctx,
@@ -76,7 +77,7 @@ export function listAudit(ctx: Ctx, p: AuditQuery): AuditList {
 export function lineDiff(a: string, b: string): string {
   const x = a.split(/\r?\n/);
   const y = b.split(/\r?\n/);
-  if (x.length * y.length > 4_000_000) return `(${x.length} → ${y.length} строк)`;
+  if (x.length * y.length > 4_000_000) return t('audit.bigDiff', { from: x.length, to: y.length });
   const dp: number[][] = Array.from({ length: x.length + 1 }, () => new Array<number>(y.length + 1).fill(0));
   for (let i = x.length - 1; i >= 0; i--)
     for (let j = y.length - 1; j >= 0; j--) dp[i]![j] = x[i] === y[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);

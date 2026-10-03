@@ -13,7 +13,7 @@ import {
   IconTrash,
 } from '@tabler/icons-react';
 import type { BranchView } from '@bm/shared';
-import { DOCKER_DOWN_HINT, useBm, useDockerOk } from '../lib/query';
+import { dockerDownHint, useBm, useDockerOk } from '../lib/query';
 import { call, errorText } from '../lib/bm';
 import { notifications } from '@mantine/notifications';
 import { StatusDot } from '../components/StatusDot';
@@ -30,6 +30,7 @@ import { BackupsTab } from './branch/BackupsTab';
 import { ToolsTab } from './branch/ToolsTab';
 import { SettingsTab } from './branch/SettingsTab';
 import { Placeholder } from '../components/Placeholder';
+import { t } from '../i18n';
 
 const STAGE_COLOR = { production: 'plum', development: 'teal' } as const;
 
@@ -38,7 +39,7 @@ export async function shellOpen(p: Parameters<typeof call<'shell.open'>>[1]) {
     const r = await call('shell.open', p);
     if (r.detail) notifications.show({ message: r.detail });
   } catch (e) {
-    notifications.show({ color: 'red', title: 'Не удалось открыть', message: errorText(e), autoClose: 12000 });
+    notifications.show({ color: 'red', title: t('branch.openFailed'), message: errorText(e), autoClose: 12000 });
   }
 }
 
@@ -61,7 +62,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
   const live = b.liveBuild;
   const blocked = folderBlockHint(b);
   // D63: without Docker, build actions wait; the folder block comes first, it needs the user's attention.
-  const off = blocked ?? (dockerOk ? null : DOCKER_DOWN_HINT);
+  const off = blocked ?? (dockerOk ? null : dockerDownHint());
   const setTab = (t: string | null) => nav(`/projects/${projectId}/branches/${branchId}/${t ?? 'history'}`);
 
   return (
@@ -78,22 +79,22 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
                 {b.stage}
               </Badge>
               {b.stage === 'production' && (
-                <Tooltip label="Локальная копия, восстановленная из бэкапа прода. С боевым сервером приложение не соединяется.">
+                <Tooltip label={t('branch.mirrorTip')}>
                   <Badge color="orange" variant="filled" data-testid="mirror-label">
-                    Зеркало прода (локально)
+                    {t('branch.mirror')}
                   </Badge>
                 </Tooltip>
               )}
               {b.assignedBy === 'user' && b.stage !== 'production' && (
-                <Tooltip label="Стадия зафиксирована вручную">
+                <Tooltip label={t('branch.pinnedTip')}>
                   <Badge variant="outline" color="gray" size="sm">
-                    вручную
+                    {t('branch.pinned')}
                   </Badge>
                 </Tooltip>
               )}
             </Group>
             <Text size="xs" c="dimmed">
-              {b.slug} · {b.folder ? `код из вашей папки ${b.folder}` : `код с GitHub · ${b.worktreePath ?? 'worktree ещё не создан'}`}
+              {b.slug} · {b.folder ? t('branch.codeFolder', { folder: b.folder }) : t('branch.codeGithub', { path: b.worktreePath ?? t('branch.noWorktree') })}
               {b.url ? ` · ${b.url}` : ''}
             </Text>
           </Stack>
@@ -106,10 +107,10 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
               </Menu.Target>
               <Menu.Dropdown>
                 <Menu.Item disabled={!b.codeDir} onClick={() => void window.bm.desktop.copy(b.codeDir ?? '')}>
-                  Скопировать путь к коду
+                  {t('branch.copyPath')}
                 </Menu.Item>
                 <Menu.Item disabled={!repoUrl} onClick={() => void window.bm.desktop.copy(`git clone -b ${b.name} ${repoUrl}`)}>
-                  Скопировать команду git clone
+                  {t('branch.copyClone')}
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>
@@ -154,7 +155,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
                     )}
                     {(x.kind === 'config-changed' || x.kind === 'worktree-off-build') && live && !off && (
                       <Button size="compact-xs" style={{ flexShrink: 0 }} onClick={() => void call('builds.action', { buildId: live.id, action: 'apply-config' }).catch((e) => notifications.show({ color: 'red', message: errorText(e) }))}>
-                        Применить
+                        {t('branch.apply')}
                       </Button>
                     )}
                   </Group>
@@ -216,8 +217,8 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
           </Tabs.Panel>
           <Tabs.Panel value="mails">
             <Placeholder
-              stage="отложено"
-              what="Mailpit в сборках отложен. Письма из сборок наружу не уходят: в копиях прода почтовые серверы выключены нейтрализацией, в чистых БД их нет. Не включайте почтовый сервер вручную в сборке с копией прода — письма уйдут настоящим адресатам."
+              stage={t('form.postponed')}
+              what={t('branch.mailpit')}
             />
           </Tabs.Panel>
           <Tabs.Panel value="backups">

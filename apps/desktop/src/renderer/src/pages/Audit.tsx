@@ -7,6 +7,7 @@ import { IconChevronDown, IconChevronRight, IconSearch } from '@tabler/icons-rea
 import type { AuditEntryView, MethodParams } from '@bm/shared';
 import { useBm } from '../lib/query';
 import { dayStartIso, fmtDate } from '../lib/format';
+import { t } from '../i18n';
 
 const PAGE = 50;
 const FILTERS = ['action', 'q', 'result', 'from', 'to', 'app'] as const;
@@ -16,8 +17,8 @@ type Filter = (typeof FILTERS)[number];
 function actionOptions(actions: string[]) {
   const groups = [...new Set(actions.filter((a) => a.includes('.')).map((a) => `${a.split('.')[0]}.`))].filter((g) => actions.filter((a) => a.startsWith(g)).length > 1);
   return [
-    ...(groups.length ? [{ group: 'Группы', items: groups.map((g) => ({ value: g, label: `${g}*` })) }] : []),
-    { group: 'Действия', items: actions.map((a) => ({ value: a, label: a })) },
+    ...(groups.length ? [{ group: t('audit.groups'), items: groups.map((g) => ({ value: g, label: `${g}*` })) }] : []),
+    { group: t('audit.actions'), items: actions.map((a) => ({ value: a, label: a })) },
   ];
 }
 
@@ -44,7 +45,7 @@ function Diff({ text }: { text: string }) {
         ))
       ) : (
         <Text size="xs" c="dimmed">
-          (без изменений)
+          {t('audit.noChanges')}
         </Text>
       )}
     </Box>
@@ -58,7 +59,7 @@ function Details({ a }: { a: AuditEntryView }) {
       {hasParams && (
         <div>
           <Text size="xs" fw={600} mb={4}>
-            Параметры
+            {t('audit.params')}
           </Text>
           <Code block>{JSON.stringify(a.params, null, 2)}</Code>
         </div>
@@ -66,14 +67,14 @@ function Details({ a }: { a: AuditEntryView }) {
       {a.diff !== null && (
         <div>
           <Text size="xs" fw={600} mb={4}>
-            Изменения настроек
+            {t('audit.settingsChanges')}
           </Text>
           <Diff text={a.diff} />
         </div>
       )}
       {!hasParams && a.diff === null && (
         <Text size="xs" c="dimmed">
-          Подробностей нет.
+          {t('audit.noDetails')}
         </Text>
       )}
     </Stack>
@@ -129,17 +130,17 @@ export function AuditPage() {
         <Group justify="space-between">
           <Title order={3}>Audit Logs</Title>
           <Text size="sm" c="dimmed">
-            {total} {anyFilter ? 'по фильтру' : 'всего'}
+            {t(anyFilter ? 'list.filtered' : 'list.total', { n: total })}
           </Text>
         </Group>
         <Text size="sm" c="dimmed">
-          Все действия приложения и пользователя по проекту. Строка раскрывается: параметры действия и изменения настроек (пароли скрыты).
+          {t('audit.about')}
         </Text>
         <Group gap="xs" align="flex-end">
           <Select
             size="xs"
             w={240}
-            placeholder="Действие"
+            placeholder={t('audit.action')}
             searchable
             clearable
             data={actionOptions(r.data?.actions ?? [])}
@@ -149,7 +150,7 @@ export function AuditPage() {
           <TextInput
             size="xs"
             w={240}
-            placeholder="Объект или параметры"
+            placeholder={t('audit.search')}
             leftSection={<IconSearch size={12} />}
             value={search}
             onChange={(e) => {
@@ -160,22 +161,22 @@ export function AuditPage() {
           <Select
             size="xs"
             w={130}
-            placeholder="Итог"
+            placeholder={t('audit.result')}
             clearable
             data={[
               { value: 'ok', label: 'ok' },
-              { value: 'error', label: 'ошибка' },
+              { value: 'error', label: t('audit.error') },
             ]}
             value={f('result')}
             onChange={(v) => set('result', v)}
           />
-          <TextInput size="xs" type="date" label="С" value={f('from') ?? ''} onChange={(e) => set('from', e.currentTarget.value || null)} />
-          <TextInput size="xs" type="date" label="По" value={f('to') ?? ''} onChange={(e) => set('to', e.currentTarget.value || null)} />
+          <TextInput size="xs" type="date" label={t('list.from')} value={f('from') ?? ''} onChange={(e) => set('from', e.currentTarget.value || null)} />
+          <TextInput size="xs" type="date" label={t('list.to')} value={f('to') ?? ''} onChange={(e) => set('to', e.currentTarget.value || null)} />
           {pid && (
             <Checkbox
               size="xs"
               mb={6}
-              label="И действия приложения (app.yaml, обновления)"
+              label={t('audit.appToo')}
               checked={f('app') === '1'}
               onChange={(e) => set('app', e.currentTarget.checked ? '1' : null)}
             />
@@ -189,7 +190,7 @@ export function AuditPage() {
                 setSp(new URLSearchParams(), { replace: true });
               }}
             >
-              Сбросить
+              {t('list.reset')}
             </Button>
           )}
         </Group>
@@ -197,10 +198,10 @@ export function AuditPage() {
           <Table.Thead>
             <Table.Tr>
               <Table.Th w={28} />
-              <Table.Th w={160}>Когда</Table.Th>
-              <Table.Th w={220}>Действие</Table.Th>
-              <Table.Th>Объект</Table.Th>
-              <Table.Th w={90}>Итог</Table.Th>
+              <Table.Th w={160}>{t('audit.when')}</Table.Th>
+              <Table.Th w={220}>{t('audit.action')}</Table.Th>
+              <Table.Th>{t('audit.object')}</Table.Th>
+              <Table.Th w={90}>{t('audit.result')}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -221,7 +222,7 @@ export function AuditPage() {
                         )}
                         {!a.projectId && pid && (
                           <Badge size="xs" variant="light" color="gray">
-                            приложение
+                            {t('audit.app')}
                           </Badge>
                         )}
                       </Group>
@@ -248,7 +249,7 @@ export function AuditPage() {
         </Table>
         {r.data && !items.length && (
           <Text size="sm" c="dimmed">
-            {anyFilter ? 'Нет записей по этому фильтру.' : 'Записей ещё нет.'}
+            {t(anyFilter ? 'audit.noneFiltered' : 'audit.none')}
           </Text>
         )}
         {total > PAGE && <Pagination total={Math.ceil(total / PAGE)} value={page} onChange={(p) => set('page', String(p))} size="sm" />}

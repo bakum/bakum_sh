@@ -29,10 +29,11 @@ import { clearPause } from '../builds/triggers';
 import { toPosix } from '../util/paths';
 import { log } from '../util/logger';
 import { runtimeState } from '../state';
+import { t } from '../i18n';
 
 function mustBuild(ctx: Ctx, id: number) {
   const b = buildRow(ctx, id);
-  if (!b) throw new BmError('NO_BUILD', 'Сборка не найдена');
+  if (!b) throw new BmError('NO_BUILD', t('common.noBuild'));
   return b;
 }
 
@@ -46,10 +47,10 @@ function view(ctx: Ctx, id: number) {
 
 async function retry(ctx: Ctx, buildId: number, fromStep: string) {
   const b = mustBuild(ctx, buildId);
-  if (b.status !== 'failed') throw new BmError('BAD_STATE', 'Повторить можно только упавшую сборку');
-  if (!(BUILD_STEPS as readonly string[]).includes(fromStep)) throw new BmError('BAD_STEP', `Неизвестный шаг ${fromStep}`);
+  if (b.status !== 'failed') throw new BmError('BAD_STATE', t('actions.retryFailedOnly'));
+  if (!(BUILD_STEPS as readonly string[]).includes(fromStep)) throw new BmError('BAD_STEP', t('actions.unknownStep', { step: fromStep }));
   const active = ctx.db.select().from(builds).where(and(eq(builds.branchId, b.branchId), inArray(builds.status, ['queued', 'building']))).get();
-  if (active) throw new BmError('BUILD_ACTIVE', `У ветки уже идёт сборка #${active.number}`);
+  if (active) throw new BmError('BUILD_ACTIVE', t('actions.active', { number: active.number }));
   await assertBranchFolder(ctx, b.branchId);
   const idx = BUILD_STEPS.indexOf(fromStep as BuildStepName);
   const steps = b.steps.map((s, i) => (i >= idx ? { ...s, status: 'pending' as const, startedAt: null, finishedAt: null, note: undefined } : s));
@@ -135,7 +136,7 @@ function writeLaunchJson(ctx: Ctx, buildId: number) {
   const b = mustBuild(ctx, buildId);
   const br = branchRow(ctx, b.branchId);
   const dir = br ? codeDir(ctx, br) : null;
-  if (!br || !dir) throw new BmError('NO_WORKTREE', 'У ветки нет worktree');
+  if (!br || !dir) throw new BmError('NO_WORKTREE', t('actions.noWorktree'));
   const conf = launchConfig(ctx, buildId);
   const file = path.join(dir, '.vscode', 'launch.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -209,12 +210,12 @@ async function openTerminal(ctx: Ctx, title: string, argv: string[], env: Record
   if (pref === 'git-bash') {
     const bash = 'C:/Program Files/Git/git-bash.exe';
     if (fs.existsSync(bash)) {
-      execa(bash, ['-c', argv.map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(' ') + '; read -p "Enter для выхода"'], opts).unref();
+      execa(bash, ['-c', argv.map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(' ') + `; read -p "${t('actions.pressEnter')}"`], opts).unref();
       return undefined;
     }
   }
   execa('cmd.exe', ['/c', 'start', title, ...argv], opts).unref();
-  return pref === 'wt' ? 'Windows Terminal не найден — открыт cmd' : undefined;
+  return pref === 'wt' ? t('actions.noWt') : undefined;
 }
 
 /** shell.open targets served by the build's containers / Traefik (D63). */
@@ -227,11 +228,11 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
   const cfg = pid ? ctx.store.require(pid) : null;
   const port = ctx.proxyPort ?? ctx.store.app.proxyPort;
   const needBuild = () => {
-    if (!b) throw new BmError('NO_BUILD', 'Нет сборки');
+    if (!b) throw new BmError('NO_BUILD', t('actions.noBuild'));
     return b;
   };
   if (DOCKER_TARGETS.has(p.target) && !runtimeState.docker.ok) {
-    throw new BmError('DOCKER_DOWN', 'Docker Desktop не запущен: запустите его (кнопка «Запустить» вверху окна) и повторите');
+    throw new BmError('DOCKER_DOWN', t('actions.dockerDown'));
   }
   switch (p.target) {
     case 'browser':
@@ -241,23 +242,23 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
       ctx.toMain({ kind: 'openExternal', url: `${buildUrl(needBuild().host, port)}/web?debug=1` });
       return { ok: true };
     case 'github':
-      if (!cfg?.repo.github) throw new BmError('NO_GITHUB', 'repo.github не задан');
+      if (!cfg?.repo.github) throw new BmError('NO_GITHUB', t('actions.noGithub'));
       ctx.toMain({ kind: 'openExternal', url: `https://github.com/${cfg.repo.github}/tree/${br?.name ?? ''}` });
       return { ok: true };
     case 'mails':
-      throw new BmError('POSTPONED', 'Mailpit в сборках отложен (docs/decisions.md D43): письма из сборок наружу не уходят.');
+      throw new BmError('POSTPONED', t('actions.mailpit'));
     case 'logs-dir':
       ctx.toMain({ kind: 'openPath', path: ctx.logsDir });
       return { ok: true };
     case 'build-log':
-      if (!b?.logPath) throw new BmError('NO_LOG', 'Нет лога сборки');
+      if (!b?.logPath) throw new BmError('NO_LOG', t('actions.noLog'));
       ctx.toMain({ kind: 'openPath', path: b.logPath });
       return { ok: true };
     case 'explorer':
     case 'editor':
     case 'editor-cursor': {
       const dir = br ? codeDir(ctx, br) : null;
-      if (!dir || !fs.existsSync(dir)) throw new BmError('NO_WORKTREE', 'Worktree ветки ещё не создан: Editor → «Создать worktree» или Rebuild');
+      if (!dir || !fs.existsSync(dir)) throw new BmError('NO_WORKTREE', t('actions.noWorktreeYet'));
       if (p.target === 'explorer') {
         ctx.toMain({ kind: 'openPath', path: dir });
         return { ok: true };
@@ -269,14 +270,14 @@ async function shellOpen(ctx: Ctx, p: { buildId?: number; branchId?: number; tar
       const macApp = ({ code: 'Visual Studio Code', cursor: 'Cursor' } as Record<string, string>)[exe];
       if (isMac && r.failed && macApp) r = await execa('open', ['-a', macApp, target], { reject: false, stdio: 'ignore' });
       log().info({ exe, target, exitCode: r.exitCode }, 'editor opened');
-      if (r.failed && r.exitCode !== 0) throw new BmError('NO_EDITOR', `Не удалось запустить «${exe}». Укажите путь к CLI редактора в Settings → Приложение → Редактор.`);
+      if (r.failed && r.exitCode !== 0) throw new BmError('NO_EDITOR', t('actions.noEditor', { exe }));
       return { ok: true };
     }
     case 'terminal':
     case 'bash':
     case 'odoo-shell': {
       const c = await serviceContainer(needBuild());
-      if (!c) throw new BmError('NOT_RUNNING', 'Контейнер сборки не найден: запустите сборку (Start)');
+      if (!c) throw new BmError('NOT_RUNNING', t('connectAs.noContainer'));
       const argv =
         p.target === 'odoo-shell'
           ? ['docker', 'exec', '-it', c.name, 'odoo', 'shell', ...serverBaseArgs(cfg!, codeVars(cfg!, br ? codeDir(ctx, br) : null)), '-d', b!.dbName, '--no-http']
@@ -313,13 +314,13 @@ export function registerBuildHandlers(ctx: Ctx): void {
     'builds.retry': (p) => retry(ctx, p.buildId, p.fromStep),
     'builds.drop': (p) => {
       const b = mustBuild(ctx, p.buildId);
-      if (b.status === 'queued' || b.status === 'building') throw new BmError('BUILD_ACTIVE', 'Сборка ещё идёт: сначала отмените задачу');
-      if (b.status === 'dropped') throw new BmError('BAD_STATE', 'Сборка уже отброшена');
+      if (b.status === 'queued' || b.status === 'building') throw new BmError('BUILD_ACTIVE', t('actions.stillBuilding'));
+      if (b.status === 'dropped') throw new BmError('BAD_STATE', t('actions.alreadyDropped'));
       return enqueueFor('drop', p.buildId);
     },
     'builds.action': (p) => {
       const b = mustBuild(ctx, p.buildId);
-      if (!b.live) throw new BmError('BAD_STATE', 'Действие доступно только для живой сборки');
+      if (!b.live) throw new BmError('BAD_STATE', t('actions.liveOnly'));
       return enqueueFor(p.action === 'apply-config' ? 'apply_config' : p.action, p.buildId);
     },
     'builds.stopAll': async () => {
@@ -353,21 +354,21 @@ export function registerBuildHandlers(ctx: Ctx): void {
     },
     'builds.connectAs': (p) => {
       const b = mustBuild(ctx, p.buildId);
-      if (!runtimeState.docker.ok) throw new BmError('DOCKER_DOWN', 'Docker Desktop не запущен: запустите его (кнопка «Запустить» вверху окна) и повторите');
+      if (!runtimeState.docker.ok) throw new BmError('DOCKER_DOWN', t('actions.dockerDown'));
       const br = branchRow(ctx, b.branchId);
       return connectAs(ctx, ctx.store.require(b.projectId), b, p.login, br ? codeDir(ctx, br) : null);
     },
     'builds.modulesAction': (p) => enqueueFor('modules', p.buildId, { install: p.install, update: p.update }),
     'builds.testsAction': (p) => {
-      if (!mustBuild(ctx, p.buildId).live) throw new BmError('BAD_STATE', 'Тесты запускаются только на живой сборке');
+      if (!mustBuild(ctx, p.buildId).live) throw new BmError('BAD_STATE', t('actions.testsLiveOnly'));
       return enqueueFor('tests', p.buildId, { modules: p.modules });
     },
     'backups.list': (p) => listBackups(ctx.store.require(p.projectId)),
     'backups.import': async (p) => {
       const cfg = ctx.store.require(p.projectId);
-      if (!fs.existsSync(p.path)) throw new BmError('NO_BACKUP', `Файл не найден: ${p.path}`);
+      if (!fs.existsSync(p.path)) throw new BmError('NO_BACKUP', t('actions.fileNotFound', { file: p.path }));
       const prod = branchByName(ctx, cfg.id, cfg.production.branch);
-      if (!prod) throw new BmError('NO_BRANCH', 'Ветка Production не найдена');
+      if (!prod) throw new BmError('NO_BRANCH', t('actions.noProd'));
       return { jobId: await requestBuildChecked(ctx, prod.id, { trigger: 'import_backup', kind: 'new', backupPath: toPosix(p.path) }) };
     },
     'shell.open': (p) => shellOpen(ctx, p),

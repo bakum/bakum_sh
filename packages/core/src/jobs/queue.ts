@@ -8,6 +8,7 @@ import { bus } from '../events';
 import { runtimeState } from '../state';
 import { log } from '../util/logger';
 import { nowIso } from '../util/time';
+import { t } from '../i18n';
 
 export interface JobContext {
   signal: AbortSignal;
@@ -82,16 +83,16 @@ export class JobQueue {
 
   cancel(jobId: number): void {
     const row = this.ctx.db.select().from(jobs).where(eq(jobs.id, jobId)).get();
-    if (!row) throw new BmError('NO_JOB', 'Задача не найдена');
+    if (!row) throw new BmError('NO_JOB', t('queue.noJob'));
     if (row.status === 'queued') {
-      this.finish(row, 'cancelled', 'Отменена пользователем');
+      this.finish(row, 'cancelled', t('queue.cancelledByUser'));
     } else if (row.status === 'running') {
       this.running.get(jobId)?.abort();
     }
   }
 
   cancelAll(): void {
-    for (const r of this.ctx.db.select().from(jobs).where(eq(jobs.status, 'queued')).all()) this.finish(r, 'cancelled', 'Отменена при выходе');
+    for (const r of this.ctx.db.select().from(jobs).where(eq(jobs.status, 'queued')).all()) this.finish(r, 'cancelled', t('queue.cancelledOnExit'));
     for (const c of this.running.values()) c.abort();
   }
 
@@ -149,7 +150,7 @@ export class JobQueue {
   private start(j: JobRow): void {
     const ex = this.executors.get(j.type);
     if (!ex) {
-      this.finish(j, 'failed', `Нет исполнителя для задачи ${j.type}`);
+      this.finish(j, 'failed', t('queue.noExecutor', { type: j.type }));
       return;
     }
     const ac = new AbortController();
@@ -203,7 +204,7 @@ export class JobQueue {
     for (const j of stale) {
       this.ctx.db
         .update(jobs)
-        .set({ status: 'interrupted', error: 'Прервана: приложение или Core было остановлено во время выполнения', finishedAt: nowIso() })
+        .set({ status: 'interrupted', error: t('queue.interrupted'), finishedAt: nowIso() })
         .where(eq(jobs.id, j.id))
         .run();
     }

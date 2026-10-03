@@ -4,6 +4,7 @@ import { BmError, type ProjectConfig } from '@bm/shared';
 import { docker, dockerCli } from './client';
 import { pullImage } from './postgres';
 import { dockerfilePath } from '../config/dockerfile';
+import { t } from '../i18n';
 
 /**
  * `runtime.build` (spec 9.3, D46): the app builds the Odoo image of the project from a Dockerfile and tags it
@@ -19,8 +20,7 @@ export async function assertOwnTag(cfg: ProjectConfig, tag: string): Promise<voi
   if (owner !== cfg.id) {
     throw new BmError(
       'IMAGE_NOT_OWNED',
-      `Образ ${tag} уже есть и собран не приложением для проекта ${cfg.id}${owner ? ` (bm.project=${owner})` : ''}: приложение его не перезапишет. ` +
-        `Укажите в runtime.image своё имя, например bm-${cfg.id}-odoo:latest.`,
+      t('image.notOwned', { tag, id: cfg.id, owner: owner ? ` (bm.project=${owner})` : '' }),
     );
   }
 }
@@ -28,11 +28,11 @@ export async function assertOwnTag(cfg: ProjectConfig, tag: string): Promise<voi
 /** `docker build` of runtime.build → runtime.image (the layer cache makes an unchanged Dockerfile a matter of seconds). */
 export async function buildImage(cfg: ProjectConfig, say: (l: string) => void, signal?: AbortSignal): Promise<void> {
   const b = cfg.runtime.build;
-  if (!b) throw new BmError('NO_BUILD_CONFIG', 'В настройках проекта не задан runtime.build');
+  if (!b) throw new BmError('NO_BUILD_CONFIG', t('image.noBuild'));
   const context = path.resolve(b.context);
   const file = dockerfilePath(b);
-  if (!fs.existsSync(context) || !fs.statSync(context).isDirectory()) throw new BmError('NO_CONTEXT', `Папка сборки образа не найдена: ${context} (runtime.build.context)`);
-  if (!fs.existsSync(file)) throw new BmError('NO_DOCKERFILE', `Dockerfile не найден: ${file} (runtime.build.dockerfile)`);
+  if (!fs.existsSync(context) || !fs.statSync(context).isDirectory()) throw new BmError('NO_CONTEXT', t('image.noContext', { dir: context }));
+  if (!fs.existsSync(file)) throw new BmError('NO_DOCKERFILE', t('image.noDockerfile', { file }));
   const tag = cfg.runtime.image;
   await assertOwnTag(cfg, tag);
   say(`docker build -t ${tag} -f ${file} ${context}`);
@@ -49,7 +49,7 @@ export async function buildImage(cfg: ProjectConfig, say: (l: string) => void, s
       }
     },
   });
-  if (r.exitCode !== 0) throw new BmError('IMAGE_BUILD', `Сборка образа ${tag} не удалась: ${(r.stderr || r.stdout).trim().split('\n').slice(-4).join(' ')}`);
+  if (r.exitCode !== 0) throw new BmError('IMAGE_BUILD', t('image.buildFailed', { tag, error: (r.stderr || r.stdout).trim().split('\n').slice(-4).join(' ') }));
 }
 
 /**
@@ -67,5 +67,5 @@ export async function removeProjectImage(cfg: ProjectConfig, say: (l: string) =>
   const info = await docker.getImage(cfg.runtime.image).inspect().catch(() => null);
   if (!info || info.Config?.Labels?.['bm.project'] !== cfg.id) return;
   say(`docker image rm ${cfg.runtime.image}`);
-  await docker.getImage(cfg.runtime.image).remove({ force: false }).catch((e) => say(`образ: ${(e as Error).message}`));
+  await docker.getImage(cfg.runtime.image).remove({ force: false }).catch((e) => say(t('image.removeFailed', { error: (e as Error).message })));
 }

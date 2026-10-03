@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Box, Paper, Text, useComputedColorScheme } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
+import { t } from '../i18n';
+import { fmtTime } from '../lib/format';
 
 /**
  * Small single-series charts of the Monitor tab (dataviz rules): one hue validated for both themes, 2px line with a
@@ -25,7 +27,7 @@ function niceMax(v: number): number {
   return 10 * p;
 }
 
-const hhmm = (t: number) => new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const hhmm = (at: number) => fmtTime(at, false);
 
 function useChrome() {
   const scheme = useComputedColorScheme('light');
@@ -104,7 +106,7 @@ export function TimeLineChart({ title, points, format, from, to, yCap }: { title
       <Box ref={ref} pos="relative">
         {!points.length ? (
           <Text size="sm" c="dimmed" h={HEIGHT} pt="xl" ta="center">
-            Данных пока нет: замер раз в 30 с, пока контейнер работает.
+            {t('chart.noData')}
           </Text>
         ) : (
           <svg width={w} height={HEIGHT} role="img" aria-label={title}>
@@ -171,7 +173,7 @@ export function MinuteBars({
       <Box ref={ref} pos="relative">
         {!bars.length ? (
           <Text size="sm" c="dimmed" h={HEIGHT} pt="xl" ta="center">
-            За последний час запросов не было.
+            {t('chart.noRequests')}
           </Text>
         ) : (
           <svg width={w} height={HEIGHT} role="img" aria-label={title}>
@@ -187,7 +189,7 @@ export function MinuteBars({
             })}
           </svg>
         )}
-        {hover && <Tip x={x(hover.t)} y={y(hover.v)} value={`${hover.v} запр.`} label={detail(hover.t)} />}
+        {hover && <Tip x={x(hover.t)} y={y(hover.v)} value={t('chart.requests', { n: hover.v })} label={detail(hover.t)} />}
       </Box>
     </Box>
   );

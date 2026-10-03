@@ -16,7 +16,7 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron';
 import pino from 'pino';
-import type { AppConfig, CoreToMain, TrayProject } from '@bm/shared';
+import { setLangSource, type AppConfig, type CoreToMain, type TrayProject } from '@bm/shared';
 import { CoreHost } from './core-host';
 import { drawIcon, trayImage, type TrayState } from './icons';
 import { isAllowedExternal } from './security';
@@ -24,6 +24,7 @@ import { resolveDirs } from './migrate-dirs';
 import { dirRoots } from './platform-dirs';
 import { Updater } from './updater';
 import { cliPipeName, installCliLaunchers } from './cli-install';
+import { t } from './i18n';
 
 const PRODUCT = 'Odoo Branch Manager';
 /** BM_PROFILE=dev keeps development runs away from the real configuration and registry. */
@@ -62,6 +63,9 @@ let appConfig: AppConfig | null = null;
 let updater: Updater | null = null;
 let pendingInstaller: string | null = null;
 let startupCheckDone = false;
+let cliBin: string | null = null;
+// Texts follow app.yaml `language` (D69); until Core sends it, the default language.
+setLangSource(() => appConfig?.language);
 
 // ---------- single instance ----------
 if (!app.requestSingleInstanceLock({ hook: isHook })) {
@@ -81,7 +85,7 @@ if (!app.requestSingleInstanceLock({ hook: isHook })) {
   });
   app.whenReady().then(boot).catch((err) => {
     log.error({ err }, 'boot failed');
-    dialog.showErrorBox(PRODUCT, `Не удалось запустить приложение: ${String(err)}`);
+    dialog.showErrorBox(PRODUCT, t('boot.failed', { error: String(err) }));
     app.exit(1);
   });
 }
@@ -210,31 +214,31 @@ function rebuildTrayMenu(): void {
               ? { label: 'Stop', click: () => void core?.call('builds.action', { buildId: b.buildId, action: 'stop' }) }
               : { label: 'Start', click: () => void core?.call('builds.action', { buildId: b.buildId, action: 'start' }) },
             { label: 'VS Code', click: () => void core?.call('shell.open', { buildId: b.buildId, target: 'editor' }) },
-            { label: 'Логи', click: () => showWindow(`/projects/${p.id}/branches/${b.branchId}/logs`) },
+            { label: t('tray.logs'), click: () => showWindow(`/projects/${p.id}/branches/${b.branchId}/logs`) },
           ],
         }))
-      : [{ label: 'Нет живых сборок', enabled: false }],
+      : [{ label: t('tray.noLive'), enabled: false }],
   }));
   const menu = Menu.buildFromTemplate([
     ...projectItems,
     ...(projectItems.length ? [{ type: 'separator' as const }] : []),
-    { label: 'Показать окно', click: () => showWindow() },
-    { label: 'Остановить все сборки', click: () => void core?.call('builds.stopAll', {}) },
+    { label: t('tray.show'), click: () => showWindow() },
+    { label: t('tray.stopAll'), click: () => void core?.call('builds.stopAll', {}) },
     { type: 'separator' },
     updater && (updater.state.status === 'available' || updater.state.status === 'ready')
-      ? { label: `Установить обновление ${updater.state.latest}…`, click: () => void installUpdate() }
-      : { label: 'Проверить обновления', enabled: updater?.state.status !== 'checking', click: () => void checkUpdates(true) },
+      ? { label: t('tray.install', { version: updater.state.latest }), click: () => void installUpdate() }
+      : { label: t('tray.check'), enabled: updater?.state.status !== 'checking', click: () => void checkUpdates(true) },
     { type: 'separator' },
-    { label: 'Выход', click: () => void requestQuit() },
+    { label: t('tray.quit'), click: () => void requestQuit() },
   ]);
   tray.setContextMenu(menu);
-  const tip = { ok: 'всё работает', building: 'идёт сборка', error: 'есть ошибки', idle: 'нет живых сборок' }[trayState];
+  const tip = t(`tray.tip.${trayState}`);
   tray.setToolTip(`${PRODUCT} — ${tip}`);
   tray.setImage(trayImage(trayState));
 }
 
 function statusLabel(s: string): string {
-  return ({ running: 'работает', stopped: 'остановлена', building: 'сборка', failed: 'ошибка', queued: 'в очереди' } as Record<string, string>)[s] ?? s;
+  return ['running', 'stopped', 'building', 'failed', 'queued'].includes(s) ? t(`status.${s as 'running'}`) : s;
 }
 
 // ---------- quit ----------
@@ -243,19 +247,19 @@ async function requestQuit(): Promise<void> {
     const { response } = await dialog.showMessageBox({
       type: 'question',
       title: PRODUCT,
-      message: `Выполняется задач: ${activeJobs}. Что сделать?`,
-      detail: 'Контейнеры сборок при выходе не останавливаются.',
-      buttons: ['Дождаться и выйти', 'Отменить задачи и выйти', 'Остаться'],
+      message: t('quit.message', { n: activeJobs }),
+      detail: t('quit.detail'),
+      buttons: [t('quit.wait'), t('quit.cancelJobs'), t('quit.stay')],
       defaultId: 0,
       cancelId: 2,
     });
     if (response === 2) return;
     if (response === 0) {
-      new Notification({ title: PRODUCT, body: 'Выход после завершения текущих задач.' }).show();
+      new Notification({ title: PRODUCT, body: t('quit.afterJobs') }).show();
       await new Promise<void>((resolve) => {
-        const t = setInterval(() => {
+        const timer = setInterval(() => {
           if (activeJobs === 0) {
-            clearInterval(t);
+            clearInterval(timer);
             resolve();
           }
         }, 1000);
@@ -300,34 +304,30 @@ function launchInstaller(file: string): void {
  * → start the installer. Portable builds open the release page instead.
  */
 async function installUpdate(): Promise<{ ok: boolean; message?: string }> {
-  if (!updater) return { ok: false, message: 'Проверка обновлений не готова' };
+  if (!updater) return { ok: false, message: t('update.notReady') };
   const s = updater.state;
-  if (s.status !== 'available' && s.status !== 'ready') return { ok: false, message: 'Нет доступного обновления: сначала проверьте обновления' };
+  if (s.status !== 'available' && s.status !== 'ready') return { ok: false, message: t('update.none') };
   if (s.mode === 'portable') {
     if (s.url && isAllowedExternal(s.url)) void shell.openExternal(s.url);
-    return { ok: true, message: 'Portable-версия: скачайте новую версию со страницы релиза' };
+    return { ok: true, message: t('update.portable') };
   }
-  if (s.mode === 'dev') return { ok: false, message: 'В режиме разработки (pnpm dev / start) установка обновлений недоступна' };
-  if (!s.asset) return { ok: false, message: 'В релизе нет установщика' };
+  if (s.mode === 'dev') return { ok: false, message: t('update.dev') };
+  if (!s.asset) return { ok: false, message: t('update.noAsset') };
   const jobs = activeJobs;
-  const buttons = jobs > 0 ? ['Дождаться задач и установить', 'Прервать задачи и установить', 'Отмена'] : ['Установить', 'Отмена'];
+  const buttons = jobs > 0 ? [t('update.waitJobs'), t('update.abortJobs'), t('common.cancel')] : [t('update.install'), t('common.cancel')];
   const { response } = await dialog.showMessageBox(win && win.isVisible() ? win : undefined!, {
     type: 'question',
     title: PRODUCT,
-    message: `Установить Odoo Branch Manager ${s.latest}?`,
+    message: t('update.question', { version: s.latest }),
     detail:
-      (isMac
-        ? `Текущая версия ${s.current}. Образ диска будет скачан (${Math.round(s.asset.size / 1e6)} МБ) и проверен, затем приложение ` +
-          'полностью закроется и откроется образ: перетащите Odoo Branch Manager в «Программы» с заменой и запустите его снова. '
-        : `Текущая версия ${s.current}. Установщик будет скачан (${Math.round(s.asset.size / 1e6)} МБ) и проверен, затем приложение ` +
-          'полностью закроется и запустится установщик. ') +
-      'Контейнеры сборок, базы и настройки не затрагиваются.' +
-      (jobs > 0 ? `\n\nСейчас выполняется задач: ${jobs}. Прерванные сборки получат статус failed, их можно повторить после обновления.` : ''),
+      t(isMac ? 'update.detailMac' : 'update.detailWin', { current: s.current, mb: Math.round(s.asset.size / 1e6) }) +
+      t('update.untouched') +
+      (jobs > 0 ? t('update.jobsRunning', { n: jobs }) : ''),
     buttons,
     defaultId: 0,
     cancelId: buttons.length - 1,
   });
-  if (response === buttons.length - 1) return { ok: false, message: 'Отменено' };
+  if (response === buttons.length - 1) return { ok: false, message: t('update.cancelled') };
   let file: string;
   try {
     file = await updater.download();
@@ -335,11 +335,11 @@ async function installUpdate(): Promise<{ ok: boolean; message?: string }> {
     return { ok: false, message: (err as Error).message };
   }
   if (jobs > 0 && response === 0) {
-    new Notification({ title: PRODUCT, body: 'Обновление будет установлено после завершения текущих задач.' }).show();
+    new Notification({ title: PRODUCT, body: t('update.afterJobs') }).show();
     await new Promise<void>((resolve) => {
-      const t = setInterval(() => {
+      const timer = setInterval(() => {
         if (activeJobs === 0) {
-          clearInterval(t);
+          clearInterval(timer);
           resolve();
         }
       }, 1000);
@@ -361,11 +361,11 @@ async function checkUpdates(manual: boolean): Promise<void> {
   const s = await updater.check(manual);
   const fromTray = manual === true && !win?.isVisible();
   if (s.status === 'available' && (manual || !s.skipped) && Notification.isSupported()) {
-    const n = new Notification({ title: `Доступна версия ${s.latest}`, body: `Установлена ${s.current}. Откройте окно, чтобы посмотреть изменения и обновить.` });
+    const n = new Notification({ title: t('update.availableTitle', { version: s.latest }), body: t('update.availableBody', { current: s.current }) });
     n.on('click', () => showWindow());
     n.show();
   } else if (fromTray && Notification.isSupported()) {
-    new Notification({ title: PRODUCT, body: s.status === 'none' ? `Установлена последняя версия ${s.current}` : (s.error ?? 'Проверка не удалась') }).show();
+    new Notification({ title: PRODUCT, body: s.status === 'none' ? t('update.upToDate', { current: s.current }) : (s.error ?? t('update.checkFailed')) }).show();
   }
 }
 
@@ -407,20 +407,36 @@ function onCoreMessage(msg: CoreToMain): void {
       trayProjects = msg.menu;
       rebuildTrayMenu();
       break;
-    case 'appConfig':
+    case 'appConfig': {
+      const langChanged = appConfig?.language !== msg.config.language;
       appConfig = msg.config;
       applyAutostart();
+      if (langChanged) {
+        rebuildTrayMenu();
+        writeCliLang();
+      }
       if (!startupCheckDone && appConfig.updates.checkOnStart) {
         startupCheckDone = true;
         // A little after start: the window and Core come first.
         setTimeout(() => void checkUpdates(false), 8000);
       }
       break;
+    }
     case 'log':
       log[msg.level]({ src: 'core' }, msg.msg);
       break;
     case 'ready':
       break;
+  }
+}
+
+/** The bm client (plain Node, no shared code) takes the language of its own few messages from this file (D69). */
+function writeCliLang(): void {
+  if (!cliBin || !appConfig) return;
+  try {
+    fs.writeFileSync(path.join(cliBin, 'lang'), appConfig.language);
+  } catch (err) {
+    log.warn({ err }, 'cli language not written');
   }
 }
 
@@ -433,14 +449,14 @@ function applyAutostart(): void {
 // ---------- renderer → main (desktop-only capabilities) ----------
 function registerIpc(): void {
   ipcMain.handle('bm:selectDirectory', async (_e, title?: string) => {
-    const r = await dialog.showOpenDialog(win ?? undefined!, { title: title ?? 'Выберите папку', properties: ['openDirectory'] });
+    const r = await dialog.showOpenDialog(win ?? undefined!, { title: title ?? t('dialog.selectDir'), properties: ['openDirectory'] });
     return r.canceled ? null : (r.filePaths[0] ?? null);
   });
   ipcMain.handle('bm:selectFile', async (_e, opts?: { title?: string; extensions?: string[] }) => {
     const r = await dialog.showOpenDialog(win ?? undefined!, {
-      title: opts?.title ?? 'Выберите файл',
+      title: opts?.title ?? t('dialog.selectFile'),
       properties: ['openFile'],
-      filters: opts?.extensions ? [{ name: 'Файлы', extensions: opts.extensions }] : [],
+      filters: opts?.extensions ? [{ name: t('dialog.files'), extensions: opts.extensions }] : [],
     });
     return r.canceled ? null : (r.filePaths[0] ?? null);
   });
@@ -449,7 +465,7 @@ function registerIpc(): void {
     const r = await dialog.showSaveDialog(win ?? undefined!, {
       title: opts.title,
       defaultPath: opts.defaultPath,
-      filters: opts.extensions ? [{ name: 'Файлы', extensions: opts.extensions }] : [],
+      filters: opts.extensions ? [{ name: t('dialog.files'), extensions: opts.extensions }] : [],
     });
     return r.canceled || !r.filePath ? null : r.filePath;
   });
@@ -473,7 +489,7 @@ function registerIpc(): void {
       type: 'question',
       message: opts.message,
       detail: opts.detail,
-      buttons: opts.buttons ?? ['OK', 'Отмена'],
+      buttons: opts.buttons ?? ['OK', t('common.cancel')],
       cancelId: (opts.buttons?.length ?? 2) - 1,
     });
     return r.response;
@@ -521,7 +537,7 @@ async function boot(): Promise<void> {
   });
   // Command line bm (D53): launchers in <localDir>/bin point at this exe; Core serves the pipe.
   const cliPipe = cliPipeName(profile);
-  const cliBin = path.join(localDir, 'bin');
+  cliBin = path.join(localDir, 'bin');
   let cli: { pipe: string; binDir: string } | null = null;
   try {
     installCliLaunchers({ binDir: cliBin, pipe: cliPipe, exe: process.execPath, cliJs: path.join(__dirname, 'cli.js') });

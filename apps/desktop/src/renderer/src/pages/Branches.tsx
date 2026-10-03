@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, Box, Button, Center, Group, Modal, Select, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -9,6 +9,7 @@ import { Sidebar } from '../components/Sidebar';
 import { useRebuild } from '../components/useRebuild';
 import { BranchPage } from './BranchPage';
 import { MergeDialog } from '../components/dialogs/MergeDialog';
+import { t, tx } from '../i18n';
 
 const STAGE_LABEL: Record<Stage, string> = { production: 'Production', development: 'Development' };
 
@@ -39,7 +40,7 @@ export function BranchesPage() {
   const list = useBm('branches.list', { projectId }, { refetchInterval: 15000 });
   const projects = useBm('projects.list', {});
   const jobs = useBm('jobs.list', { projectId, active: true }, { refetchInterval: 4000 });
-  const fetchM = useBmMutation('git.fetch', { success: 'Fetch запущен' });
+  const fetchM = useBmMutation('git.fetch', { success: t('branches.fetchStarted') });
   const login = useBmMutation('projects.login');
   const [move, setMove] = useState<{ b: BranchView; stage: Stage } | null>(null);
   const [addStage, setAddStage] = useState<Stage | null>(null);
@@ -76,7 +77,7 @@ export function BranchesPage() {
       else if (action === 'hide' || action === 'show') await call('branches.setHidden', { branchId: b.id, hidden: action === 'hide' });
       else if (action === 'production' || action === 'development') setMove({ b, stage: action });
     } catch (e) {
-      notifications.show({ color: 'red', title: 'Ошибка', message: errorText(e), autoClose: 12000 });
+      notifications.show({ color: 'red', title: t('common.error'), message: errorText(e), autoClose: 12000 });
     }
   };
 
@@ -107,15 +108,14 @@ export function BranchesPage() {
       <Box style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
         {summary?.legacy && (
           <Alert color="red" radius={0} py={6}>
-            Проект создан по старой схеме: приложение работало внутри вашего репозитория, сборки и fetch для него отключены. Удалите проект (Settings →
-            «Удалить проект…») и добавьте заново — код сборок будет браться с GitHub.
+            {t('branches.legacy')}
           </Alert>
         )}
         {summary?.lastFetchError && (
           <Alert color="orange" radius={0} py={6}>
             <Group justify="space-between" wrap="nowrap">
-              <span>Последний fetch завершился ошибкой: {summary.lastFetchError}</span>
-              {/нет доступа к репозиторию/.test(summary.lastFetchError) && (
+              <span>{t('branches.fetchFailed', { error: summary.lastFetchError })}</span>
+              {/немає доступу до репозиторію|нет доступа к репозиторию|no access to the repository/.test(summary.lastFetchError) && (
                 <Button
                   size="compact-sm"
                   variant="white"
@@ -123,11 +123,11 @@ export function BranchesPage() {
                   onClick={() =>
                     login.mutate(
                       { projectId },
-                      { onSuccess: (p) => notifications.show({ color: p.ok ? 'green' : 'red', message: p.ok ? 'Доступ есть, fetch запущен' : (p.message ?? 'Нет доступа') }) },
+                      { onSuccess: (p) => notifications.show({ color: p.ok ? 'green' : 'red', message: p.ok ? t('branches.accessOk') : (p.message ?? t('branches.noAccess')) }) },
                     )
                   }
                 >
-                  Войти
+                  {t('branches.login')}
                 </Button>
               )}
             </Group>
@@ -139,10 +139,10 @@ export function BranchesPage() {
           <Center h="80%">
             <Stack align="center" gap={4}>
               <Title order={4} c="dimmed">
-                Выберите ветку
+                {t('branches.select')}
               </Title>
               <Text c="dimmed" size="sm">
-                Перетащите ветку в другую стадию, чтобы сменить её; на другую ветку — чтобы открыть Merge.
+                {t('branches.dragHint')}
               </Text>
             </Stack>
           </Center>
@@ -158,7 +158,7 @@ export function BranchesPage() {
 
 function MoveDialog({ move, onClose, production }: { move: { b: BranchView; stage: Stage } | null; onClose: () => void; production: string | null }) {
   const setStage = useBmMutation('branches.setStage');
-  const rebuild = useBmMutation('builds.rebuild', { success: 'Rebuild поставлен в очередь' });
+  const rebuild = useBmMutation('builds.rebuild', { success: t('move.rebuildQueued') });
   const [done, setDone] = useState(false);
   if (!move) return null;
   const close = () => {
@@ -166,39 +166,38 @@ function MoveDialog({ move, onClose, production }: { move: { b: BranchView; stag
     onClose();
   };
   return (
-    <Modal opened onClose={close} title={`Сменить стадию: ${move.b.name}`} size="lg">
+    <Modal opened onClose={close} title={t('move.title', { branch: move.b.name })} size="lg">
       {!done ? (
         <Stack>
           <Text>
             {STAGE_LABEL[move.b.stage]} → <b>{STAGE_LABEL[move.stage]}</b>.
           </Text>
           {move.stage === 'production' && (
-            <Alert color="orange" title="Смена продакшн-ветки">
-              Текущая продакшн-ветка {production ? <b>{production}</b> : ''} уйдёт в Development. Зеркало прода для новой ветки нужно пересоздать
-              импортом бэкапа (Backups → Импортировать).
+            <Alert color="orange" title={t('move.prodTitle')}>
+              {tx('move.prodText', { current: production ? <b>{production}</b> : '' })}
             </Alert>
           )}
           <Text size="sm" c="dimmed">
-            Сборка сама не пересоздаётся: у ветки появится отметка «настройки стадии изменились — Rebuild».
+            {t('move.noRebuild')}
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={close}>
-              Отмена
+              {t('common.cancel')}
             </Button>
             <Button
               loading={setStage.isPending}
               onClick={() => setStage.mutate({ branchId: move.b.id, stage: move.stage }, { onSuccess: () => setDone(true) })}
             >
-              Сменить стадию
+              {t('move.confirm')}
             </Button>
           </Group>
         </Stack>
       ) : (
         <Stack>
-          <Text>Стадия изменена. Пересобрать ветку по правилам новой стадии сейчас?</Text>
+          <Text>{t('move.done')}</Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={close}>
-              Позже
+              {t('move.later')}
             </Button>
             <Button
               loading={rebuild.isPending}
@@ -221,11 +220,9 @@ function MoveDialog({ move, onClose, production }: { move: { b: BranchView; stag
 }
 
 /** Where new remote branches go by `autoAddBranches`: under «+» they only show up when fetch did not add them. */
-const AUTO_ADD_TEXT: Record<BranchesList['autoAdd'], string> = {
-  all: 'Новые ветки с GitHub приложение добавляет само при fetch. Здесь бывают только ветки, которые вы удалили из приложения.',
-  rules: 'Новые ветки с GitHub, подходящие под правила стадий, приложение добавляет само при fetch. Здесь — остальные и те, что вы удалили из приложения.',
-  none: 'Ветку, только что созданную на GitHub, здесь видно после fetch.',
-};
+const autoAddText = (a: BranchesList['autoAdd']): string => t(a === 'all' ? 'add.autoAll' : a === 'rules' ? 'add.autoRules' : 'add.autoNone');
+
+const bold = { b: (x: ReactNode) => <b>{x}</b> };
 
 function AddDialog({
   stage,
@@ -248,46 +245,38 @@ function AddDialog({
   if (!stage) return null;
   const pv = name ? preview.data : undefined;
   return (
-    <Modal opened onClose={onClose} title={`Добавить ветку в ${STAGE_LABEL[stage]}`}>
+    <Modal opened onClose={onClose} title={t('add.title', { stage: STAGE_LABEL[stage] })}>
       <Stack>
-        <Text size="sm">Подключает к приложению ветку, которая уже есть в репозитории на GitHub. Новую ветку здесь создать нельзя.</Text>
+        <Text size="sm">{t('add.about')}</Text>
         {options.length ? (
           <Select
-            label="Ветка из репозитория, ещё не добавленная в приложение"
+            label={t('add.select')}
             searchable
             data={options}
             value={name}
             onChange={setName}
-            nothingFoundMessage="Такой ветки нет — выполните fetch"
+            nothingFoundMessage={t('add.nothing')}
             data-autofocus
           />
         ) : (
-          <Alert color="gray">Все ветки репозитория уже добавлены в приложение.</Alert>
+          <Alert color="gray">{t('add.allAdded')}</Alert>
         )}
         <Text size="sm" c="dimmed">
-          {AUTO_ADD_TEXT[autoAdd]}
+          {autoAddText(autoAdd)}
         </Text>
         {pv && (
           <Text size="sm">
-            Ветка появится в {STAGE_LABEL[stage]}; на GitHub ничего не меняется.{' '}
-            {pv.build ? 'Сразу начнётся сборка' : 'Сборка сама не начнётся (выключено «Собирать при добавлении») — запустите её кнопкой Rebuild на странице ветки'}
-            : код из <b>{name}</b>, база —{' '}
-            {pv.copyOf ? (
-              <>
-                копия базы <b>{pv.copyOf}</b>
-              </>
-            ) : (
-              `чистая${pv.withDemo ? ' с демо-данными' : ''}`
-            )}
-            .
+            {t('add.appears', { stage: STAGE_LABEL[stage] })} {t(pv.build ? 'add.buildNow' : 'add.noBuild')}
+            {tx('add.code', { name: name ?? '' }, bold)}
+            {pv.copyOf ? tx('add.copyOf', { name: pv.copyOf }, bold) : t(pv.withDemo ? 'add.cleanDemo' : 'add.clean')}.
           </Text>
         )}
         <Text size="sm" c="dimmed">
-          Новую ветку от существующей создаёт Fork на странице ветки-источника.
+          {t('add.forkHint')}
         </Text>
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
-            {options.length ? 'Отмена' : 'Закрыть'}
+            {options.length ? t('common.cancel') : t('common.close')}
           </Button>
           <Button
             disabled={!name}
@@ -304,7 +293,7 @@ function AddDialog({
               )
             }
           >
-            Добавить
+            {t('add.add')}
           </Button>
         </Group>
       </Stack>

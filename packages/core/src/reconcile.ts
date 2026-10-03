@@ -21,6 +21,7 @@ import { log } from './util/logger';
 import { nowIso } from './util/time';
 import { TRAEFIK_PROJECT } from './docker/traefik';
 import { buildContainers } from './builds/drop';
+import { t } from './i18n';
 
 /** Builds of interrupted jobs become `failed` (spec 8.12); their previous live build is untouched. */
 export function failInterruptedBuilds(ctx: Ctx, stale: JobRow[]): void {
@@ -30,14 +31,14 @@ export function failInterruptedBuilds(ctx: Ctx, stale: JobRow[]): void {
   const orphanBuilding = ctx.db.select().from(builds).where(inArray(builds.status, ['queued', 'building'])).all();
   for (const b of [...rows, ...orphanBuilding]) {
     if (b.status !== 'queued' && b.status !== 'building') continue;
-    const steps: BuildStep[] = (b.steps ?? []).map((s) => (s.status === 'running' ? { ...s, status: 'failed', finishedAt: nowIso(), note: 'прервано' } : s));
+    const steps: BuildStep[] = (b.steps ?? []).map((s) => (s.status === 'running' ? { ...s, status: 'failed', finishedAt: nowIso(), note: t('reconcile.stepInterrupted') } : s));
     ctx.db
       .update(builds)
       .set({
         status: 'failed',
         steps,
         finishedAt: nowIso(),
-        errorMessage: 'Сборка прервана: приложение было закрыто или Core перезапущен. Нажмите «Повторить с шага» или «Отбросить», чтобы удалить созданные ею ресурсы.',
+        errorMessage: t('reconcile.buildInterrupted'),
       })
       .where(eq(builds.id, b.id))
       .run();
@@ -97,7 +98,7 @@ export async function reconcile(ctx: Ctx): Promise<void> {
             projectId: cfg.id,
             kind: 'container-missing',
             target: b.composeProject,
-            text: `Живая сборка ${b.composeProject} #${b.number}: контейнер не найден в Docker (удалён вручную?). Нажмите Rebuild или «Отбросить».`,
+            text: t('reconcile.noContainer', { project: b.composeProject, number: b.number }),
           });
         }
       }
@@ -124,7 +125,7 @@ export async function reconcile(ctx: Ctx): Promise<void> {
       }
       for (const b of alive.filter((x) => x.live && x.status !== 'failed')) {
         if (!dbs.includes(b.dbName)) {
-          discrepancies.push({ projectId: cfg.id, kind: 'db-missing', target: b.dbName, text: `БД ${b.dbName} живой сборки #${b.number} отсутствует в Postgres.` });
+          discrepancies.push({ projectId: cfg.id, kind: 'db-missing', target: b.dbName, text: t('reconcile.dbMissing', { db: b.dbName, number: b.number }) });
         }
       }
       runtimeState.postgres.set(cfg.id, { ok: true, text: `${cfg.postgres.host}:${cfg.postgres.port}` });
@@ -155,7 +156,7 @@ export async function reconcile(ctx: Ctx): Promise<void> {
       }
       for (const b of ctx.db.select().from(branches).where(eq(branches.projectId, cfg.id)).all()) {
         if (b.worktreePath && !wts.some((w) => samePath(w.path, b.worktreePath!))) {
-          discrepancies.push({ projectId: cfg.id, kind: 'worktree-missing', target: b.worktreePath, text: `Worktree ветки ${b.name} не найден (${b.worktreePath}); будет создан заново при сборке.` });
+          discrepancies.push({ projectId: cfg.id, kind: 'worktree-missing', target: b.worktreePath, text: t('reconcile.worktreeMissing', { branch: b.name, path: b.worktreePath }) });
         }
       }
     } catch {
@@ -186,26 +187,26 @@ export async function cleanupOrphans(ctx: Ctx, items: { kind: string; name: stri
   for (const it of items) {
     try {
       const known = runtimeState.orphans.find((o) => o.kind === it.kind && o.name === it.name && o.projectId === it.projectId);
-      if (!known) throw new BmError('NOT_ORPHAN', `«${it.name}» не в списке сирот — обновите Status`);
+      if (!known) throw new BmError('NOT_ORPHAN', t('reconcile.notOrphan', { name: it.name }));
       const cfg: ProjectConfig | null = it.projectId ? ctx.store.require(it.projectId) : null;
       switch (it.kind) {
         case 'database': {
-          if (!cfg || !SQL_IDENT_RE.test(it.name) || cfg.postgres.protectedDbs.includes(it.name)) throw new BmError('PROTECTED', `БД ${it.name} защищена`);
+          if (!cfg || !SQL_IDENT_RE.test(it.name) || cfg.postgres.protectedDbs.includes(it.name)) throw new BmError('PROTECTED', t('reconcile.dbProtected', { db: it.name }));
           await dropDatabase(cfg.postgres, it.name);
           break;
         }
         case 'filestore': {
-          if (!cfg || !isInside(cfg.runtime.filestore.hostDir, it.name)) throw new BmError('NOT_OWNED', 'Каталог вне filestore проекта');
-          if (!templateToRegex(cfg.naming.db.replace('{project}', cfg.id)).test(path.basename(it.name))) throw new BmError('NOT_OWNED', 'Каталог не соответствует шаблону БД');
+          if (!cfg || !isInside(cfg.runtime.filestore.hostDir, it.name)) throw new BmError('NOT_OWNED', t('reconcile.outsideFilestore'));
+          if (!templateToRegex(cfg.naming.db.replace('{project}', cfg.id)).test(path.basename(it.name))) throw new BmError('NOT_OWNED', t('reconcile.notDbTemplate'));
           await fs.promises.rm(it.name, { recursive: true, force: true });
           break;
         }
         case 'container': {
           const c = await docker.getContainer(it.name).inspect();
           const labels = c.Config.Labels ?? {};
-          if (!labels['bm.project'] || c.Name.replace(/^\//, '') === TRAEFIK_PROJECT) throw new BmError('NOT_OWNED', 'У контейнера нет метки bm.project');
+          if (!labels['bm.project'] || c.Name.replace(/^\//, '') === TRAEFIK_PROJECT) throw new BmError('NOT_OWNED', t('reconcile.noLabel'));
           const protectedNames = ctx.store.list().flatMap((e) => e.config?.postgres.protectedContainers ?? []);
-          if (protectedNames.includes(c.Name.replace(/^\//, ''))) throw new BmError('PROTECTED', 'Контейнер защищён');
+          if (protectedNames.includes(c.Name.replace(/^\//, ''))) throw new BmError('PROTECTED', t('reconcile.containerProtected'));
           // D55: anonymous volumes passed on by a recreate survive `down -v`; they go once nothing uses them.
           const volumes = await anonymousVolumes(c.Id);
           const cp = labels['com.docker.compose.project'];
@@ -215,7 +216,7 @@ export async function cleanupOrphans(ctx: Ctx, items: { kind: string; name: stri
           break;
         }
         case 'worktree': {
-          if (!cfg || !isInside(path.join(cfg.repo.worktreesDir, cfg.id), it.name)) throw new BmError('NOT_OWNED', 'worktree вне папки проекта');
+          if (!cfg || !isInside(path.join(cfg.repo.worktreesDir, cfg.id), it.name)) throw new BmError('NOT_OWNED', t('reconcile.worktreeOutside'));
           await git.worktreeRemove(repoDir(cfg), it.name, true);
           break;
         }
