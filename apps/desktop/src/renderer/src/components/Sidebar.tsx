@@ -82,7 +82,7 @@ export function Sidebar(props: {
   };
 
   return (
-    <Box className={classes.sidebar}>
+    <Box className={`${classes.sidebar} bm-chrome`}>
       <Group p="xs" gap={6} wrap="nowrap">
         <TextInput
           size="xs"

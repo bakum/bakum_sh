@@ -22,6 +22,7 @@
 }
 .row {
   padding: 5px 12px;
+  background: var(--bm-row-bg, transparent);
   cursor: pointer;
   border-left: 3px solid transparent;
   user-select: none;

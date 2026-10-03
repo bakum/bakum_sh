@@ -9,3 +9,33 @@
 :root[data-mantine-color-scheme='light'] .mantine-Input-wrapper[data-variant='default'] {
   --input-bg: var(--bm-surface);
 }
+
+/* odoo.sh slate (D68): dark sidebar and branch header in the light scheme; variables come from chromeCss() in
+   theme.ts. Text inherits its color, so it is set here where the dark variables apply. */
+:root[data-mantine-color-scheme='light'] .bm-chrome {
+  color: var(--mantine-color-text);
+  background-color: var(--mantine-color-body);
+  color-scheme: dark;
+}
+:root[data-mantine-color-scheme='light'] .bm-chrome .mantine-Input-wrapper[data-variant='default'] {
+  --input-bd: var(--mantine-color-default-border);
+}
+:root[data-mantine-color-scheme='light'] .bm-chrome .mantine-Alert-message {
+  color: var(--mantine-color-text);
+}
+:root[data-mantine-color-scheme='light'] .bm-chrome .mantine-ScrollArea-thumb {
+  background-color: rgba(255, 255, 255, 0.25);
+}
+/* The tab bar: a notch lighter than the header, the active tab takes the header color. */
+:root[data-mantine-color-scheme='light'] .bm-chrome.bm-tabbar {
+  background-color: var(--bm-chrome-raised);
+  --tab-hover-color: var(--mantine-color-default-hover);
+  --tab-border-color: transparent;
+}
+:root[data-mantine-color-scheme='light'] .bm-tabbar .mantine-Tabs-tab {
+  color: var(--mantine-color-dimmed);
+}
+:root[data-mantine-color-scheme='light'] .bm-tabbar .mantine-Tabs-tab[data-active] {
+  color: #ffffff;
+  background-color: var(--mantine-color-body);
+}

@@ -66,7 +66,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
 
   return (
     <Stack gap={0} h="100%">
-      <Box px="lg" pt="md" pb={6}>
+      <Box px="lg" pt="md" pb={6} className="bm-chrome">
         <Group justify="space-between" wrap="nowrap" align="flex-start">
           <Stack gap={4} style={{ minWidth: 0 }}>
             <Group gap="xs" wrap="nowrap">
@@ -164,7 +164,7 @@ export function BranchPage({ branchId, projectId, onMerge }: { branchId: number;
         )}
       </Box>
       <Tabs value={active} onChange={setTab} keepMounted={false} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <Group justify="space-between" px="lg" wrap="nowrap" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+        <Group justify="space-between" px="lg" wrap="nowrap" className="bm-chrome bm-tabbar" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
           <Tabs.List style={{ border: 0 }}>
             <Tabs.Tab value="history">History</Tabs.Tab>
             <Tabs.Tab value="shell">Shell</Tabs.Tab>
