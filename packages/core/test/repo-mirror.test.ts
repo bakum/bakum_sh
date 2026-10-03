@@ -149,7 +149,7 @@ describe('the app mirror (git)', () => {
     expect((await git.listBranches(mirror, 'origin')).map((b) => b.name)).toEqual(['main']);
     expect(await git.remoteSha(mirror, 'origin', 'feature/x')).toBeNull();
     expect(await git.headSha(wt)).toBe(sha);
-  });
+  }, 30_000); // dozens of git processes: 2–3 s alone, over 5 s when the whole suite runs in parallel
 
   it('lists uncommitted files of the user folder without changing it', async () => {
     fs.writeFileSync(path.join(work, 'mod_a', '__manifest__.py'), "{'name': 'A2', 'version': '19.0.1.0.1'}");
