@@ -17,8 +17,11 @@ import {
   useMantineColorScheme,
   useComputedColorScheme,
 } from '@mantine/core';
+import { useHotkeys } from '@mantine/hooks';
+import { useQueryClient } from '@tanstack/react-query';
 import { IconBell, IconBrandDocker, IconGitBranch, IconMoon, IconSun } from '@tabler/icons-react';
 import { useBm, useBmMutation } from '../lib/query';
+import { BRANCH_FILTER_ID } from './Sidebar';
 import { EditionBadge } from './EditionBadge';
 import { useCoreEvents } from '../lib/events';
 import { fmtAgo, fmtTime, jobLabel } from '../lib/format';
@@ -46,6 +49,26 @@ export function Shell() {
   const current = pid ?? projects.data?.[0]?.id;
   const dockerOk = status.data?.docker.ok ?? true;
   const activeJobs = jobs.data ?? [];
+
+  // Spec 7 hotkeys: Ctrl+K — branch search, Ctrl+R — fetch, F5 — refresh the screen (Cmd on macOS). They also work
+  // from inputs; Ctrl+K is left to Monaco and xterm (their textarea), where it is a chord of their own.
+  const qc = useQueryClient();
+  const fetchM = useBmMutation('git.fetch', { success: t('branches.fetchStarted') });
+  const focusBranchFilter = () => {
+    const el = document.getElementById(BRANCH_FILTER_ID);
+    if (el instanceof HTMLInputElement) {
+      el.focus();
+      el.select();
+    } else if (current) nav(`/projects/${current}/branches`, { state: { focusFilter: true } });
+  };
+  useHotkeys([['mod+K', focusBranchFilter]], ['TEXTAREA']);
+  useHotkeys(
+    [
+      ['mod+R', () => current && !fetchM.isPending && fetchM.mutate({ projectId: current })],
+      ['F5', () => void qc.invalidateQueries()],
+    ],
+    [],
+  );
 
   const link = (to: string, label: string) => (
     <NavLink to={to} className={({ isActive }) => `${classes.link} ${isActive ? classes.active : ''}`}>

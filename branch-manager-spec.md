@@ -297,7 +297,7 @@ Backups · Tools · Settings**; кнопки **Rebuild** и **GitHub**.
 | **History** | лента сборок по датам: автор, время, коммиты (сообщение + sha, «N commits more»), тип и источник БД, «Test: Success/Failed», длительность; у живой — **CONNECT** (▾: открыть, открыть в режиме отладки `?debug=1`, скопировать логин/пароль admin, скопировать URL), у старых — DROPPED; дата авто-удаления; пагинация |
 | **Shell** | Windows Terminal: `docker exec -it <container> bash`, `odoo shell -d <db>` (▾) |
 | **Editor** | открыть worktree в VS Code / Cursor (CLI), в Проводнике |
-| **Monitor** | CPU / RAM контейнера (docker stats), число запросов и время ответа (access-лог Traefik), размер БД и filestore; за последний час |
+| **Monitor** | CPU / RAM контейнера (docker stats), число запросов и время ответа (access-лог Traefik), размер БД и filestore; за период 1 ч / 6 ч / 24 ч / 7 дней (D74) |
 | **Logs** | `odoo.log` (живой `docker logs -f`), `build.log` (шаги сборки), `tests.log`; фильтр по уровню, поиск, подсветка traceback, «Сохранить как…», «В отдельном окне» |
 | **Mails** | встроенный UI Mailpit сборки (или открыть `mail-<host>` в браузере); счётчик новых писем в заголовке вкладки |
 | **Backups** | снапшоты живой сборки: создать (`CREATE DATABASE <db>_snap_<n> TEMPLATE <db>` + `cp -al` filestore), откатить, удалить, выгрузить в Odoo-формат `.zip` (`odoo db dump`); для Production — список бэкапов прода и «Импортировать» |
@@ -600,6 +600,10 @@ shell.open {buildId, target: browser|browser-debug|explorer|editor|terminal|bash
 Этап 2 выполнен в версиях 0.4.0–0.9.0, проверка — `docs/acceptance.md`. По решению пользователя отложены Mails (D43),
 Merge через `gh` с удалением ветки в origin и хуки (D44); `dropAfterDays` только напоминает, сборку отбрасывает
 пользователь (D45).
+
+Этап 3: инсталлятор и автообновление — с 0.10.x (NSIS, переносная версия, `.dmg` для macOS, D67, D70); автозапуск и
+горячие клавиши — D71; свой `composeTemplate` — D72; пресеты и экспорт / импорт проектов — D73; графики ресурсов за
+период (до 7 дней) — D74.
 
 ## 13. Критерии приёмки (этап 1)
 

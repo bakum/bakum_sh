@@ -1,10 +1,19 @@
 import { locale } from '@bm/shared';
 import { t } from '../i18n';
+import { isMac } from './bm';
+
+/** A Ctrl (⌘ on macOS) shortcut as the hint shows it: `Ctrl+K` / `⌘K`. */
+export const modKey = (key: string): string => (isMac ? `⌘${key}` : `Ctrl+${key}`);
 
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   return d.toLocaleString(locale(), { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+/** Day and month in the interface locale (axis of a chart over days). */
+export function fmtDay(t0: number | string | Date): string {
+  return new Date(t0).toLocaleDateString(locale(), { day: '2-digit', month: '2-digit' });
 }
 
 /** Time of day in the interface locale; `seconds: false` gives HH:MM. */

@@ -168,6 +168,7 @@ export async function deleteProjectExecutor(ctx: Ctx, job: JobRow, jc: JobContex
   // Monitor and lifecycle traces of the builds (D45).
   for (const id of buildIds) {
     ctx.sqlite.prepare('DELETE FROM http_stats WHERE build_id = ?').run(id);
+    ctx.sqlite.prepare('DELETE FROM resource_stats WHERE build_id = ?').run(id);
     ctx.sqlite.prepare('DELETE FROM kv WHERE key = ?').run(`drop-warned:${id}`);
   }
   ctx.db.delete(builds).where(eq(builds.projectId, cfg.id)).run();

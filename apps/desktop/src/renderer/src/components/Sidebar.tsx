@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ActionIcon,
   Badge,
@@ -19,7 +19,7 @@ import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSe
 import { IconChevronDown, IconChevronRight, IconEye, IconEyeOff, IconPlus, IconRefresh, IconSearch } from '@tabler/icons-react';
 import type { BranchesList, BranchView, Stage, UnassignedBranch } from '@bm/shared';
 import { StatusDot } from './StatusDot';
-import { fmtAgo } from '../lib/format';
+import { fmtAgo, modKey } from '../lib/format';
 import classes from './Sidebar.module.css';
 import { t } from '../i18n';
 
@@ -37,6 +37,9 @@ export interface SidebarActions {
   onContext: (b: BranchView, action: 'connect' | 'rebuild' | 'start' | 'stop' | 'editor' | 'logs' | 'hide' | 'show' | Stage) => void;
 }
 
+/** Id of the branch filter: Ctrl+K in Shell focuses it (spec 7). */
+export const BRANCH_FILTER_ID = 'bm-branch-filter';
+
 /** Branches sidebar (spec 6): stages with drag & drop, filter, hidden branches, «не добавлены», context menu. */
 export function Sidebar(props: {
   data: BranchesList | undefined;
@@ -47,6 +50,8 @@ export function Sidebar(props: {
   actions: SidebarActions;
 }) {
   const nav = useNavigate();
+  const loc = useLocation();
+  const filterRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState('');
   const [showUnassigned, setShowUnassigned] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
@@ -61,6 +66,21 @@ export function Sidebar(props: {
   }, [hiddenCount]);
   // A filter also searches hidden branches: that is how one is found to be shown again.
   const visible = (b: BranchView) => match(b.name) && (!b.hidden || showHidden || !!f);
+
+  // Ctrl+K from another page comes here with `focusFilter` in the navigation state.
+  useEffect(() => {
+    if ((loc.state as { focusFilter?: boolean } | null)?.focusFilter) filterRef.current?.focus();
+  }, [loc.state]);
+  // Enter opens the first branch the filter leaves, Escape clears the filter.
+  const onFilterKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && f) {
+      const first = all.find(visible);
+      if (first) nav(`/projects/${props.projectId}/branches/${first.id}`);
+    } else if (e.key === 'Escape') {
+      setFilter('');
+      e.currentTarget.blur();
+    }
+  };
 
   const onDragEnd = (e: DragEndEvent) => {
     const id = String(e.active.id);
@@ -86,14 +106,17 @@ export function Sidebar(props: {
     <Box className={`${classes.sidebar} bm-chrome`}>
       <Group p="xs" gap={6} wrap="nowrap">
         <TextInput
+          ref={filterRef}
+          id={BRANCH_FILTER_ID}
           size="xs"
           style={{ flex: 1 }}
-          placeholder={t('sidebar.filter')}
+          placeholder={t('sidebar.filter', { key: modKey('K') })}
+          onKeyDown={onFilterKey}
           leftSection={<IconSearch size={14} />}
           value={filter}
           onChange={(e) => setFilter(e.currentTarget.value)}
         />
-        <Tooltip label={t('sidebar.fetch', { ago: fmtAgo(props.lastFetchAt) })}>
+        <Tooltip label={t('sidebar.fetch', { ago: fmtAgo(props.lastFetchAt), key: modKey('R') })}>
           <ActionIcon variant="default" size="md" onClick={props.actions.onFetch} aria-label="Fetch">
             {props.fetching ? <Loader size={14} /> : <IconRefresh size={16} />}
           </ActionIcon>

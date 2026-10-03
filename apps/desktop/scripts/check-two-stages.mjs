@@ -59,10 +59,10 @@ try {
   check('ветка скрыта', (await bm(win, 'branches.get', { branchId: crm.id })).hidden === true && !(await win.isVisible(sel)));
   check('кнопка «Показать скрытые (1)»', await win.isVisible('text=Показать скрытые (1)'));
   await shot(win, 'd37-hidden');
-  await win.fill('input[placeholder="Filter branches…"]', 'crm');
+  await win.fill('#bm-branch-filter', 'crm');
   await win.waitForTimeout(500);
   check('поиск находит скрытую', await win.isVisible(sel));
-  await win.fill('input[placeholder="Filter branches…"]', '');
+  await win.fill('#bm-branch-filter', '');
   await win.click('[data-testid="toggle-hidden"]');
   await win.waitForTimeout(500);
   await shot(win, 'd37-show-hidden');

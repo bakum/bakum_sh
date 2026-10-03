@@ -111,6 +111,13 @@ describe('assistant skill (D52)', () => {
     expect(skillFile(input({ ...shop, postgres: { ...shop.postgres, password: 'shop-pw-9' } }))).not.toContain('shop-pw-9');
   });
 
+  it('finds only the odoo container of a build with runtime.composeTemplate (D72)', () => {
+    expect(renderSkill(input(demz))).not.toContain('com.docker.compose.service=odoo');
+    const withTpl = { ...demz, runtime: { ...demz.runtime, composeTemplate: 'E:/stack/bm-compose.yml' } };
+    const text = renderSkill(input(withTpl));
+    expect(text).toContain('--filter label=com.docker.compose.oneoff=False --filter label=com.docker.compose.service=odoo');
+  });
+
   it('uses the project values: labels, protected branches, managed Postgres, one-off options', () => {
     const text = renderSkill(input(demz, { protectedBranches: ['19.0-demz-crm', 'hotfix'] }));
     expect(text).toContain('--filter label=bm.project=demz');

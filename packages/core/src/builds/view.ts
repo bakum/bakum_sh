@@ -7,6 +7,7 @@ import { containerPoll, containerStates } from '../docker/state';
 import { resolveBranchScope } from '../config/effective';
 import { lifecycleState } from './lifecycle-state';
 import { dockerfileHash } from '../config/dockerfile';
+import { composeTemplateHash } from '../config/compose-template';
 import { buildUrl } from '../docker/compose';
 
 /**
@@ -34,6 +35,8 @@ export function configHash(cfg: ProjectConfig, scope: ResolvedBranchScope, proxy
     ...(scope.folder ? { folder: scope.folder } : {}),
     // An image built by the app (D46): a Dockerfile edit changes the container. Absent otherwise (hashes unchanged).
     ...(r.build && scope.image === r.image ? { imageBuild: { context: r.build.context, dockerfile: dockerfileHash(cfg) } } : {}),
+    // runtime.composeTemplate (D72): its path and content. Absent otherwise (hashes unchanged).
+    ...(r.composeTemplate ? { composeTemplate: [r.composeTemplate, composeTemplateHash(cfg)] } : {}),
   };
   return crypto.createHash('sha1').update(JSON.stringify(payload)).digest('hex').slice(0, 16);
 }

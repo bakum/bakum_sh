@@ -21,8 +21,8 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconFolder, IconX } from '@tabler/icons-react';
-import { ODOO_VERSIONS, type DetectResult, type PresetId, type ProjectConfig } from '@bm/shared';
-import { useBmMutation } from '../lib/query';
+import { ODOO_VERSIONS, overlayConfig, type DetectResult, type PresetId, type PresetOverlay, type ProjectConfig } from '@bm/shared';
+import { useBm, useBmMutation } from '../lib/query';
 import { call, errorText } from '../lib/bm';
 import { YamlEditor } from '../components/YamlEditor';
 import { RepoClone } from '../components/RepoClone';
@@ -63,6 +63,11 @@ export function AddProject() {
   const [yamlDirty, setYamlDirty] = useState(false);
   const [pgProblem, setPgProblem] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  /** Saved preset or exported project laid over the detected proposal (D73); `overlayKey` — `none`, `p:<file>`, `file`. */
+  const [overlay, setOverlay] = useState<PresetOverlay | null>(null);
+  const [overlayKey, setOverlayKey] = useState('none');
+  const [overlayFile, setOverlayFile] = useState<string | null>(null);
+  const savedPresets = useBm('presets.list', {});
   const detect = useBmMutation('projects.detect');
   const create = useBmMutation('projects.create', { success: t('ap.added') });
   const d: DetectResult | undefined = detect.data;
@@ -107,9 +112,10 @@ export function AddProject() {
 
   const generated = useMemo(() => {
     if (!d) return '';
-    const base: ProjectConfig = structuredClone(d.proposals[preset]);
-    const origId = base.id;
-    const origProd = base.production.branch;
+    const base: ProjectConfig = overlayConfig(structuredClone(d.proposals[preset]), overlay?.config);
+    // Names derived from the id (network, Postgres container, databases) follow the id the file or the user gives.
+    const origId = d.proposals[preset].id;
+    const origProd = d.proposals[preset].production.branch;
     base.id = edits.id || base.id;
     base.name = edits.name || base.name;
     base.production.branch = edits.production || base.production.branch;
@@ -120,15 +126,19 @@ export function AddProject() {
       base.naming.pr.targets = swap(base.naming.pr.targets);
       if (base.naming.branch.base === origProd) base.naming.branch.base = base.production.branch;
     }
+    const fileId = typeof overlay?.config.id === 'string' ? overlay.config.id : null;
     if (base.postgres.mode === 'managed' && base.id !== origId) {
       // The app's own Postgres and its network are named after the project id.
       base.runtime.network = `bm-${base.id}`;
-      base.postgres.protectedContainers = base.postgres.protectedContainers.map((c) => (c === `bm-${origId}-db` ? `bm-${base.id}-db` : c));
+      const own = (c: string) => c === `bm-${origId}-db` || (!!fileId && c === `bm-${fileId}-db`);
+      base.postgres.protectedContainers = base.postgres.protectedContainers.map((c) => (own(c) ? `bm-${base.id}-db` : c));
     }
     if (preset === 'odoo' && base.id !== origId) {
-      // Resource names of «Odoo в Docker» are derived from the project id.
-      base.naming.db = `bm_${base.id.replace(/-/g, '_')}_{slug_}_{build}`;
-      base.naming.host = `{slug}.${base.id}.localhost`;
+      // Resource names of «Odoo в Docker» are derived from the project id (an exported project keeps its own).
+      if (base.id !== fileId) {
+        base.naming.db = `bm_${base.id.replace(/-/g, '_')}_{slug_}_{build}`;
+        base.naming.host = `{slug}.${base.id}.localhost`;
+      }
       base.runtime.filestore.hostDir = base.runtime.filestore.hostDir.replace(new RegExp(`/${origId}$`), `/${base.id}`);
     }
     const doc = new YAML.Document(base);
@@ -137,11 +147,42 @@ export function AddProject() {
         ? t('ap.yamlOdoo', { name: base.name })
         : t(base.postgres.mode === 'managed' ? 'ap.yamlManaged' : 'ap.yamlExternal', { name: base.name, preset: presetLabel(preset) });
     return doc.toString({ lineWidth: 120 });
-  }, [d, preset, edits]);
+  }, [d, preset, edits, overlay]);
 
   useEffect(() => {
     if (!yamlDirty) setYaml(generated);
   }, [generated, yamlDirty]);
+
+  /** A preset or a file: its base preset is selected, the names it brings (an exported project) fill the fields. */
+  const applyOverlay = (o: PresetOverlay | null) => {
+    setOverlay(o);
+    setYamlDirty(false);
+    setPgProblem(null);
+    if (!d) return;
+    const base = o?.base ?? preset;
+    if (o) setPreset(base);
+    const m: ProjectConfig = overlayConfig(structuredClone(d.proposals[base]), o?.config);
+    setEdits({ id: m.id, name: m.name, production: m.production.branch, worktreesDir: m.repo.worktreesDir });
+  };
+  const chooseOverlay = async (key: string) => {
+    try {
+      if (key === 'none') {
+        applyOverlay(null);
+        setOverlayFile(null);
+      } else if (key === 'file') {
+        const path = await window.bm.desktop.selectFile({ title: t('ap.ovPick'), extensions: ['yaml', 'yml'] });
+        if (!path) return;
+        applyOverlay(await call('presets.read', { path }));
+        setOverlayFile(path);
+      } else {
+        applyOverlay(await call('presets.read', { file: key.slice(2) }));
+        setOverlayFile(null);
+      }
+      setOverlayKey(key);
+    } catch (e) {
+      notifications.show({ color: 'red', title: t('common.error'), message: errorText(e), autoClose: 12000 });
+    }
+  };
 
   /** The user's clone: only its address is read; the app still makes its own copy from that address. */
   const readFolder = async (p: string) => {
@@ -386,6 +427,24 @@ export function AddProject() {
                 <Text size="sm" c="dimmed">
                   {presetText(preset)}
                 </Text>
+                <Select
+                  label={t('ap.ovLabel')}
+                  description={t('ap.ovHint')}
+                  value={overlayKey}
+                  onChange={(v) => v && void chooseOverlay(v)}
+                  allowDeselect={false}
+                  data={[
+                    { value: 'none', label: t('ap.ovNone') },
+                    ...(savedPresets.data ?? []).map((p) => ({ value: `p:${p.file}`, label: `${p.name} (${presetLabel(p.base)})` })),
+                    { value: 'file', label: overlayFile ? t('ap.ovFileChosen', { file: overlayFile.split(/[\\/]/).pop() ?? '' }) : t('ap.ovFile') },
+                  ]}
+                  data-testid="preset-overlay"
+                />
+                {overlay && (
+                  <Alert color="blue" py={6}>
+                    {t(overlay.kind === 'project' ? 'ap.ovProject' : 'ap.ovPreset', { name: overlay.name, base: presetLabel(overlay.base) })}
+                  </Alert>
+                )}
 
                 {preset === 'odoo' && (
                   <Card withBorder bg="var(--mantine-color-gray-light)">

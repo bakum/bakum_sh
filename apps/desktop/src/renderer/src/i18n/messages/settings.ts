@@ -87,6 +87,11 @@ export default {
   'set.hcPath': { uk: 'Healthcheck, шлях', ru: 'Healthcheck, путь', en: 'Healthcheck, path' },
   'set.hcTimeout': { uk: 'Healthcheck, таймаут, с', ru: 'Healthcheck, таймаут, с', en: 'Healthcheck, timeout, s' },
   'set.composeTemplate': { uk: 'Власний шаблон compose', ru: 'Свой шаблон compose', en: 'Own compose template' },
+  'set.composeTemplateHint': {
+    uk: 'Повний шлях до YAML-фрагмента compose, що доповнює кожну збірку: services.odoo зливається з сервісом збірки, інші сервіси (redis, mailpit…) додаються поруч. Мітки bm.*, маршрут Traefik і мережу проєкту застосунок ставить сам. У рядках працюють {db}, {slug}, {host}… Зміна файла — «Застосувати» у живих збірок.',
+    ru: 'Полный путь к YAML-фрагменту compose, который дополняет каждую сборку: services.odoo сливается с сервисом сборки, другие сервисы (redis, mailpit…) добавляются рядом. Метки bm.*, маршрут Traefik и сеть проекта приложение ставит само. В строках работают {db}, {slug}, {host}… Правка файла — «Применить» у живых сборок.',
+    en: 'Full path to a compose YAML fragment added to every build: services.odoo is merged into the build service, other services (redis, mailpit…) are added next to it. The app sets the bm.* labels, the Traefik route and the project network itself. Strings take {db}, {slug}, {host}… After editing the file, «Apply» the live builds.',
+  },
   'set.pgMode': { uk: 'Режим', ru: 'Режим', en: 'Mode' },
   'set.pgModeHint': {
     uk: 'external — наявний Postgres; managed — власний контейнер застосунку bm-<проєкт>-db',
@@ -272,4 +277,13 @@ export default {
   'app.nDisk': { uk: 'Мало місця', ru: 'Мало места', en: 'Low disk space' },
   'app.nExpired': { uk: 'Минув термін зберігання збірки (dropAfterDays)', ru: 'Истёк срок хранения сборки (dropAfterDays)', en: 'A build’s retention passed (dropAfterDays)' },
   'app.nRemoved': { uk: 'Гілку видалили на GitHub', ru: 'Ветку удалили на GitHub', en: 'A branch was deleted on GitHub' },
+
+  'presets.title': { uk: 'Пресети', ru: 'Пресеты', en: 'Presets' },
+  'presets.hint': {
+    uk: 'Пресет зберігають із налаштувань проєкту: «Експорт / пресет» → «Зберегти як пресет…». Майстер «Додати проєкт» пропонує збережені пресети на кроці «Пресет». Файли лежать у теці presets поруч з app.yaml.',
+    ru: 'Пресет сохраняют из настроек проекта: «Экспорт / пресет» → «Сохранить как пресет…». Мастер «Добавить проект» предлагает сохранённые пресеты на шаге «Пресет». Файлы лежат в папке presets рядом с app.yaml.',
+    en: 'A preset is saved from the project settings: «Export / preset» → «Save as preset…». The «Add project» wizard offers saved presets at the «Preset» step. The files are in the presets folder next to app.yaml.',
+  },
+  'presets.from': { uk: 'з {id},', ru: 'из {id},', en: 'from {id},' },
+  'presets.deleted': { uk: 'Пресет видалено', ru: 'Пресет удалён', en: 'Preset deleted' },
 } satisfies Record<string, Entry>;

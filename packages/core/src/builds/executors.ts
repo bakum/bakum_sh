@@ -22,6 +22,7 @@ import { configHash, testsLogPath } from './view';
 import { runBuild } from './pipeline';
 import { runOdooOneOff, assertOdooOk, serverBaseArgs, codeVars, testArgs, testsFailed } from './odoo-cli';
 import { assertSqlIdent } from '../config/templates';
+import { readComposeTemplate } from '../config/compose-template';
 import { copyDatabaseByDump } from '../docker/pg-tools';
 import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
@@ -111,6 +112,7 @@ export async function writeLiveCompose(ctx: Ctx, b: BuildRow, log: (l: string) =
     addonsPath: vars.addonsPath as string | undefined,
     proxyPort: ctx.proxyPort ?? ctx.store.app.proxyPort,
     odooArgs: serverBaseArgs(cfg, vars),
+    template: readComposeTemplate(cfg),
   });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text, 'utf8');

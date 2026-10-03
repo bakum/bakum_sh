@@ -9,7 +9,7 @@ import { log } from '../util/logger';
 
 /**
  * Activity of builds (D45): the JSON access log of the shared Traefik (container stdout) is followed; each request to
- * a live build counts in `http_stats` (per build and minute, kept 24 h) and moves `branches.last_active_at`, which
+ * a live build counts in `http_stats` (per build and minute, kept 7 days, D74) and moves `branches.last_active_at`, which
  * drives `idleStopHours` / `dropAfterDays`. Traefik is shared by every profile of the app: it is only read here.
  */
 
@@ -58,13 +58,19 @@ interface Bucket {
 }
 
 const FLUSH_MS = 30_000;
-const KEEP_MS = 24 * 3_600_000;
+/** Requests are kept as long as the resource samples: Monitor shows up to 7 days (D74). */
+const KEEP_MS = 7 * 24 * 3_600_000;
+/** The Traefik log is replayed for a day at most after a pause. */
+const REPLAY_MS = 24 * 3_600_000;
 
 export class ActivityCollector {
   private buckets = new Map<string, Bucket>();
   private lastActive = new Map<number, string>();
   private lastAt = '';
   private stream: NodeJS.ReadableStream | null = null;
+  /** Traefik container the stream reads, and the reconnect of that stream. */
+  private containerId: string | null = null;
+  private reconnect: (() => void) | null = null;
   private retry: NodeJS.Timeout | null = null;
   private flushTimer: NodeJS.Timeout | null = null;
   private stopped = true;
@@ -79,7 +85,10 @@ export class ActivityCollector {
     this.lastAt = (this.ctx.sqlite.prepare("SELECT value FROM kv WHERE key = 'traefik-log-at'").get() as { value: string } | undefined)?.value ?? '';
     this.refreshRoutes();
     void this.follow();
-    this.flushTimer = setInterval(() => this.flush(), FLUSH_MS);
+    this.flushTimer = setInterval(() => {
+      this.flush();
+      void this.checkContainer();
+    }, FLUSH_MS);
   }
 
   stop(): void {
@@ -104,21 +113,29 @@ export class ActivityCollector {
   /** Follows `docker logs` of Traefik from the last seen time; reconnects when Traefik is recreated or Docker restarts. */
   private async follow(): Promise<void> {
     if (this.stopped) return;
+    let done = false;
     const again = () => {
+      if (done) return;
+      done = true;
       this.stream = null;
+      this.reconnect = null;
       if (!this.stopped) this.retry = setTimeout(() => void this.follow(), 10_000);
     };
     try {
       if (!runtimeState.docker.ok) return again();
       const lastMs = this.lastAt ? new Date(this.lastAt).getTime() : 0;
-      // Not older than a day: a long pause would replay a huge log for nothing (the stats keep 24 h anyway).
-      const since = Math.floor(Math.max(lastMs, Date.now() - KEEP_MS) / 1000);
-      const s = (await docker.getContainer(TRAEFIK_PROJECT).logs({ follow: true, stdout: true, stderr: false, since })) as NodeJS.ReadableStream;
+      // Not older than a day: a long pause would replay a huge log for nothing.
+      const since = Math.floor(Math.max(lastMs, Date.now() - REPLAY_MS) / 1000);
+      const c = docker.getContainer(TRAEFIK_PROJECT);
+      const id = (await c.inspect()).Id;
+      const s = (await c.logs({ follow: true, stdout: true, stderr: false, since })) as NodeJS.ReadableStream;
       if (this.stopped) {
         (s as unknown as { destroy?: () => void }).destroy?.();
         return;
       }
       this.stream = s;
+      this.containerId = id;
+      this.reconnect = again;
       const out = new PassThrough();
       docker.modem.demuxStream(s, out, new PassThrough());
       let partial = '';
@@ -127,12 +144,33 @@ export class ActivityCollector {
         partial = parts.pop() ?? '';
         for (const l of parts) this.onLine(l);
       });
-      s.on('end', again);
-      s.on('error', again);
+      log().info({ since }, 'traefik access log attached');
+      s.on('end', () => {
+        log().info('traefik access log ended');
+        again();
+      });
+      s.on('error', (err) => {
+        log().info({ err }, 'traefik access log failed');
+        again();
+      });
     } catch (err) {
       log().debug({ err }, 'traefik access log unavailable');
       again();
     }
+  }
+
+  /**
+   * The log stream of a removed container does not always end (seen when Traefik is recreated for a new project
+   * network): every flush compares the container id and reattaches to the new one.
+   */
+  private async checkContainer(): Promise<void> {
+    if (this.stopped || !this.stream || !this.reconnect || !runtimeState.docker.ok) return;
+    const id = (await docker.getContainer(TRAEFIK_PROJECT).inspect().catch(() => null))?.Id;
+    if (!id || id === this.containerId || !this.stream) return;
+    log().info('traefik recreated: access log reattached');
+    const s = this.stream;
+    this.reconnect?.();
+    (s as unknown as { destroy?: () => void }).destroy?.();
   }
 
   onLine(line: string): void {

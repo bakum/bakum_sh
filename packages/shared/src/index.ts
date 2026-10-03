@@ -4,3 +4,4 @@ export * from './ipc';
 export * from './errors';
 export * from './semver';
 export * from './i18n';
+export * from './presets';

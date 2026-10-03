@@ -310,4 +310,45 @@ export default {
     ru: 'worktree на {head}, а сборка — на {sha}: git checkout --detach {sha}',
     en: 'worktree is at {head}, the build at {sha}: git checkout --detach {sha}',
   },
+
+  'presets.exportHeader': {
+    uk: 'Експорт проєкту {id} з Odoo Branch Manager, {at}.\nПрибрано: {removed}.\nСтворити проєкт із файла: «Додати проєкт» → крок «Пресет» → «З файла…».',
+    ru: 'Экспорт проекта {id} из Odoo Branch Manager, {at}.\nУбрано: {removed}.\nСоздать проект из файла: «Добавить проект» → шаг «Пресет» → «Из файла…».',
+    en: 'Project {id} exported from Odoo Branch Manager, {at}.\nRemoved: {removed}.\nTo create a project from the file: «Add project» → «Preset» step → «From file…».',
+  },
+  'presets.presetHeader': {
+    uk: 'Пресет Odoo Branch Manager «{name}»: налаштування без паролів, шляхів цього комп’ютера та назв проєкту.\nМайстер «Додати проєкт» кладе config поверх того, що знайшов у вибраному репозиторії.',
+    ru: 'Пресет Odoo Branch Manager «{name}»: настройки без паролей, путей этого компьютера и имён проекта.\nМастер «Добавить проект» кладёт config поверх того, что нашёл в выбранном репозитории.',
+    en: 'Odoo Branch Manager preset «{name}»: settings without passwords, paths of this computer and project names.\nThe «Add project» wizard lays config over what it detected in the chosen repository.',
+  },
+  'presets.relative': {
+    uk: 'Потрібен повний шлях до файла, а не «{path}».',
+    ru: 'Нужен полный путь к файлу, а не «{path}».',
+    en: 'A full path to the file is needed, not «{path}».',
+  },
+  'presets.notYaml': {
+    uk: 'Файл {file} — не YAML: {error}',
+    ru: 'Файл {file} — не YAML: {error}',
+    en: 'File {file} is not YAML: {error}',
+  },
+  'presets.notConfig': {
+    uk: 'Файл {file} не схожий на пресет чи експорт проєкту Odoo Branch Manager. Виберіть файл, збережений кнопкою «Зберегти як пресет» або «Експорт».',
+    ru: 'Файл {file} не похож на пресет или экспорт проекта Odoo Branch Manager. Выберите файл, сохранённый кнопкой «Сохранить как пресет» или «Экспорт».',
+    en: 'File {file} does not look like an Odoo Branch Manager preset or project export. Pick a file saved with «Save as preset» or «Export».',
+  },
+  'presets.missing': {
+    uk: 'Файл {file} не знайдено. Виберіть інший пресет або файл.',
+    ru: 'Файл {file} не найден. Выберите другой пресет или файл.',
+    en: 'File {file} not found. Pick another preset or file.',
+  },
+  'presets.tooBig': {
+    uk: 'Файл {file} завеликий для налаштувань (понад 1 МБ). Виберіть файл пресета чи експорту.',
+    ru: 'Файл {file} слишком большой для настроек (больше 1 МБ). Выберите файл пресета или экспорта.',
+    en: 'File {file} is too big for settings (over 1 MB). Pick a preset or export file.',
+  },
+  'presets.badName': {
+    uk: 'Недопустима назва файла пресета: {file}',
+    ru: 'Недопустимое имя файла пресета: {file}',
+    en: 'Invalid preset file name: {file}',
+  },
 } satisfies Record<string, Entry>;

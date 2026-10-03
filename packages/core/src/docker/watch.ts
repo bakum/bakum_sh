@@ -17,6 +17,8 @@ export async function refreshContainers(ctx: Ctx): Promise<void> {
   const next = new Map<string, ContainerState>();
   for (const c of list) {
     if (c.Labels['com.docker.compose.oneoff'] === 'True') continue;
+    // Extra services of runtime.composeTemplate (D72) share the compose project; the build's state is its odoo.
+    if (c.Labels['bm.service']) continue;
     const cp = c.Labels['com.docker.compose.project'];
     if (!cp) continue;
     const health = /\((healthy|unhealthy|health: starting)\)/.exec(c.Status)?.[1] ?? null;

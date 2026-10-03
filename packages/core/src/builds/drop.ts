@@ -41,13 +41,18 @@ export async function buildContainers(b: { projectId: string; id: number }): Pro
  */
 export async function dropBuildResources(ctx: Ctx, cfg: ProjectConfig, b: BuildRow, log: Log): Promise<void> {
   const reg = ownedRegistry(ctx, cfg.id);
-  // 1. Containers of this build (service container if it serves this build, leftover one-off containers).
+  // 1. Containers of this build (service container if it serves this build, leftover one-off containers). Extra services
+  // of runtime.composeTemplate (D72) go with the same `compose down`.
+  let down = false;
   for (const c of await buildContainers(b)) {
     assertOwned(cfg, { kind: 'container', name: c.name, labels: c.labels }, reg);
     // D55: after a recreate the container's anonymous volumes are no longer its own; `down -v` leaves them behind.
     const volumes = await anonymousVolumes(c.id);
     for (const v of volumes) assertOwned(cfg, { kind: 'volume', name: v, anonymous: true, container: c }, reg);
-    if (!c.oneoff) {
+    if (!c.oneoff && down) {
+      await docker.getContainer(c.id).remove({ force: true, v: true }).catch(() => {});
+    } else if (!c.oneoff) {
+      down = true;
       assertOwned(cfg, { kind: 'compose', name: b.composeProject }, reg);
       log(`docker compose -p ${b.composeProject} down -v`);
       const br = branchRow(ctx, b.branchId);

@@ -79,7 +79,8 @@ export function renderSkill(i: SkillInput): string {
   const worktrees = `${cfg.repo.worktreesDir}/${id}/<slug>`;
   const local = cfg.repo.localFolder;
   const fetchText = cfg.repo.fetchIntervalMin > 0 ? `раз в ${cfg.repo.fetchIntervalMin} мин (или кнопкой «Обновить»)` : 'кнопкой «Обновить»';
-  const filter = `--filter label=bm.project=${id} --filter label=com.docker.compose.oneoff=False`;
+  // With runtime.composeTemplate a build has extra services (D72): only its odoo container is the build.
+  const filter = `--filter label=bm.project=${id} --filter label=com.docker.compose.oneoff=False${cfg.runtime.composeTemplate ? ' --filter label=com.docker.compose.service=odoo' : ''}`;
   const protectedOthers = [...new Set(i.protectedBranches)].filter((b) => b !== cfg.production.branch);
   // The app's own Postgres is listed separately (psql is allowed there).
   const protectedContainers = pg.protectedContainers.filter((c) => c !== pgName);

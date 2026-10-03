@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Box, Paper, Text, useComputedColorScheme } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { t } from '../i18n';
-import { fmtTime } from '../lib/format';
+import { fmtDate, fmtDay, fmtTime } from '../lib/format';
 
 /**
  * Small single-series charts of the Monitor tab (dataviz rules): one hue validated for both themes, 2px line with a
@@ -28,6 +28,20 @@ function niceMax(v: number): number {
 }
 
 const hhmm = (at: number) => fmtTime(at, false);
+const HOUR = 3_600_000;
+
+/** Ticks of the time axis for the chart's span (D74), aligned to the local clock: 15 min … 1 day. */
+function timeTicks(from: number, to: number): { ticks: number[]; label: (t: number) => string } {
+  const span = to - from;
+  const step = span <= HOUR ? 15 * 60_000 : span <= 6 * HOUR ? HOUR : span <= 24 * HOUR ? 3 * HOUR : 24 * HOUR;
+  const off = -new Date(from).getTimezoneOffset() * 60_000;
+  const ticks: number[] = [];
+  for (let t = Math.ceil((from + off) / step) * step - off; t <= to; t += step) ticks.push(t);
+  return { ticks, label: step >= 24 * HOUR ? fmtDay : hhmm };
+}
+
+/** Tooltip time: with the date once the chart spans more than a day. */
+const pointLabel = (t: number, from: number, to: number): string => (to - from > 24 * HOUR ? fmtDate(new Date(t).toISOString()) : hhmm(t));
 
 function useChrome() {
   const scheme = useComputedColorScheme('light');
@@ -42,9 +56,7 @@ function useChrome() {
 function Axes({ w, h, yMax, format, from, to }: { w: number; h: number; yMax: number; format: (v: number) => string; from: number; to: number }) {
   const c = useChrome();
   const ticks = [0, yMax / 2, yMax];
-  const xTicks: number[] = [];
-  const step = 15 * 60_000;
-  for (let t = Math.ceil(from / step) * step; t <= to; t += step) xTicks.push(t);
+  const { ticks: xTicks, label } = timeTicks(from, to);
   const x = (t: number) => PAD.left + ((t - from) / (to - from)) * (w - PAD.left - PAD.right);
   const y = (v: number) => PAD.top + (1 - v / yMax) * (h - PAD.top - PAD.bottom);
   return (
@@ -59,7 +71,7 @@ function Axes({ w, h, yMax, format, from, to }: { w: number; h: number; yMax: nu
       ))}
       {xTicks.map((t) => (
         <text key={t} x={x(t)} y={h - 6} textAnchor="middle">
-          {hhmm(t)}
+          {label(t)}
         </text>
       ))}
     </g>
@@ -79,7 +91,7 @@ function Tip({ x, y, value, label }: { x: number; y: number; value: string; labe
   );
 }
 
-/** A line over the last hour; `yCap` fixes the top of the scale (e.g. the memory limit). */
+/** A line over the period; `yCap` fixes the top of the scale (e.g. the memory limit). */
 export function TimeLineChart({ title, points, format, from, to, yCap }: { title: string; points: Point[]; format: (v: number) => string; from: number; to: number; yCap?: number }) {
   const { ref, width } = useElementSize();
   const c = useChrome();
@@ -130,25 +142,27 @@ export function TimeLineChart({ title, points, format, from, to, yCap }: { title
             <rect x={PAD.left} y={0} width={w - PAD.left - PAD.right} height={HEIGHT} fill="transparent" onPointerMove={onMove} onPointerLeave={() => setHover(null)} />
           </svg>
         )}
-        {hover && <Tip x={x(hover.t)} y={y(hover.v)} value={format(hover.v)} label={hhmm(hover.t)} />}
+        {hover && <Tip x={x(hover.t)} y={y(hover.v)} value={format(hover.v)} label={pointLabel(hover.t, from, to)} />}
       </Box>
     </Box>
   );
 }
 
-/** Columns per minute over the last hour (requests); the tooltip also shows response times and errors. */
+/** Columns per bucket (a minute over an hour, longer over a longer period): requests; the tooltip adds times and errors. */
 export function MinuteBars({
   title,
   bars,
   from,
   to,
   detail,
+  bucketMs = 60_000,
 }: {
   title: string;
   bars: { t: number; v: number }[];
   from: number;
   to: number;
   detail: (t: number) => string;
+  bucketMs?: number;
 }) {
   const { ref, width } = useElementSize();
   const c = useChrome();
@@ -156,7 +170,7 @@ export function MinuteBars({
   const w = Math.max(width, 200);
   const yMax = niceMax(Math.max(...bars.map((b) => b.v), 0));
   const plotW = w - PAD.left - PAD.right;
-  const slot = plotW / 60;
+  const slot = (plotW * bucketMs) / (to - from);
   const barW = Math.min(24, Math.max(2, slot - 2));
   const x = (t: number) => PAD.left + ((t - from) / (to - from)) * plotW;
   const y = (v: number) => PAD.top + (1 - v / yMax) * (HEIGHT - PAD.top - PAD.bottom);

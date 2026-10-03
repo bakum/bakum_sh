@@ -18,6 +18,7 @@ import * as pg from '../pg';
 import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
 import { assertSqlIdent } from '../config/templates';
+import { readComposeTemplate } from '../config/compose-template';
 import { bumpedModules, changedModules, matchInstalled, modulesFromTree, parseModuleList, selectTestModules, splitInstallUpdate, type ModuleInfo } from '../modules';
 import {
   assertOdooOk,
@@ -103,6 +104,7 @@ function writeBuildCompose(r: Run): void {
     addonsPath: v.addonsPath as string | undefined,
     proxyPort: r.ctx.proxyPort ?? r.ctx.store.app.proxyPort,
     odooArgs: serverBaseArgs(r.cfg, v),
+    template: readComposeTemplate(r.cfg),
   });
   fs.mkdirSync(r.buildDir, { recursive: true });
   fs.writeFileSync(r.composeFile, text, 'utf8');

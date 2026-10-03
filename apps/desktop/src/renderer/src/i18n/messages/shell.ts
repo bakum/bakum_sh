@@ -37,8 +37,8 @@ export default {
   },
   'shell.coreRestartedRetry': { uk: 'Core перезапущено, повторіть дію', ru: 'Core был перезапущен, повторите действие', en: 'Core restarted, try again' },
 
-  'sidebar.fetch': { uk: 'Fetch (останній: {ago})', ru: 'Fetch (последний: {ago})', en: 'Fetch (last: {ago})' },
-  'sidebar.filter': { uk: 'Фільтр гілок…', ru: 'Фильтр веток…', en: 'Filter branches…' },
+  'sidebar.fetch': { uk: 'Fetch, {key} (останній: {ago})', ru: 'Fetch, {key} (последний: {ago})', en: 'Fetch, {key} (last: {ago})' },
+  'sidebar.filter': { uk: 'Фільтр гілок… ({key})', ru: 'Фильтр веток… ({key})', en: 'Filter branches… ({key})' },
   'sidebar.hideHidden': { uk: 'Не показувати приховані ({n})', ru: 'Не показывать скрытые ({n})', en: 'Do not show hidden ({n})' },
   'sidebar.showHidden': { uk: 'Показати приховані ({n})', ru: 'Показать скрытые ({n})', en: 'Show hidden ({n})' },
   'sidebar.unassigned': { uk: 'НЕ ДОДАНО ({n})', ru: 'НЕ ДОБАВЛЕНЫ ({n})', en: 'NOT ADDED ({n})' },

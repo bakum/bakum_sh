@@ -60,6 +60,8 @@ let trayState: TrayState = 'idle';
 let trayProjects: TrayProject[] = [];
 let blockerId: number | null = null;
 let appConfig: AppConfig | null = null;
+/** macOS: started at login and still waiting for app.yaml to learn `startMinimized` (D71). */
+let openedAtLogin = false;
 let updater: Updater | null = null;
 let pendingInstaller: string | null = null;
 let startupCheckDone = false;
@@ -411,6 +413,11 @@ function onCoreMessage(msg: CoreToMain): void {
       const langChanged = appConfig?.language !== msg.config.language;
       appConfig = msg.config;
       applyAutostart();
+      // macOS starts hidden at login before the settings are known; `startMinimized: false` shows the window now.
+      if (openedAtLogin) {
+        openedAtLogin = false;
+        if (!appConfig.desktop.startMinimized) showWindow();
+      }
       if (langChanged) {
         rebuildTrayMenu();
         writeCliLang();
@@ -442,8 +449,14 @@ function writeCliLang(): void {
 
 function applyAutostart(): void {
   if (!appConfig || !app.isPackaged) return;
-  // `args` is Windows-only; on macOS the start at login is recognised by wasOpenedAtLogin (see boot).
-  app.setLoginItemSettings({ openAtLogin: appConfig.desktop.autostart, args: ['--minimized'] });
+  const { autostart, startMinimized } = appConfig.desktop;
+  // `path` / `args` are Windows-only: the portable exe unpacks itself into a temp folder on every start, so the login
+  // item points at the portable file. On macOS the start at login is recognised by wasOpenedAtLogin (see boot).
+  app.setLoginItemSettings({
+    openAtLogin: autostart,
+    ...(process.env.PORTABLE_EXECUTABLE_FILE ? { path: process.env.PORTABLE_EXECUTABLE_FILE } : {}),
+    args: startMinimized ? ['--minimized'] : [],
+  });
 }
 
 // ---------- renderer → main (desktop-only capabilities) ----------
@@ -569,8 +582,8 @@ async function boot(): Promise<void> {
   tray.on('click', () => showWindow());
   rebuildTrayMenu();
 
-  const minimized = process.argv.includes('--minimized') || (isMac && app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin);
-  createWindow(!minimized);
+  openedAtLogin = isMac && app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin;
+  createWindow(!process.argv.includes('--minimized') && !openedAtLogin);
   // macOS: a click on the Dock icon brings back the window hidden to the menu bar.
   app.on('activate', () => showWindow());
   win?.once('ready-to-show', () => log.info({ ms: Date.now() - t0 }, 'window ready'));

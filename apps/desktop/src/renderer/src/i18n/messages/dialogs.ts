@@ -185,4 +185,38 @@ export default {
     ru: 'Проверьте подключение к интернету, прокси или VPN и повторите.',
     en: 'Check the internet connection, proxy or VPN and try again.',
   },
+
+  'exp.menu': { uk: 'Експорт / пресет', ru: 'Экспорт / пресет', en: 'Export / preset' },
+  'exp.export': { uk: 'Експорт налаштувань у файл…', ru: 'Экспорт настроек в файл…', en: 'Export settings to a file…' },
+  'exp.asPreset': { uk: 'Зберегти як пресет…', ru: 'Сохранить как пресет…', en: 'Save as preset…' },
+  'exp.exportTitle': { uk: 'Експорт проєкту {id}', ru: 'Экспорт проекта {id}', en: 'Export project {id}' },
+  'exp.exportText': {
+    uk: 'YAML проєкту з коментарями, але без пароля Postgres і пароля адміністратора для Connect. З файла створюють проєкт на іншому комп’ютері: «Додати проєкт» → крок «Пресет» → «З файла…».',
+    ru: 'YAML проекта с комментариями, но без пароля Postgres и пароля администратора для Connect. Из файла создают проект на другом компьютере: «Добавить проект» → шаг «Пресет» → «Из файла…».',
+    en: 'The project YAML with its comments, without the Postgres password and the Connect admin password. Create a project from the file on another computer: «Add project» → «Preset» step → «From file…».',
+  },
+  'exp.keepPaths': { uk: 'Залишити шляхи цього комп’ютера', ru: 'Оставить пути этого компьютера', en: 'Keep this computer’s paths' },
+  'exp.keepPathsHint': {
+    uk: 'Папки, монтування, мережа Docker, адреса Postgres. Без них майстер візьме те, що знайде на іншому комп’ютері.',
+    ru: 'Папки, монтирования, сеть Docker, адрес Postgres. Без них мастер возьмёт то, что найдёт на другом компьютере.',
+    en: 'Folders, mounts, the Docker network, the Postgres address. Without them the wizard takes what it detects on the other computer.',
+  },
+  'exp.saveTitle': { uk: 'Експорт налаштувань проєкту', ru: 'Экспорт настроек проекта', en: 'Export project settings' },
+  'exp.saveFile': { uk: 'Зберегти файл…', ru: 'Сохранить файл…', en: 'Save file…' },
+  'exp.saved': { uk: 'Налаштування збережено: {path}', ru: 'Настройки сохранены: {path}', en: 'Settings saved: {path}' },
+  'exp.presetTitle': { uk: 'Зберегти як пресет', ru: 'Сохранить как пресет', en: 'Save as preset' },
+  'exp.presetText': {
+    uk: 'Пресет — налаштування без паролів, шляхів і назв цього проєкту (id, репозиторій, гілка Production, імена БД). Майстер «Додати проєкт» пропонує його для нового репозиторію.',
+    ru: 'Пресет — настройки без паролей, путей и имён этого проекта (id, репозиторий, ветка Production, имена БД). Мастер «Добавить проект» предлагает его для нового репозитория.',
+    en: 'A preset is the settings without passwords, paths and this project’s names (id, repository, Production branch, database names). The «Add project» wizard offers it for a new repository.',
+  },
+  'exp.presetName': { uk: 'Назва пресета', ru: 'Название пресета', en: 'Preset name' },
+  'exp.base': { uk: 'Вбудований пресет в основі', ru: 'Встроенный пресет в основе', en: 'Built-in preset underneath' },
+  'exp.baseHint': {
+    uk: 'Його знайдені значення заповнять те, чого в пресеті немає (шляхи, мережу, Postgres).',
+    ru: 'Его найденные значения заполнят то, чего в пресете нет (пути, сеть, Postgres).',
+    en: 'Its detected values fill what the preset leaves out (paths, network, Postgres).',
+  },
+  'exp.baseAuto': { uk: 'Визначити автоматично', ru: 'Определить автоматически', en: 'Detect automatically' },
+  'exp.presetSaved': { uk: 'Пресет «{name}» збережено', ru: 'Пресет «{name}» сохранён', en: 'Preset «{name}» saved' },
 } satisfies Record<string, Entry>;

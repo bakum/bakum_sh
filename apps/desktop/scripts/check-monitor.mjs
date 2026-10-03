@@ -98,6 +98,18 @@ async function run(win) {
   check('вкладка Monitor показывает графики', (await win.locator('svg[aria-label^="CPU"]').count()) === 1 && (await win.locator('svg[aria-label^="Запросы"]').count()) === 1);
   await shot(win, 'monitor');
 
+  // D74: a period of 7 days — the same samples and requests from SQLite, averaged; the «now» tiles from the last sample.
+  const week = await bm(win, 'monitor.get', { buildId: prod.id, period: '7d' });
+  check('Monitor за 7 дней: интервал 84 мин', week.period === '7d' && week.bucketSec === 5040 && Date.parse(week.to) - Date.parse(week.from) === 7 * 86400000);
+  check('Monitor за 7 дней: запросы те же', week.requests.reduce((a, r) => a + r.count, 0) === total, JSON.stringify(week.requests));
+  check('Monitor за 7 дней: CPU/RAM усреднены', week.resources.length >= 1 && week.resources.length <= 2 && week.resources[0].memMb > 0, JSON.stringify(week.resources));
+  check('Monitor: текущий замер', !!week.current && week.current.memMb > 0, JSON.stringify(week.current));
+  await win.locator('[data-testid="monitor-period"]').getByText('7').click();
+  await win.waitForTimeout(2500);
+  check('вкладка Monitor: период 7 дней', (await win.locator('svg[aria-label^="CPU"]').count()) === 1);
+  await shot(win, 'monitor-7d');
+  await win.locator('[data-testid="monitor-period"]').getByText('1').first().click();
+
   // 3. dropAfterDays ≈ 40 s: a warning, the build stays.
   await setStage(win, { dropAfterDays: 0.0005 });
   await waitFor('audit build.expired', async () => (await bm(win, 'audit.list', { projectId: ID, action: 'build.expired' })).total > 0);
@@ -118,9 +130,15 @@ async function run(win) {
 }
 
 const { app, win } = await launch({ BM_LIFECYCLE_TICK_MS: '10000' });
+// The checks read Russian labels (D69): the language is switched for the run and put back.
+const originalApp = (await bm(win, 'config.get', { level: 'app' })).yaml;
 try {
   const state = await bm(win, 'system.state');
   if (state.firstRun) await bm(win, 'system.completeFirstRun', {});
+  const lang = YAML.parseDocument(originalApp);
+  lang.set('language', 'ru');
+  await bm(win, 'config.put', { level: 'app', yaml: lang.toString() });
+  await win.waitForTimeout(2500);
   await run(win);
 } catch (err) {
   check('без исключений', false, err.stack ?? err.message);
@@ -129,6 +147,7 @@ try {
     const j = await waitJob(win, (await bm(win, 'projects.delete', { projectId: ID, confirm: ID })).jobId);
     console.log(`проект ${ID} удалён: ${j.status}`);
   }
+  await bm(win, 'config.put', { level: 'app', yaml: originalApp });
   await app.close();
   const own = path.join(process.env.LOCALAPPDATA, 'Odoo Branch Manager', 'traefik', 'compose.yml');
   if (fs.existsSync(own)) docker('compose', '-p', 'bm-traefik', '-f', own, 'up', '-d');

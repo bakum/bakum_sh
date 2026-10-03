@@ -217,13 +217,24 @@ export interface BuildView {
 }
 
 /** Monitor tab of a build (spec 8.9): the last hour of resources and requests, sizes, lifecycle dates. */
+/** Periods of the Monitor charts (D74): samples and requests are kept for 7 days. */
+export const MONITOR_PERIODS = ['1h', '6h', '24h', '7d'] as const;
+export type MonitorPeriod = (typeof MONITOR_PERIODS)[number];
+
 export interface MonitorView {
   buildId: number;
   running: boolean;
-  /** CPU % (of one core = 100) and RAM, sampled every 30 s while the container runs. */
+  period: MonitorPeriod;
+  /** Bounds of the charts (ISO) and the width of one point / column, seconds (30 s samples, 60 s requests for 1 h). */
+  from: string;
+  to: string;
+  bucketSec: number;
+  /** CPU % (of one core = 100) and RAM of the branch's builds over the period, averaged per bucket. */
   resources: { at: string; cpu: number; memMb: number }[];
+  /** The last sample of this build if it is fresh (the «now» tiles); null when the container is not sampled. */
+  current: { at: string; cpu: number; memMb: number } | null;
   memLimitMb: number | null;
-  /** Requests through Traefik per minute (background websocket / longpolling excluded). */
+  /** Requests through Traefik per bucket (background websocket / longpolling excluded); `minute` — bucket start. */
   requests: { minute: string; count: number; avgMs: number; maxMs: number; errors: number }[];
   dbSizeBytes: number | null;
   filestoreBytes: number | null;

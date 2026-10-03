@@ -8,6 +8,8 @@ import { isMac } from '../lib/bm';
 import { YamlEditor } from '../components/YamlEditor';
 import { YamlForm, type FieldDef, type FieldGroup } from '../components/YamlForm';
 import { DeleteProjectButton } from '../components/dialogs/DeleteProject';
+import { ProjectExportMenu } from '../components/dialogs/ProjectExport';
+import { PresetsCard } from '../components/PresetsCard';
 import { MigratePostgresCard } from '../components/dialogs/MigratePostgres';
 import { UpdatesCard } from '../components/UpdatesCard';
 import { LANG_NAMES, LANGS } from '@bm/shared';
@@ -117,7 +119,7 @@ const projectTabs = (): Record<string, { label: string; groups: FieldGroup[]; st
           { path: ['runtime', 'debug', 'containerPort'], label: t('set.debugPort'), type: 'number' },
           { path: ['runtime', 'healthcheck', 'path'], label: t('set.hcPath'), type: 'text' },
           { path: ['runtime', 'healthcheck', 'timeoutSec'], label: t('set.hcTimeout'), type: 'number' },
-          { path: ['runtime', 'composeTemplate'], label: t('set.composeTemplate'), type: 'text', stage: 'stage3' },
+          { path: ['runtime', 'composeTemplate'], label: t('set.composeTemplate'), type: 'text', nullable: true, description: t('set.composeTemplateHint') },
         ],
       },
     ],
@@ -218,6 +220,7 @@ export function SettingsPage() {
                 checked={project.data.summary.enabled}
                 onChange={(e) => setEnabled.mutate({ projectId: pid!, enabled: e.currentTarget.checked })}
               />
+              <ProjectExportMenu projectId={pid!} projectName={project.data.summary.name} />
               <DeleteProjectButton projectId={pid!} />
             </Group>
           )}
@@ -584,7 +587,7 @@ function AppSettings({ text, defaults, onSave, saving }: { text: string; default
       fields: [
         { path: ['desktop', 'closeToTray'], label: t('app.closeToTray'), type: 'switch' },
         { path: ['desktop', 'startMinimized'], label: t('app.startMinimized'), type: 'switch' },
-        { path: ['desktop', 'autostart'], label: t(isMac ? 'app.autostartMac' : 'app.autostartWin'), type: 'switch', stage: 'stage3' },
+        { path: ['desktop', 'autostart'], label: t(isMac ? 'app.autostartMac' : 'app.autostartWin'), type: 'switch' },
         { path: ['desktop', 'editor'], label: t('app.editor'), type: 'text', description: t('app.editorHint') },
         // macOS always opens Terminal.app (D67).
         ...(isMac ? [] : [{ path: ['desktop', 'terminal'], label: t('app.terminal'), type: 'select', options: ['wt', 'git-bash', 'cmd'] } satisfies FieldDef]),
@@ -621,6 +624,7 @@ function AppSettings({ text, defaults, onSave, saving }: { text: string; default
   return (
     <Stack>
       <UpdatesCard />
+      <PresetsCard />
       <Card withBorder>
         <YamlForm text={text} groups={groups} onSave={onSave} saving={saving} defaults={defaults} />
       </Card>

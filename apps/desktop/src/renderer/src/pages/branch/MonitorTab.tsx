@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Alert, Button, Card, Group, Paper, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import { Alert, Button, Card, Group, Paper, SegmentedControl, SimpleGrid, Stack, Table, Text } from '@mantine/core';
 import { keepPreviousData } from '@tanstack/react-query';
-import type { BranchView } from '@bm/shared';
+import { MONITOR_PERIODS, type BranchView, type MonitorPeriod } from '@bm/shared';
 import { useBm } from '../../lib/query';
 import { fmtAgo, fmtBytes, fmtDate, fmtTime } from '../../lib/format';
 import { MinuteBars, TimeLineChart } from '../../components/MonitorCharts';
@@ -27,18 +27,43 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
 
 const minuteMs = (m: string) => new Date(`${m}:00Z`).getTime();
 
-/** Monitor (spec 8.9, D45): the last hour of CPU / RAM and requests, database and filestore sizes, lifecycle dates. */
+const PERIOD_KEY = 'bm.monitorPeriod';
+function readPeriod(): MonitorPeriod {
+  try {
+    const v = localStorage.getItem(PERIOD_KEY);
+    return (MONITOR_PERIODS as readonly string[]).includes(v ?? '') ? (v as MonitorPeriod) : '1h';
+  } catch {
+    return '1h';
+  }
+}
+
+/**
+ * Monitor (spec 8.9, D45, D74): CPU / RAM and requests of the branch over a period (1 h … 7 days), database and
+ * filestore sizes, lifecycle dates.
+ */
 export function MonitorTab({ branch }: { branch: BranchView }) {
   const live = branch.liveBuild;
-  const q = useBm('monitor.get', { buildId: live?.id ?? 0 }, { enabled: !!live, refetchInterval: 15_000, placeholderData: keepPreviousData });
+  const [period, setPeriodState] = useState<MonitorPeriod>(readPeriod);
+  const setPeriod = (p: MonitorPeriod) => {
+    setPeriodState(p);
+    try {
+      localStorage.setItem(PERIOD_KEY, p);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  const q = useBm('monitor.get', { buildId: live?.id ?? 0, period }, { enabled: !!live, refetchInterval: 15_000, placeholderData: keepPreviousData });
   const [table, setTable] = useState(false);
   if (!live) return <Alert color="gray">{t('monitor.noLive')}</Alert>;
   const m = q.data;
   if (!m) return null;
-  const to = Date.now();
-  const from = to - 3_600_000;
+  const to = Date.parse(m.to);
+  const from = Date.parse(m.from);
+  const long = to - from > 24 * 3_600_000;
+  const when = (at: number) => (long ? fmtDate(new Date(at).toISOString()) : fmtTime(at, m.bucketSec < 60));
+  const reqBucketMs = Math.max(60, m.bucketSec) * 1000;
   const res = m.resources.map((s) => ({ t: new Date(s.at).getTime(), cpu: s.cpu, mem: s.memMb }));
-  const last = res[res.length - 1];
+  const last = m.current ? { cpu: m.current.cpu, mem: m.current.memMb } : null;
   const reqs = m.requests.map((r) => ({ ...r, t: minuteMs(r.minute) }));
   const total = reqs.reduce((a, r) => a + r.count, 0);
   const avg = total ? Math.round(reqs.reduce((a, r) => a + r.avgMs * r.count, 0) / total) : null;
@@ -50,7 +75,7 @@ export function MonitorTab({ branch }: { branch: BranchView }) {
         <Tile label={t('monitor.cpuNow')} value={last ? `${last.cpu.toFixed(1)} %` : m.running ? '—' : t('monitor.stopped')} hint={t('monitor.oneCore')} />
         <Tile label={t('monitor.memNow')} value={last ? t('monitor.mb', { n: last.mem }) : '—'} hint={m.memLimitMb ? t('monitor.ofDocker', { n: m.memLimitMb }) : undefined} />
         <Tile
-          label={t('monitor.reqHour')}
+          label={t('monitor.reqPeriod', { period: t(`monitor.period.${m.period}`) })}
           value={String(total)}
           hint={avg !== null ? t('monitor.avg', { ms: avg }) + (errors ? t('monitor.errors5xx', { n: errors }) : '') : t('monitor.viaTraefik')}
         />
@@ -70,7 +95,17 @@ export function MonitorTab({ branch }: { branch: BranchView }) {
       </SimpleGrid>
       <Card withBorder>
         <Stack gap="lg">
-          <TimeLineChart title={t('monitor.cpuChart')} points={res.map((r) => ({ t: r.t, v: r.cpu }))} format={(v) => `${Math.round(v)} %`} from={from} to={to} />
+          <Group justify="flex-end">
+            <SegmentedControl
+              size="xs"
+              aria-label={t('monitor.periodLabel')}
+              value={period}
+              onChange={(v) => setPeriod(v as MonitorPeriod)}
+              data={MONITOR_PERIODS.map((p) => ({ value: p, label: t(`monitor.period.${p}`) }))}
+              data-testid="monitor-period"
+            />
+          </Group>
+          <TimeLineChart title={t('monitor.cpuChart')} points={res.map((r) => ({ t: r.t, v: r.cpu }))} format={(v) => `${v < 10 && v % 1 ? v.toFixed(1) : Math.round(v)} %`} from={from} to={to} />
           <TimeLineChart
             title={t('monitor.memChart')}
             points={res.map((r) => ({ t: r.t, v: r.mem }))}
@@ -79,13 +114,14 @@ export function MonitorTab({ branch }: { branch: BranchView }) {
             to={to}
           />
           <MinuteBars
-            title={t('monitor.reqChart')}
+            title={t('monitor.reqChart', { bucket: t('monitor.bucket', { n: reqBucketMs / 60_000 }) })}
             bars={reqs.map((r) => ({ t: r.t, v: r.count }))}
             from={from}
             to={to}
+            bucketMs={reqBucketMs}
             detail={(at) => {
               const r = byMinute.get(at);
-              return t('monitor.reqDetail', { time: fmtTime(at, false), avg: r?.avgMs ?? 0, max: r?.maxMs ?? 0, errors: r?.errors ? `, 5xx: ${r.errors}` : '' });
+              return t('monitor.reqDetail', { time: when(at), avg: r?.avgMs ?? 0, max: r?.maxMs ?? 0, errors: r?.errors ? `, 5xx: ${r.errors}` : '' });
             }}
           />
           <Group>
@@ -109,7 +145,7 @@ export function MonitorTab({ branch }: { branch: BranchView }) {
                 <Table.Tbody>
                   {[...res].reverse().map((r) => (
                     <Table.Tr key={r.t}>
-                      <Table.Td>{fmtTime(r.t)}</Table.Td>
+                      <Table.Td>{when(r.t)}</Table.Td>
                       <Table.Td>{r.cpu.toFixed(1)}</Table.Td>
                       <Table.Td>{r.mem}</Table.Td>
                     </Table.Tr>
@@ -119,7 +155,7 @@ export function MonitorTab({ branch }: { branch: BranchView }) {
               <Table striped withTableBorder fz="xs" style={{ fontVariantNumeric: 'tabular-nums' }}>
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>{t('monitor.minute')}</Table.Th>
+                    <Table.Th>{t('monitor.time')}</Table.Th>
                     <Table.Th>{t('monitor.requests')}</Table.Th>
                     <Table.Th>{t('monitor.avgMs')}</Table.Th>
                     <Table.Th>{t('monitor.maxMs')}</Table.Th>
@@ -129,7 +165,7 @@ export function MonitorTab({ branch }: { branch: BranchView }) {
                 <Table.Tbody>
                   {[...reqs].reverse().map((r) => (
                     <Table.Tr key={r.t}>
-                      <Table.Td>{fmtTime(r.t, false)}</Table.Td>
+                      <Table.Td>{when(r.t)}</Table.Td>
                       <Table.Td>{r.count}</Table.Td>
                       <Table.Td>{r.avgMs}</Table.Td>
                       <Table.Td>{r.maxMs}</Table.Td>

@@ -7,6 +7,7 @@ import { detectProject } from './detect';
 import * as git from './git';
 import { configEffective, configGet, configPut, jsonSchemas, setBranchOverrides } from './services/config';
 import { checkPostgres, createProject, getProject, setEnabled, summaries, updateProject } from './services/projects';
+import { deletePreset, exportProject, listPresets, readPreset, savePreset } from './services/presets';
 import { completeFirstRun, appState, systemStatus, startDockerDesktop } from './services/system';
 import { jobLog, jobView, listJobs } from './services/jobs-view';
 import { defaultCloneDir, loginProject, probeRepo, requestClone, saveToken } from './services/repo';
@@ -82,6 +83,14 @@ export function registerHandlers(ctx: Ctx): void {
     'repo.folderRemote': (p) => git.folderRemoteUrl(p.path),
     'projects.update': (p) => updateProject(ctx, p.projectId, p.yaml),
     'projects.setEnabled': (p) => setEnabled(ctx, p.projectId, p.enabled),
+    'projects.export': (p) => exportProject(ctx, p),
+    'presets.list': () => listPresets(ctx),
+    'presets.save': (p) => savePreset(ctx, p),
+    'presets.read': (p) => readPreset(ctx, p),
+    'presets.delete': (p) => {
+      deletePreset(ctx, p.file);
+      return { ok: true as const };
+    },
     'projects.deletePreview': (p) => projectDeletePreview(ctx, p.projectId),
     'projects.delete': (p) => requestProjectDelete(ctx, p.projectId, p.confirm),
     'projects.pgMigratePreview': (p) => pgMigratePreview(ctx, p.projectId),
@@ -139,7 +148,7 @@ export function registerHandlers(ctx: Ctx): void {
   registerAgentHandlers(ctx);
   ctx.rpc.register(snapshotHandlers(ctx));
   ctx.rpc.register({
-    'monitor.get': (p) => monitorView(ctx, p.buildId),
+    'monitor.get': (p) => monitorView(ctx, p.buildId, p.period),
     'projects.buildImage': (p) => requestImageBuild(ctx, p.projectId),
   });
 }

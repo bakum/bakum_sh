@@ -24,6 +24,8 @@ import type {
   SystemStatus,
   UnassignedBranch,
 } from './types';
+import { MONITOR_PERIODS } from './types';
+import type { PresetInfo, PresetOverlay } from './presets';
 
 interface MethodDef<P extends z.ZodType, R> {
   params: P;
@@ -147,6 +149,20 @@ export const methods = {
   'projects.checkPostgres': m<{ ok: boolean; text: string }>()(z.object({ yaml: z.string().min(1) }).strict()),
   'projects.update': m<ProjectSummary>()(z.object({ projectId, yaml: z.string().min(1) }).strict()),
   'projects.setEnabled': m<ProjectSummary>()(z.object({ projectId, enabled: z.boolean() }).strict()),
+  /** Project YAML into a file the user chose: without passwords, `keepPaths: false` — without this machine's paths (D73). */
+  'projects.export': m<{ path: string }>()(z.object({ projectId, path: z.string().min(1), keepPaths: z.boolean() }).strict()),
+  /** Saved presets (`<settings>/presets`), «Сохранить как пресет», reading a preset or an exported project for the wizard. */
+  'presets.list': m<PresetInfo[]>()(empty),
+  'presets.save': m<PresetInfo>()(
+    z.object({ projectId, name: z.string().trim().min(1).max(80), base: z.enum(['odoo', 'generic', 'demz']).optional() }).strict(),
+  ),
+  'presets.read': m<PresetOverlay>()(
+    z
+      .object({ file: z.string().min(1).optional(), path: z.string().min(1).optional() })
+      .strict()
+      .refine((p) => !!p.file !== !!p.path),
+  ),
+  'presets.delete': m<{ ok: true }>()(z.object({ file: z.string().min(1) }).strict()),
   'projects.deletePreview': m<ProjectDeletePreview>()(
     z.object({ projectId }).strict(),
   ),
@@ -263,7 +279,7 @@ export const methods = {
   'backups.list': m<BackupFile[]>()(z.object({ projectId }).strict()),
   'backups.import': m<JobRef>()(z.object({ projectId, path: z.string().min(1) }).strict()),
 
-  'monitor.get': m<MonitorView>()(z.object({ buildId: id }).strict()),
+  'monitor.get': m<MonitorView>()(z.object({ buildId: id, period: z.enum(MONITOR_PERIODS).default('1h') }).strict()),
 
   /** Snapshots of the live build's database (spec 8.9 Backups). */
   'snapshots.list': m<SnapshotView[]>()(z.object({ branchId: id }).strict()),

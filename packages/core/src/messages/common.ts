@@ -167,6 +167,47 @@ export default {
   'image.buildFailed': { uk: 'Збирання образу {tag} не вдалося: {error}', ru: 'Сборка образа {tag} не удалась: {error}', en: 'Building image {tag} failed: {error}' },
   'image.removeFailed': { uk: 'образ: {error}', ru: 'образ: {error}', en: 'image: {error}' },
 
+  'ctpl.relative': {
+    uk: 'runtime.composeTemplate має бути повним шляхом до файла, а зараз «{file}». Вкажіть шлях на кшталт E:/stack/bm-compose.yml.',
+    ru: 'runtime.composeTemplate должен быть полным путём к файлу, а сейчас «{file}». Укажите путь вида E:/stack/bm-compose.yml.',
+    en: 'runtime.composeTemplate must be a full path to a file, but it is «{file}». Use a path like E:/stack/bm-compose.yml.',
+  },
+  'ctpl.missing': {
+    uk: 'Шаблон compose не знайдено: {file} (runtime.composeTemplate). Поверніть файл або очистіть поле в налаштуваннях проєкту.',
+    ru: 'Шаблон compose не найден: {file} (runtime.composeTemplate). Верните файл или очистите поле в настройках проекта.',
+    en: 'Compose template not found: {file} (runtime.composeTemplate). Restore the file or clear the field in the project settings.',
+  },
+  'ctpl.yaml': {
+    uk: 'Шаблон compose {file} — не YAML: {error}',
+    ru: 'Шаблон compose {file} — не YAML: {error}',
+    en: 'Compose template {file} is not YAML: {error}',
+  },
+  'ctpl.notMap': {
+    uk: 'Шаблон compose {file}: services, volumes і networks мають бути словниками (ключ: значення).',
+    ru: 'Шаблон compose {file}: services, volumes и networks должны быть словарями (ключ: значение).',
+    en: 'Compose template {file}: services, volumes and networks must be mappings (key: value).',
+  },
+  'ctpl.topKey': {
+    uk: 'Шаблон compose {file}: ключ «{key}» не підтримується. Можна services, volumes, networks і x-*; name задає застосунок.',
+    ru: 'Шаблон compose {file}: ключ «{key}» не поддерживается. Можно services, volumes, networks и x-*; name задаёт приложение.',
+    en: 'Compose template {file}: key «{key}» is not supported. Use services, volumes, networks and x-*; the app sets name.',
+  },
+  'ctpl.serviceName': {
+    uk: 'Шаблон compose {file}: недопустима назва сервісу «{name}» (малі латинські літери, цифри, - і _).',
+    ru: 'Шаблон compose {file}: недопустимое имя сервиса «{name}» (строчные латинские буквы, цифры, - и _).',
+    en: 'Compose template {file}: invalid service name «{name}» (lowercase latin letters, digits, - and _).',
+  },
+  'ctpl.serviceMap': {
+    uk: 'Шаблон compose {file}: сервіс «{name}» має бути словником налаштувань.',
+    ru: 'Шаблон compose {file}: сервис «{name}» должен быть словарём настроек.',
+    en: 'Compose template {file}: service «{name}» must be a mapping of settings.',
+  },
+  'ctpl.forbidden': {
+    uk: 'Шаблон compose {file}: у сервісу «{name}» не можна задавати {key} — у кожної збірки свої контейнери. Приберіть цей рядок.',
+    ru: 'Шаблон compose {file}: у сервиса «{name}» нельзя задавать {key} — у каждой сборки свои контейнеры. Уберите эту строку.',
+    en: 'Compose template {file}: service «{name}» cannot set {key}: every build has its own containers. Remove that line.',
+  },
+
   'remoteGone.production': { uk: 'це Production', ru: 'это Production', en: 'it is Production' },
   'remoteGone.protected': { uk: 'гілку захищено (protected)', ru: 'ветка защищена (protected)', en: 'the branch is protected' },
   'remoteGone.folder': { uk: 'код збірки береться з вашої папки', ru: 'код сборки берётся из вашей папки', en: 'the build code comes from your folder' },

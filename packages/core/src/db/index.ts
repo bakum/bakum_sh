@@ -60,6 +60,14 @@ const MIGRATIONS: string[] = [
     max_ms REAL NOT NULL, errors INTEGER NOT NULL, PRIMARY KEY (build_id, minute)
   );
   `,
+  // D74: CPU / RAM samples of live builds, so Monitor shows a period and survives a Core restart; kept for 7 days.
+  `
+  CREATE TABLE resource_stats (
+    build_id INTEGER NOT NULL, branch_id INTEGER NOT NULL, at TEXT NOT NULL, cpu REAL NOT NULL, mem_mb INTEGER NOT NULL,
+    PRIMARY KEY (build_id, at)
+  );
+  CREATE INDEX resource_stats_branch ON resource_stats (branch_id, at);
+  `,
 ];
 
 export function openDb(file: string): { db: Db; sqlite: Database.Database } {

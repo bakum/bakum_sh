@@ -5,6 +5,7 @@ import { projectConfigSchema } from '@bm/shared';
 import { demzPreset } from '../src/config/presets';
 import { resolveBranchScope } from '../src/config/effective';
 import { dataDirOf, generateCompose, ONEOFF_OVERRIDE, oneOffArgs, oneOffOverridePath } from '../src/docker/compose';
+import { parseComposeTemplate } from '../src/config/compose-template';
 
 const cfg = projectConfigSchema.parse(
   demzPreset({
@@ -95,5 +96,88 @@ describe('generateCompose', () => {
   it('runs one-offs without the service healthcheck (D60)', () => {
     expect(path.basename(oneOffOverridePath('C:/x/compose.yml'))).toBe('compose.oneoff.yml');
     expect(YAML.parse(ONEOFF_OVERRIDE)).toEqual({ services: { odoo: { healthcheck: { disable: true } } } });
+  });
+});
+
+describe('runtime.composeTemplate (D72)', () => {
+  const tpl = parseComposeTemplate(
+    [
+      'x-common: &common',
+      '  restart: "no"',
+      'services:',
+      '  odoo:',
+      '    environment: [REDIS_URL=redis://redis:6379/0, PGPASSWORD=override]',
+      '    labels: { team: odoo, bm.project: other, traefik.enable: "false" }',
+      '    volumes: [{ type: volume, source: cache, target: /cache }]',
+      '    mem_limit: 4g',
+      '    depends_on: [redis]',
+      '  redis:',
+      '    <<: *common',
+      '    image: redis:7',
+      '    command: [redis-server, --dbfilename, "{db}.rdb"]',
+      '    volumes: [cache:/data]',
+      '  mailpit:',
+      '    image: axllent/mailpit',
+      '    labels: [traefik.enable=true, bm.build=1]',
+      '    networks: { mail: {} }',
+      'volumes:',
+      '  cache: {}',
+      'networks:',
+      '  mail: {}',
+    ].join('\n'),
+    'tpl.yml',
+  );
+  const doc = YAML.parse(generateCompose({ ...input, template: tpl }));
+
+  it('merges services.odoo into the build service; the app keeps its labels and network', () => {
+    const svc = doc.services.odoo;
+    expect(svc.environment.REDIS_URL).toBe('redis://redis:6379/0');
+    expect(svc.environment.PGPASSWORD).toBe('override');
+    expect(svc.labels.team).toBe('odoo');
+    expect(svc.labels['bm.project']).toBe('demz');
+    expect(svc.labels['traefik.enable']).toBe('true');
+    expect(svc.volumes).toContainEqual({ type: 'bind', source: 'E:/demz-odoo-19/worktrees/demz/crm', target: '/mnt/repositories/demz-odoo' });
+    expect(svc.volumes).toContainEqual({ type: 'volume', source: 'cache', target: '/cache' });
+    expect(svc.mem_limit).toBe('4g');
+    expect(svc.depends_on).toEqual(['redis']);
+    expect(svc.networks).toEqual(['demz-odoo-19_default']);
+    expect(svc.command).toContain('--db-filter=^o19_br_crm_3$$');
+  });
+
+  it('adds other services with ownership labels, the project network and no Traefik route by default', () => {
+    const redis = doc.services.redis;
+    expect(redis.command).toEqual(['redis-server', '--dbfilename', 'o19_br_crm_3.rdb']);
+    expect(redis.restart).toBe('no');
+    expect(redis.networks).toEqual(['demz-odoo-19_default']);
+    expect(redis.labels).toEqual({
+      'traefik.enable': 'false',
+      'bm.project': 'demz',
+      'bm.branch': '7',
+      'bm.build': '42',
+      'bm.build.number': '3',
+      'bm.service': 'redis',
+    });
+    const mail = doc.services.mailpit;
+    expect(mail.restart).toBe('unless-stopped');
+    expect(mail.labels['traefik.enable']).toBe('true');
+    expect(mail.labels['bm.build']).toBe('42');
+    expect(mail.networks).toEqual({ 'demz-odoo-19_default': {}, mail: {} });
+    expect(doc.volumes).toEqual({ cache: {} });
+    expect(doc.networks).toEqual({ mail: {}, 'demz-odoo-19_default': { external: true, name: 'demz-odoo-19_default' } });
+    expect(doc.name).toBe('bm-demz-crm');
+    expect(doc['x-common']).toBeUndefined();
+  });
+
+  it('rejects what would break builds', () => {
+    expect(() => parseComposeTemplate('name: x', 'f')).toThrow(/name/);
+    expect(() => parseComposeTemplate('services:\n  odoo:\n    container_name: odoo', 'f')).toThrow(/container_name/);
+    expect(() => parseComposeTemplate('services:\n  Bad Name: {}', 'f')).toThrow(/Bad Name/);
+    expect(() => parseComposeTemplate('services: [a]', 'f')).toThrow();
+    expect(() => parseComposeTemplate(':\n -', 'f')).toThrow();
+    expect(parseComposeTemplate('', 'f')).toEqual({ services: {}, volumes: {}, networks: {} });
+  });
+
+  it('leaves the generated file unchanged without a template', () => {
+    expect(generateCompose({ ...input, template: null })).toBe(generateCompose(input));
   });
 });
