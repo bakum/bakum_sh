@@ -1,7 +1,7 @@
 {
   "name": "@bm/desktop",
   "productName": "Odoo Branch Manager",
-  "version": "0.13.24",
+  "version": "0.14.0",
   "private": true,
   "description": "Odoo Branch Manager: local odoo.sh for Windows / macOS + Docker Desktop",
   "author": "Bakum Viacheslav",
