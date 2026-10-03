@@ -277,6 +277,7 @@ export default {
   'app.nDisk': { uk: 'Мало місця', ru: 'Мало места', en: 'Low disk space' },
   'app.nExpired': { uk: 'Минув термін зберігання збірки (dropAfterDays)', ru: 'Истёк срок хранения сборки (dropAfterDays)', en: 'A build’s retention passed (dropAfterDays)' },
   'app.nRemoved': { uk: 'Гілку видалили на GitHub', ru: 'Ветку удалили на GitHub', en: 'A branch was deleted on GitHub' },
+  'app.nSkill': { uk: 'Skill асистентів застарів', ru: 'Skill ассистентов устарел', en: 'An assistant skill is outdated' },
 
   'presets.title': { uk: 'Пресети', ru: 'Пресеты', en: 'Presets' },
   'presets.hint': {

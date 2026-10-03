@@ -326,7 +326,7 @@ export type ProjectConfig = z.infer<typeof projectConfigSchema>;
 export const isLegacyProject = (cfg: ProjectConfig): boolean => !cfg.repo.url || !cfg.repo.mirrorDir;
 export type ProjectConfigInput = z.input<typeof projectConfigSchema>;
 
-export const notificationKinds = ['buildReady', 'buildFailed', 'testsFailed', 'newBackup', 'lowDisk', 'buildExpired', 'branchRemoved'] as const;
+export const notificationKinds = ['buildReady', 'buildFailed', 'testsFailed', 'newBackup', 'lowDisk', 'buildExpired', 'branchRemoved', 'skillOutdated'] as const;
 export type NotificationKind = (typeof notificationKinds)[number];
 
 export const appConfigSchema = z
@@ -378,6 +378,8 @@ export const appConfigSchema = z
             buildExpired: z.boolean().default(true),
             /** A branch deleted on GitHub was deleted in the app, or kept and needs the user (D50). */
             branchRemoved: z.boolean().default(true),
+            /** The assistant skill of a project is behind the app (D75): it is not rewritten without the user. */
+            skillOutdated: z.boolean().default(true),
           })
           .strict()
           .prefault({}),

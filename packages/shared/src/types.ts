@@ -376,9 +376,23 @@ export interface SystemStatus {
   fetches: { projectId: string; at: string | null; error: string | null }[];
   discrepancies: Discrepancy[];
   orphans: Orphan[];
-  /** Assistant skills written by an older version of the app or before a settings change (D52). */
-  outdatedSkills: { projectId: string; path: string }[];
+  /**
+   * Assistant skills behind what the app writes now (D52, D75): written by an older version or before a settings
+   * change. `modified` — also edited by hand, so it is rewritten only after a confirmation in the project settings.
+   */
+  outdatedSkills: OutdatedSkill[];
   paths: { configDir: string; dataDir: string; logsDir: string };
+}
+
+export interface OutdatedSkill {
+  projectId: string;
+  projectName: string;
+  path: string;
+  /** Folder the skill was installed into (`agents.skillsDir`): «Обновить» writes there again. */
+  dir: string;
+  installedVersion: string | null;
+  currentVersion: string;
+  modified: boolean;
 }
 
 export interface Discrepancy {

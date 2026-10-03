@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import YAML from 'yaml';
-import { BmError, type AgentSkillStatus, type ProjectConfig } from '@bm/shared';
+import { BmError, type AgentSkillStatus, type OutdatedSkill, type ProjectConfig } from '@bm/shared';
 import type { Ctx } from '../context';
 import { branches } from '../db/schema';
 import { resolveBranchScope } from '../config/effective';
@@ -13,6 +13,8 @@ import * as git from '../git';
 import { isInside, samePath, toPosix } from '../util/paths';
 import { audit } from './audit';
 import { onProjectConfigChanged } from './projects';
+import { notify } from './notify';
+import { log } from '../util/logger';
 import { t } from '../i18n';
 
 /** Protected branches of the project now: the settings list plus branches of the registry with the protected setting. */
@@ -78,19 +80,82 @@ export function skillStatus(ctx: Ctx, projectId: string, dirOverride?: string): 
   };
 }
 
-/** Projects whose installed skill is older than what the app writes now (Status page). */
-export function outdatedSkills(ctx: Ctx): { projectId: string; path: string }[] {
-  const out: { projectId: string; path: string }[] = [];
+/**
+ * Projects whose installed skill is behind what the app writes now (the warning under the header, Status page; D75).
+ * A skill edited by hand counts when the app's own text changed since it was written (the marker keeps that hash).
+ */
+export function outdatedSkills(ctx: Ctx): OutdatedSkill[] {
+  const out: OutdatedSkill[] = [];
   for (const e of ctx.store.list()) {
-    if (!e.config?.agents.skillsDir) continue;
+    const cfg = e.config;
+    if (!cfg?.agents.skillsDir) continue;
     try {
-      const s = skillStatus(ctx, e.id);
-      if (s.state === 'outdated') out.push({ projectId: e.id, path: s.path! });
+      const file = skillPath(cfg.agents.skillsDir, cfg.id);
+      if (!fs.existsSync(file)) continue;
+      const m = parseSkill(fs.readFileSync(file, 'utf8'));
+      if (!m || m.hash === parseSkill(content(ctx, cfg))!.hash) continue;
+      out.push({
+        projectId: cfg.id,
+        projectName: cfg.name,
+        path: toPosix(file),
+        dir: cfg.agents.skillsDir,
+        installedVersion: m.version,
+        currentVersion: ctx.appVersion,
+        modified: m.modified,
+      });
     } catch {
       /* folder gone or unreadable: shown in the project settings */
     }
   }
   return out;
+}
+
+/**
+ * Desktop notification about skills that fell behind (D75): once per project and app version, checked after start
+ * and after settings changes. The skill itself is never rewritten without the user.
+ */
+export function warnOutdatedSkills(ctx: Ctx): void {
+  for (const s of outdatedSkills(ctx)) {
+    const key = `skill-warned:${s.projectId}`;
+    const seen = (ctx.sqlite.prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+    const stamp = `${ctx.appVersion}|${parseSkill(content(ctx, ctx.store.require(s.projectId)))!.hash}`;
+    if (seen === stamp) continue;
+    ctx.sqlite.prepare('INSERT OR REPLACE INTO kv(key, value) VALUES (?, ?)').run(key, stamp);
+    log().info({ projectId: s.projectId, installed: s.installedVersion, modified: s.modified }, 'assistant skill outdated: warned');
+    notify(ctx, 'skillOutdated', t('agents.outdatedTitle', { name: s.projectName }), t(s.modified ? 'agents.outdatedModifiedBody' : 'agents.outdatedBody'), {
+      route: `/projects/${s.projectId}/settings/agents`,
+    });
+  }
+}
+
+let checkTimer: NodeJS.Timeout | null = null;
+let hourly: NodeJS.Timeout | null = null;
+
+/** Checks the skills after `delayMs` (a later call replaces an earlier one: settings edits come in bursts). */
+export function scheduleSkillCheck(ctx: Ctx, delayMs = 5000): void {
+  if (checkTimer) clearTimeout(checkTimer);
+  checkTimer = setTimeout(() => {
+    checkTimer = null;
+    try {
+      warnOutdatedSkills(ctx);
+    } catch (err) {
+      log().warn({ err }, 'skill check failed');
+    }
+  }, delayMs);
+}
+
+/** After start (the app may have just been updated), then hourly: protected branches also change the text. */
+export function startSkillChecks(ctx: Ctx): void {
+  stopSkillChecks();
+  scheduleSkillCheck(ctx, 10_000);
+  hourly = setInterval(() => scheduleSkillCheck(ctx, 0), 3_600_000);
+}
+
+export function stopSkillChecks(): void {
+  if (checkTimer) clearTimeout(checkTimer);
+  if (hourly) clearInterval(hourly);
+  checkTimer = null;
+  hourly = null;
 }
 
 export async function installSkill(ctx: Ctx, projectId: string, dir: string, overwrite: boolean): Promise<{ path: string; inGit: boolean }> {
@@ -117,6 +182,8 @@ export async function installSkill(ctx: Ctx, projectId: string, dir: string, ove
     onProjectConfigChanged(ctx, cfg, saved);
   }
   audit(ctx, { projectId, action: 'agents.skill', target: toPosix(file), params: { version: ctx.appVersion, previous: cur.state } });
+  // The next time the skill falls behind is a new warning, even with a text seen before.
+  ctx.sqlite.prepare('DELETE FROM kv WHERE key = ?').run(`skill-warned:${projectId}`);
 
   let inGit = false;
   try {

@@ -31,6 +31,7 @@ import { HEADER_BG } from '../theme';
 import classes from './Shell.module.css';
 import { AppFooter } from './AppFooter';
 import { UpdateBanner } from './UpdateBanner';
+import { SkillBanner } from './SkillBanner';
 import { ErrorBoundary } from './ErrorBoundary';
 import { t, useLang } from '../i18n';
 
@@ -206,6 +207,7 @@ export function Shell() {
         </Alert>
       )}
       <UpdateBanner />
+      <SkillBanner />
       <Box className={classes.main}>
         <ErrorBoundary resetKey={loc.pathname} scope="page">
           <Outlet />

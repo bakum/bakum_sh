@@ -6,6 +6,7 @@ import { BackupWatcher } from './services/backup-watch';
 import { ActivityCollector, setActivityCollector } from './services/activity';
 import { startMonitor, stopMonitor } from './services/monitor';
 import { startLifecycle, stopLifecycle } from './services/lifecycle';
+import { scheduleSkillCheck, startSkillChecks, stopSkillChecks } from './services/agents';
 import { applyRules } from './services/branches';
 import { deleteBranchExecutor } from './services/branch-delete';
 import { deleteProjectExecutor } from './services/project-delete';
@@ -65,6 +66,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
     backups.sync();
     startMonitor(ctx);
     startLifecycle(ctx);
+    startSkillChecks(ctx);
     publishTray(ctx);
     // First fetch right after start (criterion 3: the sidebar matches odoo.sh after the first fetch).
     requestFetch(ctx);
@@ -89,6 +91,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
     activity.stop();
     stopMonitor();
     stopLifecycle();
+    stopSkillChecks();
     if (cancel) queue.cancelAll();
     else await queue.drain(3000);
     queue.stop();
@@ -103,6 +106,7 @@ export function bootServices(ctx: Ctx): { onConfigChanged: () => void } {
       backups.sync();
       for (const e of ctx.store.list()) if (e.config) applyRules(ctx, e.config);
       void ensureTraefik(ctx);
+      scheduleSkillCheck(ctx);
     },
   };
 }

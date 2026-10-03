@@ -171,6 +171,8 @@ export async function deleteProjectExecutor(ctx: Ctx, job: JobRow, jc: JobContex
     ctx.sqlite.prepare('DELETE FROM resource_stats WHERE build_id = ?').run(id);
     ctx.sqlite.prepare('DELETE FROM kv WHERE key = ?').run(`drop-warned:${id}`);
   }
+  // The skill warning of the project (D75): a new project with this id is warned again.
+  ctx.sqlite.prepare('DELETE FROM kv WHERE key = ?').run(`skill-warned:${cfg.id}`);
   ctx.db.delete(builds).where(eq(builds.projectId, cfg.id)).run();
   ctx.db.delete(branches).where(eq(branches.projectId, cfg.id)).run();
   ctx.db.delete(projects).where(eq(projects.id, cfg.id)).run();

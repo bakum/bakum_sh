@@ -618,6 +618,7 @@ function AppSettings({ text, defaults, onSave, saving }: { text: string; default
         { path: ['desktop', 'notifications', 'lowDisk'], label: t('app.nDisk'), type: 'switch' },
         { path: ['desktop', 'notifications', 'buildExpired'], label: t('app.nExpired'), type: 'switch' },
         { path: ['desktop', 'notifications', 'branchRemoved'], label: t('app.nRemoved'), type: 'switch' },
+        { path: ['desktop', 'notifications', 'skillOutdated'], label: t('app.nSkill'), type: 'switch' },
       ],
     },
   ];

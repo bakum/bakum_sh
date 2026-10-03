@@ -77,19 +77,6 @@ export function StatusPage() {
           </Card>
         </SimpleGrid>
 
-        {s.outdatedSkills.map((k) => (
-          <Alert key={k.projectId} color="orange" variant="light" data-testid="outdated-skill">
-            <Group justify="space-between">
-              <Text size="sm">
-                {tx('status.skillOutdated', { id: k.projectId, path: k.path }, { code: (x) => <Code>{x}</Code> })}
-              </Text>
-              <Button size="compact-sm" variant="light" onClick={() => nav(`/projects/${k.projectId}/settings/agents`)}>
-                {t('common.refresh')}
-              </Button>
-            </Group>
-          </Alert>
-        ))}
-
         <Card withBorder>
           <Text fw={600} mb="xs">
             {t('status.lastFetch')}

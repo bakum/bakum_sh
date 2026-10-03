@@ -242,6 +242,21 @@ export default {
     ru: '{file} изменён вручную. Перезапишите его, если правки не нужны, или перенесите их в другой skill.',
     en: '{file} was edited by hand. Overwrite it if you do not need the edits, or move them to another skill.',
   },
+  'agents.outdatedTitle': {
+    uk: 'Skill асистентів «{name}» застарів',
+    ru: 'Skill ассистентов «{name}» устарел',
+    en: 'Assistant skill of «{name}» is outdated',
+  },
+  'agents.outdatedBody': {
+    uk: 'Застосунок або налаштування змінилися, а Claude Code і Cursor читають старий текст. Оновіть його кнопкою на плашці у вікні.',
+    ru: 'Приложение или настройки изменились, а Claude Code и Cursor читают старый текст. Обновите его кнопкой на плашке в окне.',
+    en: 'The app or the settings changed, but Claude Code and Cursor still read the old text. Update it with the button in the window.',
+  },
+  'agents.outdatedModifiedBody': {
+    uk: 'Застосунок або налаштування змінилися, а файл ще й правили вручну. Відкрийте Settings → «Асистенти» і вирішіть, чи перезаписати його.',
+    ru: 'Приложение или настройки изменились, а файл ещё и правили вручную. Откройте Settings → «Ассистенты» и решите, перезаписать ли его.',
+    en: 'The app or the settings changed, and the file was also edited by hand. Open Settings → «Assistants» and decide whether to overwrite it.',
+  },
 
   'merge.differentProjects': { uk: 'Гілки з різних проєктів', ru: 'Ветки из разных проектов', en: 'The branches are from different projects' },
   'merge.noGithub': {
