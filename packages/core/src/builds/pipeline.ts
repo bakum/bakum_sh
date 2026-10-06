@@ -44,6 +44,7 @@ import { listeningPorts } from '../util/ports';
 import { extractEntry, openZip } from '../util/zip';
 import { copyTree } from '../util/fs-tree';
 import { commits, computeCodeLag } from '../services/code-lag';
+import { alreadyApplied, codeFingerprint, folderCodeState, testsCover, type CodeState } from './code-state';
 import { log as coreLog } from '../util/logger';
 import { nowIso, sleep } from '../util/time';
 import { t } from '../i18n';
@@ -124,6 +125,13 @@ async function stepCode(r: Run): Promise<string> {
     if (!sha) throw new BmError('NO_HEAD', t('pl.noHead', { dir: from.dir }));
     const dirty = await git.uncommittedFiles(from.dir);
     if (dirty.length) r.log(t('pl.dirtyFolder', { n: dirty.length }));
+    // What the database is about to get, read before the modules step (D76): an edit made meanwhile never counts as
+    // applied. Without it nothing is skipped later, the build itself is not affected.
+    const state = await folderCodeState(from.dir, cfg.repo.moduleRoots).catch((err: Error) => {
+      coreLog().warn({ err, branch: r.branch.name }, 'folder code state failed');
+      return null;
+    });
+    patchBuild(r, { codeState: state });
   } else {
     const wt = await ensureWorktree(ctx, cfg, r.branch);
     r.branch = branchRow(ctx, r.branch.id)!;
@@ -582,12 +590,22 @@ function testsSummary(x: TestsResult): string {
   return t('pl.testsSummary', { passed: x.passed, failed: x.failed, errors: x.errors, warnings: x.warnings ? t('pl.testsWarnings', { n: x.warnings }) : '' });
 }
 
-/** Stores the result of a test run; no summary line means no test matched the tags. */
-function saveTests(r: Run, tr: TestsResult | null): void {
+/** Stores the result of a test run (with the code it ran on, D76); no summary line means no test matched the tags. */
+function saveTests(r: Run, tr: TestsResult | null, modules: string[]): void {
   if (!tr) r.log(t('exec.noTestLine'));
   const res = tr ?? { passed: 0, failed: 0, errors: 0, warnings: 0, failures: [] };
   r.log(`[tests] ${testsSummary(res)}`);
-  patchBuild(r, { tests: res });
+  const code = r.build.codeState;
+  patchBuild(r, { tests: res, testedCode: code ? { code: codeFingerprint(code), modules } : null });
+}
+
+/**
+ * The previous live build of a folder branch whose database this `update` keeps (D76): what it already got through
+ * manual `-u` and the code its tests ran on. Null when not applicable — then nothing is skipped.
+ */
+function folderPrev(r: Run): { state: CodeState | null; build: BuildRow } | null {
+  if (r.build.kind !== 'update' || src(r).kind !== 'folder' || !r.prevLive) return null;
+  return { state: r.prevLive.codeState ?? null, build: r.prevLive };
 }
 
 /** Result of the tests step; with `tests.failBuild` failed tests stop the build (the previous live build stays). */
@@ -635,8 +653,8 @@ async function stepModules(r: Run): Promise<string> {
     try {
       const extra = [...demoArgs(cfg, scope.withDemo), ...(tested.length ? testArgs(scope.tests, tested) : [])];
       const res = await runModules(r, install, [], extra, tl?.log);
-      patchBuild(r, { tests: null });
-      if (tl) saveTests(r, res.summary.tests);
+      patchBuild(r, { tests: null, testedCode: null });
+      if (tl) saveTests(r, res.summary.tests, tested);
     } finally {
       tl?.close();
     }
@@ -696,6 +714,13 @@ async function stepModules(r: Run): Promise<string> {
       update = s.update;
       install = s.install;
       if (s.none.length) r.log(t('pl.notMine', { modules: s.none.join(', ') }));
+      // D76: modules the database already got with this very code (a manual -u before the commit) are not updated again.
+      const prev = folderPrev(r);
+      const done = alreadyApplied(prev?.state, build.codeState, update);
+      if (done.length) {
+        update = update.filter((m) => !done.includes(m));
+        r.log(t('pl.alreadyApplied', { modules: done.join(', '), number: prev!.build.number }));
+      }
       r.log(t('pl.changedFiles', { n: d.files, update: update.join(',') || '—', install: install.join(',') || '—' }));
     } else {
       r.log(t('pl.sameCommit'));
@@ -723,8 +748,18 @@ async function stepTests(r: Run): Promise<string> {
   const changed = base ? (await modulesChangedSince(r, base)).modules : [];
   const mods = selectTestModules(scope.tests.mode, { changed, wanted: await wantedModules(r, build.commitSha!), available: installed });
   if (!mods.length) {
-    patchBuild(r, { tests: null });
+    patchBuild(r, { tests: null, testedCode: null });
     skip(t(scope.tests.mode === 'changed' ? 'pl.noChangedModules' : 'pl.noInstalledModules'));
+  }
+  // D76: these modules were already tested on this very code (manual tests before the commit): the result is carried over.
+  const prev = folderPrev(r)?.build;
+  if (prev?.tests && testsCover(prev.testedCode, build.codeState, mods)) {
+    r.log(t('pl.testsReused', { number: prev.number, modules: mods.join(', ') }));
+    patchBuild(r, { tests: prev.tests, testedCode: prev.testedCode });
+    if (prev.logPath && build.logPath && fs.existsSync(testsLogPath(prev.logPath))) {
+      fs.copyFileSync(testsLogPath(prev.logPath), testsLogPath(build.logPath));
+    }
+    return checkTests(r, t('pl.testsFrom', { number: prev.number }));
   }
   const testDb = assertSqlIdent(`${build.dbName}_test`);
   const fsDir = path.join(cfg.runtime.filestore.hostDir, testDb);
@@ -753,7 +788,7 @@ async function stepTests(r: Run): Promise<string> {
     const cmd = ['odoo', ...serverBaseArgs(cfg, vars(r)), '-d', testDb, '--stop-after-init', '--no-http', '-u', mods.join(','), ...testArgs(scope.tests, mods)];
     const res = await runOdooOneOff({ composeFile: r.composeFile, project: build.composeProject, cmd, log: tl.log, signal: r.jc.signal });
     assertOdooOk(res, t('exec.testsOnCopy', { db: testDb }));
-    saveTests(r, res.summary.tests);
+    saveTests(r, res.summary.tests, mods);
   } finally {
     tl.close();
     await cleanup().catch((e) => r.log(t('exec.dropTestFailed', { db: testDb, error: (e as Error).message })));

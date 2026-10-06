@@ -30,6 +30,8 @@ import { copyTree } from '../util/fs-tree';
 import * as pg from '../pg';
 import { docker } from '../docker/client';
 import { sleep } from '../util/time';
+import { log as coreLog } from '../util/logger';
+import { afterModules, codeFingerprint, commitCodeState, folderCodeState, forgetModules, type CodeState } from './code-state';
 import { t } from '../i18n';
 
 function mustBuild(ctx: Ctx, id: number | null): BuildRow {
@@ -81,6 +83,34 @@ async function syncLiveWorktree(ctx: Ctx, b: BuildRow, log: (l: string) => void)
   if (!br || !b.commitSha || isLegacyProject(cfg)) return;
   if (resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope.folder) return;
   await syncWorktreeTo(ctx, cfg, br, b.commitSha, log);
+}
+
+/**
+ * Code of the user's folder right before a manual -u / tests run (D76); null for code from the mirror or when it cannot
+ * be read. Read before the run: an edit made during it never counts as applied.
+ */
+async function folderStateNow(ctx: Ctx, b: BuildRow): Promise<CodeState | null> {
+  const br = branchRow(ctx, b.branchId);
+  const cfg = ctx.store.require(b.projectId);
+  const folder = br ? resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope.folder : null;
+  if (!folder) return null;
+  return folderCodeState(codeSource(cfg, br!, { folder }).dir!, cfg.repo.moduleRoots).catch((err: Error) => {
+    coreLog().warn({ err, build: b.id }, 'folder code state failed');
+    return null;
+  });
+}
+
+/**
+ * What the database of a folder build got before a manual -u (D76): its recorded state, or for a build made before
+ * that was recorded, the tree of its commit (the same assumption the next build's diff makes).
+ */
+async function dbCodeState(ctx: Ctx, b: BuildRow): Promise<CodeState | null> {
+  if (b.codeState) return b.codeState;
+  const br = branchRow(ctx, b.branchId);
+  const cfg = ctx.store.require(b.projectId);
+  const folder = br ? resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope.folder : null;
+  if (!folder || !b.commitSha) return null;
+  return commitCodeState(codeSource(cfg, br!, { folder }).dir!, b.commitSha, cfg.repo.moduleRoots).catch(() => null);
 }
 
 /** Jobs that run the live build's code: the folder has this branch open (D59), the worktree is on its commit (D64). */
@@ -145,6 +175,8 @@ async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> 
   const p = job.params as { install?: string[]; update?: string[] };
   const file = liveCompose(ctx, b);
   await ensurePostgres(ctx, cfg, jc.log);
+  const mods = [...(p.install ?? []), ...(p.update ?? [])];
+  const [now, base] = await Promise.all([folderStateNow(ctx, b), dbCodeState(ctx, b)]);
   await compose(ctx, b, ['stop'], jc);
   try {
     const br = branchRow(ctx, b.branchId);
@@ -154,6 +186,11 @@ async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> 
     if (p.update?.length) cmd.push('-u', p.update.join(','));
     const r = await runOdooOneOff({ composeFile: file, project: b.composeProject, cmd, log: jc.log, signal: jc.signal });
     assertOdooOk(r, t('exec.modules'));
+    // D76: the database now has these modules with the folder's code, a commit of that code will not update them again.
+    if (now && base) ctx.db.update(builds).set({ codeState: afterModules(base, now, mods) }).where(eq(builds.id, b.id)).run();
+  } catch (err) {
+    if (base) ctx.db.update(builds).set({ codeState: forgetModules(base, mods) }).where(eq(builds.id, b.id)).run();
+    throw err;
   } finally {
     await compose(ctx, b, ['start'], jc);
   }
@@ -194,6 +231,7 @@ async function testsJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
       await fs.promises.rm(fsDir, { recursive: true, force: true, maxRetries: 3 });
     }
   };
+  const now = await folderStateNow(ctx, b);
   const out = b.logPath ? fs.createWriteStream(testsLogPath(b.logPath), { flags: 'w' }) : null;
   const tl = (l: string): void => {
     jc.log(l);
@@ -227,7 +265,9 @@ async function testsJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> {
     const tr = res.summary.tests ?? { passed: 0, failed: 0, errors: 0, warnings: 0, failures: [] };
     const summary = t('exec.testSummary', { passed: tr.passed, failed: tr.failed, errors: tr.errors });
     tl(`[tests] ${summary}`);
-    ctx.db.update(builds).set({ tests: tr }).where(eq(builds.id, b.id)).run();
+    // D76: with the code it ran on — a commit of that same code carries the result over instead of testing again.
+    const testedCode = now ? { code: codeFingerprint(now), modules: mods } : null;
+    ctx.db.update(builds).set({ tests: tr, testedCode }).where(eq(builds.id, b.id)).run();
     audit(ctx, { projectId: b.projectId, action: 'build.tests', target: `${b.composeProject}#${b.number}`, params: { modules: mods, ...tr, failures: tr.failures.length } });
     bus.emit({ type: 'build.changed', projectId: b.projectId, branchId: b.branchId, buildId: b.id });
     if (testsFailed(tr)) {

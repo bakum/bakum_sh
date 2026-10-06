@@ -1,5 +1,6 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { BuildStep, CommitInfo, TestsResult, BranchScope } from '@bm/shared';
+import type { CodeState, TestedCode } from '../builds/code-state';
 
 export const projects = sqliteTable('projects', {
   id: text('id').primaryKey(),
@@ -54,6 +55,10 @@ export const builds = sqliteTable('builds', {
   debugPort: integer('debug_port'),
   status: text('status', { enum: ['queued', 'building', 'running', 'stopped', 'failed', 'dropped'] }).notNull(),
   tests: text('tests', { mode: 'json' }).$type<TestsResult | null>(),
+  /** Builds from the user's folder (D76): code the database was brought to, per module (manual -u included). */
+  codeState: text('code_state', { mode: 'json' }).$type<CodeState | null>(),
+  /** Builds from the user's folder (D76): code the result in `tests` was obtained on. */
+  testedCode: text('tested_code', { mode: 'json' }).$type<TestedCode | null>(),
   steps: text('steps', { mode: 'json' }).$type<BuildStep[]>().notNull().default([]),
   logPath: text('log_path'),
   configHash: text('config_hash'),

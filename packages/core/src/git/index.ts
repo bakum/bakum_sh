@@ -528,6 +528,36 @@ export async function lsTree(repo: string, sha: string): Promise<string[]> {
   return out.split('\n').filter(Boolean);
 }
 
+/** Files of a commit with their object ids (`git ls-tree -r -z`), repo-relative paths. */
+export async function lsTreeObjects(repo: string, sha: string): Promise<Map<string, string>> {
+  const out = await git(repo, ['ls-tree', '-r', '-z', sha]);
+  const res = new Map<string, string>();
+  for (const rec of out.split('\0')) {
+    // <mode> SP <type> SP <object> TAB <file>
+    const tab = rec.indexOf('\t');
+    if (tab < 0) continue;
+    const object = rec.slice(0, tab).split(' ')[2];
+    if (object) res.set(rec.slice(tab + 1), object);
+  }
+  return res;
+}
+
+/** Uncommitted paths of a folder (modified, staged, deleted, untracked), unquoted; read-only. */
+export async function uncommittedPaths(dir: string): Promise<string[]> {
+  const out = await git(dir, ['status', '--porcelain', '-z', '--untracked-files=all', '--no-renames']);
+  return out
+    .split('\0')
+    .filter((r) => r.length > 3)
+    .map((r) => r.slice(3));
+}
+
+/** Object ids the given files of a folder would get if committed (`hash-object` without -w writes nothing). */
+export async function hashFiles(dir: string, files: string[]): Promise<string[]> {
+  if (!files.length) return [];
+  const out = await git(dir, ['hash-object', '--stdin-paths'], { input: `${files.join('\n')}\n`, timeoutMs: 120_000 });
+  return out.split('\n').map((s) => s.trim());
+}
+
 export async function isValidBranchName(repo: string, name: string): Promise<boolean> {
   const r = await execa('git', ['check-ref-format', '--branch', name], { cwd: repo, reject: false, windowsHide: true });
   return r.exitCode === 0;

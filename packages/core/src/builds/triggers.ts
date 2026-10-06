@@ -7,6 +7,7 @@ import * as git from '../git';
 import { DETACHED, folderBranchMismatch } from '../git/worktrees';
 import { liveBuild } from './view';
 import { requestBuild } from './request';
+import { markLiveWithCommit } from './same-code';
 import { bus } from '../events';
 import { audit } from '../services/audit';
 import { log } from '../util/logger';
@@ -48,6 +49,8 @@ export async function onNewCommit(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, sh
     bus.emit({ type: 'branch.changed', projectId: b.projectId, branchId: b.id });
     return;
   }
+  // Code from the folder: a commit of what the live build already got and tested only marks it (D76).
+  if (kind === 'update' && scope.folder && (await markLiveWithCommit(ctx, cfg, b, scope, live, sha))) return;
   try {
     requestBuild(ctx, b.id, { trigger: 'new_commit', kind, targetSha: sha });
   } catch (err) {

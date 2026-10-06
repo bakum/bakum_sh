@@ -68,6 +68,11 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX resource_stats_branch ON resource_stats (branch_id, at);
   `,
+  // D76: code a folder build's database and its test result correspond to, so a commit of that same code rebuilds nothing.
+  `
+  ALTER TABLE builds ADD COLUMN code_state TEXT;
+  ALTER TABLE builds ADD COLUMN tested_code TEXT;
+  `,
 ];
 
 export function openDb(file: string): { db: Db; sqlite: Database.Database } {

@@ -217,6 +217,22 @@ export default {
   'pl.noChangedModules': { uk: 'немає змінених встановлених модулів', ru: 'нет изменённых установленных модулей', en: 'no changed installed modules' },
   'pl.noInstalledModules': { uk: 'немає встановлених модулів для тестів', ru: 'нет установленных модулей для тестов', en: 'no installed modules to test' },
   'pl.onCopy': { uk: 'на копії {db}', ru: 'на копии {db}', en: 'on copy {db}' },
+  'pl.alreadyApplied': {
+    uk: 'вже оновлено в збірці #{number} на цьому ж коді, -u не повторюється: {modules}',
+    ru: 'уже обновлены в сборке #{number} на этом же коде, -u не повторяется: {modules}',
+    en: 'already updated in build #{number} with this same code, -u is not repeated: {modules}',
+  },
+  'pl.testsReused': {
+    uk: 'тести {modules} вже запускалися в збірці #{number} на цьому ж коді — результат перенесено без повторного запуску',
+    ru: 'тесты {modules} уже запускались в сборке #{number} на этом же коде — итог перенесён без повторного запуска',
+    en: 'tests of {modules} already ran in build #{number} with this same code — the result is carried over without a rerun',
+  },
+  'same.marked': {
+    uk: '==> коміт {sha} {time}: у папці той самий код, що вже отримала БД збірки #{number} і на якому пройшли тести — збірка не потрібна, #{number} позначено цим комітом',
+    ru: '==> коммит {sha} {time}: в папке тот же код, что уже получила БД сборки #{number} и на котором прошли тесты — сборка не нужна, #{number} отмечена этим коммитом',
+    en: '==> commit {sha} {time}: the folder holds the code the database of build #{number} already got and its tests ran on — no build needed, #{number} is marked with this commit',
+  },
+  'pl.testsFrom': { uk: 'зі збірки #{number}, той самий код', ru: 'из сборки #{number}, тот же код', en: 'from build #{number}, same code' },
   'pl.containerHealth': { uk: 'контейнер {name}: {health}', ru: 'контейнер {name}: {health}', en: 'container {name}: {health}' },
   'pl.containerExited': {
     uk: 'Контейнер збірки зупинився (код {code}). Див. odoo.log у вкладці Logs.',

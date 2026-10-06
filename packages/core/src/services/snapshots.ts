@@ -205,6 +205,8 @@ async function restoreExecutor(ctx: Ctx, job: JobRow, jc: JobContext): Promise<v
     }
   });
   ctx.db.update(snapshots).set({ sizeBytes: await sizeOf(cfg, keep) }).where(eq(snapshots.id, keepRow.id)).run();
+  // The database is now that of the snapshot: what code it got and what its tests showed is no longer known (D76).
+  ctx.db.update(builds).set({ codeState: null, testedCode: null }).where(eq(builds.id, live.id)).run();
   audit(ctx, { projectId: cfg.id, action: 'snapshot.restore', target: s.dbName, params: { name: s.name, db: live.dbName, before: keep } });
   changed(ctx, live);
 }

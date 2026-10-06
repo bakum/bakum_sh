@@ -112,7 +112,7 @@ export async function dropBuildResources(ctx: Ctx, cfg: ProjectConfig, b: BuildR
 export function markDropped(ctx: Ctx, b: BuildRow, note?: string): void {
   ctx.db
     .update(builds)
-    .set({ status: 'dropped', live: false, droppedAt: nowIso(), errorMessage: note ?? b.errorMessage })
+    .set({ status: 'dropped', live: false, droppedAt: nowIso(), errorMessage: note ?? b.errorMessage, codeState: null, testedCode: null })
     .where(eq(builds.id, b.id))
     .run();
   bus.emit({ type: 'build.changed', projectId: b.projectId, branchId: b.branchId, buildId: b.id });
