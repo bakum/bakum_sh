@@ -22,6 +22,7 @@ import { audit } from './audit';
 import { branchByName, branchRow, branchRows, ensureBranchRow, setAutoAddSkip } from './branch-rows';
 import { branchBuilds, buildUrl, configHash, liveBuild, toBuildView } from '../builds/view';
 import { requestBuildChecked } from '../builds/request';
+import { addonsDrift } from '../builds/live-compose';
 import { repoDir, worktreeHeadSync } from '../git/worktrees';
 import { assertNotLegacy } from '../config/legacy';
 import { onProjectConfigChanged } from './projects';
@@ -81,6 +82,8 @@ export function branchView(ctx: Ctx, cfg: ProjectConfig, b: BranchRow, prodLive?
     badges.push({ kind: 'stage-changed', text: t('badge.stageChanged') });
   }
   if (live && live.configHash && live.configHash !== hash) badges.push({ kind: 'config-changed', text: t('badge.configChanged') });
+  // D77: the same configuration, but the user's folder got module folders the running server does not load.
+  else if (live && r.scope.folder && !active && addonsDrift(ctx, live)) badges.push({ kind: 'config-changed', text: t('badge.addonsChanged') });
   // D64: the container mounts the worktree (same config), but it is on another commit — e.g. after building from the
   // user's folder. A changed config already asks for «Применить», which puts the worktree back itself.
   const wtHead = !r.scope.folder && live?.commitSha && b.worktreePath && !active && live.configHash === hash ? worktreeHeadSync(b.worktreePath) : null;

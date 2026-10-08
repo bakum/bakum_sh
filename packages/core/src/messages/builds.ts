@@ -66,6 +66,11 @@ export default {
   'exec.cancelled': { uk: 'Скасовано', ru: 'Отменено', en: 'Cancelled' },
   'exec.healthTimeout': { uk: 'Збірка не відповіла за {s} с', ru: 'Сборка не ответила за {s} с', en: 'The build did not respond within {s} s' },
   'exec.noWorktree': { uk: 'Worktree гілки не знайдено — потрібен Rebuild', ru: 'Worktree ветки не найден — нужен Rebuild', en: 'The branch worktree is missing — Rebuild is needed' },
+  'exec.addonsChanged': {
+    uk: 'Папки модулів у папці гілки змінилися: compose.yml переписано з новим --addons-path, контейнер буде перестворено (БД не чіпається)',
+    ru: 'Папки модулей в папке ветки изменились: compose.yml переписан с новым --addons-path, контейнер будет пересоздан (БД не трогается)',
+    en: 'The module folders in the branch folder changed: compose.yml is rewritten with the new --addons-path, the container will be recreated (the database is untouched)',
+  },
   'exec.recreate': {
     uk: 'docker compose up -d (перестворення контейнера, БД не чіпається)',
     ru: 'docker compose up -d (пересоздание контейнера, БД не трогается)',
@@ -146,6 +151,11 @@ export default {
   'badge.unbuilt': { uk: 'Є незібрані коміти', ru: 'Есть несобранные коммиты', en: 'There are unbuilt commits' },
   'badge.stageChanged': { uk: 'Налаштування стадії змінилися — Rebuild', ru: 'Настройки стадии изменились — Rebuild', en: 'Stage settings changed — Rebuild' },
   'badge.configChanged': { uk: 'Конфігурація змінилася', ru: 'Конфигурация изменилась', en: 'The configuration changed' },
+  'badge.addonsChanged': {
+    uk: 'У папці гілки змінилися папки модулів, а сервер збірки запущено зі старим --addons-path: нових модулів він не бачить. «Застосувати», Restart або «Модулі вручну» перестворять контейнер, база не чіпається.',
+    ru: 'В папке ветки изменились папки модулей, а сервер сборки запущен со старым --addons-path: новых модулей он не видит. «Применить», Restart или «Модули вручную» пересоздадут контейнер, база не трогается.',
+    en: 'The module folders in the branch folder changed, but the build server runs with the old --addons-path and does not see the new modules. «Apply», Restart or «Modules by hand» recreate the container; the database is untouched.',
+  },
   'badge.worktreeOffBuild': {
     uk: 'Код у worktree ({head}) не збігається з кодом збірки #{number} ({sha}): Odoo працює не на тому коді. «Застосувати» поверне worktree до коду збірки й перестворить контейнер, база не чіпається.',
     ru: 'Код в worktree ({head}) не совпадает с кодом сборки #{number} ({sha}): Odoo работает не на том коде. «Применить» вернёт worktree к коду сборки и пересоздаст контейнер, база не трогается.',

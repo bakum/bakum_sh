@@ -6,7 +6,6 @@ import { branchDir, type Ctx } from '../context';
 import { builds, type BuildRow, type JobRow } from '../db/schema';
 import type { JobContext, JobQueue } from '../jobs/queue';
 import { dockerCli } from '../docker/client';
-import { generateCompose } from '../docker/compose';
 import { ensureTraefik } from '../docker/traefik';
 import { ensurePostgres } from '../docker/postgres';
 import { ensureImage } from '../docker/image';
@@ -18,11 +17,11 @@ import { publishTray } from '../services/tray';
 import { audit } from '../services/audit';
 import { bus } from '../events';
 import { buildContainers, dropBuild } from './drop';
-import { configHash, testsLogPath } from './view';
+import { testsLogPath } from './view';
+import { addonsDrift, liveComposeText } from './live-compose';
 import { runBuild } from './pipeline';
 import { runOdooOneOff, assertOdooOk, serverBaseArgs, codeVars, testArgs, testsFailed } from './odoo-cli';
 import { assertSqlIdent } from '../config/templates';
-import { readComposeTemplate } from '../config/compose-template';
 import { copyDatabaseByDump } from '../docker/pg-tools';
 import { assertOwned } from '../safety';
 import { ownedRegistry } from '../registry';
@@ -125,28 +124,22 @@ async function assertBuildCode(ctx: Ctx, b: BuildRow, log: (l: string) => void):
  */
 export async function writeLiveCompose(ctx: Ctx, b: BuildRow, log: (l: string) => void): Promise<string> {
   await syncLiveWorktree(ctx, b, log);
-  const br = branchRow(ctx, b.branchId);
-  if (!br) throw new BmError('NO_BRANCH', t('exec.branchDeleted'));
-  const cfg = ctx.store.require(b.projectId);
-  const scope = resolveBranchScope(cfg, br.name, br.stage, br.overrides).scope;
-  const code = codeSource(cfg, br, scope).dir;
-  if (!code) throw new BmError('NO_WORKTREE', t('exec.noWorktree'));
-  const file = path.join(branchDir(ctx, cfg.id, br.slug), 'compose.yml');
-  const vars = codeVars(cfg, code);
-  const text = generateCompose({
-    cfg,
-    scope,
-    branch: { id: br.id, name: br.name, slug: br.slug, stage: br.stage },
-    build: { id: b.id, number: b.number, dbName: b.dbName, host: b.host, composeProject: b.composeProject, debugPort: b.debugPort },
-    worktree: code,
-    addonsPath: vars.addonsPath as string | undefined,
-    proxyPort: ctx.proxyPort ?? ctx.store.app.proxyPort,
-    odooArgs: serverBaseArgs(cfg, vars),
-    template: readComposeTemplate(cfg),
-  });
+  const { file, text, hash } = liveComposeText(ctx, b);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text, 'utf8');
-  return configHash(cfg, scope, ctx.proxyPort ?? ctx.store.app.proxyPort);
+  return hash;
+}
+
+/**
+ * D77: a build from the user's folder whose module folders changed since its container was created gets compose.yml
+ * with the new `{addonsPath}`; returns whether the container must be recreated (`up -d`) to load them.
+ */
+function refreshFolderAddons(ctx: Ctx, b: BuildRow, log: (l: string) => void): boolean {
+  const drift = addonsDrift(ctx, b);
+  if (!drift) return false;
+  fs.writeFileSync(drift.file, drift.text, 'utf8');
+  log(t('exec.addonsChanged'));
+  return true;
 }
 
 /** «Применить» (spec 9.1): recreate the container with the current configuration, the database is kept. */
@@ -177,6 +170,8 @@ async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> 
   await ensurePostgres(ctx, cfg, jc.log);
   const mods = [...(p.install ?? []), ...(p.update ?? [])];
   const [now, base] = await Promise.all([folderStateNow(ctx, b), dbCodeState(ctx, b)]);
+  // D77: new module folders (`-i` of a module in one) — the server comes back with them, not only the one-off run.
+  const recreate = refreshFolderAddons(ctx, b, jc.log);
   await compose(ctx, b, ['stop'], jc);
   try {
     const br = branchRow(ctx, b.branchId);
@@ -192,7 +187,7 @@ async function modulesJob(ctx: Ctx, job: JobRow, jc: JobContext): Promise<void> 
     if (base) ctx.db.update(builds).set({ codeState: forgetModules(base, mods) }).where(eq(builds.id, b.id)).run();
     throw err;
   } finally {
-    await compose(ctx, b, ['start'], jc);
+    await compose(ctx, b, recreate ? ['up', '-d', '--remove-orphans'] : ['start'], jc);
   }
   done(ctx, b, 'modules');
 }
@@ -299,6 +294,7 @@ export function registerBuildExecutors(q: JobQueue): void {
     const b = mustBuild(ctx, job.buildId);
     await assertBuildCode(ctx, b, jc.log);
     await ensurePostgres(ctx, ctx.store.require(b.projectId), jc.log);
+    refreshFolderAddons(ctx, b, jc.log);
     await compose(ctx, b, ['up', '-d', '--remove-orphans'], jc);
     done(ctx, b, 'start');
   });
@@ -311,7 +307,7 @@ export function registerBuildExecutors(q: JobQueue): void {
     const b = mustBuild(ctx, job.buildId);
     await assertBuildCode(ctx, b, jc.log);
     await ensurePostgres(ctx, ctx.store.require(b.projectId), jc.log);
-    await compose(ctx, b, ['restart'], jc);
+    await compose(ctx, b, refreshFolderAddons(ctx, b, jc.log) ? ['up', '-d', '--remove-orphans'] : ['restart'], jc);
     done(ctx, b, 'restart');
   });
   q.register('apply_config', applyConfig);
